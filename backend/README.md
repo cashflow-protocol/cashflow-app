@@ -14,7 +14,9 @@ npm install
 cp .env.example .env
 ```
 
-3. Update `.env` with your MongoDB connection string
+3. Update `.env` with your configuration:
+   - `MONGODB_URI` - Your MongoDB connection string
+   - `JUPITER_API_KEY` - Your Jupiter API key
 
 ## Development
 
@@ -44,7 +46,10 @@ npm start
 - `GET /health` - Returns server health status
 
 ### Earn Endpoints
-- `GET /earn/v1/tokens` - Returns list of tokens (currently empty)
+
+- `GET /earn/v1/tokens` - Get earn tokens from Jupiter Lend API
+  - Returns tokens with lending/earn opportunities and their APYs across different platforms
+  - Example: `/earn/v1/tokens`
 
 ## Tech Stack
 
