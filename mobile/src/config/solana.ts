@@ -1,24 +1,29 @@
-import { clusterApiUrl } from '@solana/kit';
-
 export type Cluster = 'mainnet-beta' | 'devnet' | 'testnet';
+
+// Solana RPC endpoints
+export const RPC_ENDPOINTS = {
+  'mainnet-beta': 'https://api.mainnet-beta.solana.com',
+  devnet: 'https://api.devnet.solana.com',
+  testnet: 'https://api.testnet.solana.com',
+} as const;
 
 export const SOLANA_CONFIG = {
   cluster: 'devnet' as Cluster,
-  rpcEndpoint: clusterApiUrl('devnet'),
+  rpcEndpoint: RPC_ENDPOINTS.devnet,
   commitment: 'confirmed' as const,
 };
 
 export const NETWORK_CONFIG = {
   devnet: {
     name: 'Devnet',
-    endpoint: clusterApiUrl('devnet'),
+    endpoint: RPC_ENDPOINTS.devnet,
   },
   'mainnet-beta': {
     name: 'Mainnet Beta',
-    endpoint: clusterApiUrl('mainnet-beta'),
+    endpoint: RPC_ENDPOINTS['mainnet-beta'],
   },
   testnet: {
     name: 'Testnet',
-    endpoint: clusterApiUrl('testnet'),
+    endpoint: RPC_ENDPOINTS.testnet,
   },
 };

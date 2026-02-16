@@ -1,17 +1,17 @@
 import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol';
-import { Connection, PublicKey } from '@solana/kit';
+import { address, Address, createSolanaRpc, lamports } from '@solana/kit';
 import { SOLANA_CONFIG } from '../config/solana';
 
 export interface WalletAccount {
-  publicKey: PublicKey;
+  publicKey: Address;
   label?: string;
 }
 
 class WalletService {
-  private connection: Connection;
+  private rpc: ReturnType<typeof createSolanaRpc>;
 
   constructor() {
-    this.connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
+    this.rpc = createSolanaRpc(SOLANA_CONFIG.rpcEndpoint);
   }
 
   async connect(): Promise<WalletAccount | null> {
@@ -27,7 +27,7 @@ class WalletService {
         });
 
         return {
-          publicKey: new PublicKey(authResult.accounts[0].address),
+          publicKey: address(authResult.accounts[0].address),
           label: authResult.accounts[0].label,
           authToken: authResult.auth_token,
         };
@@ -50,14 +50,14 @@ class WalletService {
     }
   }
 
-  getConnection(): Connection {
-    return this.connection;
+  getRpc() {
+    return this.rpc;
   }
 
-  async getBalance(publicKey: PublicKey): Promise<number> {
+  async getBalance(publicKey: Address): Promise<number> {
     try {
-      const balance = await this.connection.getBalance(publicKey);
-      return balance / 1e9; // Convert lamports to SOL
+      const balanceResponse = await this.rpc.getBalance(publicKey).send();
+      return Number(balanceResponse.value) / 1e9; // Convert lamports to SOL
     } catch (error) {
       console.error('Failed to get balance:', error);
       return 0;

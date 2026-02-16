@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { PublicKey } from '@solana/kit';
+import { Address } from '@solana/kit';
 import walletService, { WalletAccount } from '../services/walletService';
 
 interface WalletContextType {

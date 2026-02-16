@@ -6,13 +6,13 @@
 import React from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { WalletProvider } from './src/hooks/useWallet';
-import HomeScreen from './src/screens/HomeScreen';
+import NewHomeScreen from './src/screens/NewHomeScreen';
 
 function App() {
   return (
     <SafeAreaProvider>
       <WalletProvider>
-        <HomeScreen />
+        <NewHomeScreen />
       </WalletProvider>
     </SafeAreaProvider>
   );
