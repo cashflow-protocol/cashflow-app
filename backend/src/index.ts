@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express, { Application } from 'express';
 import mongoose from 'mongoose';
 import earnRouter from './routes/earn';
+import { initializeScheduler } from './services';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
@@ -26,6 +27,9 @@ mongoose
     console.log('✅ Connected to MongoDB');
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);
+
+      // Initialize cron scheduler after server starts
+      initializeScheduler();
     });
   })
   .catch((error) => {

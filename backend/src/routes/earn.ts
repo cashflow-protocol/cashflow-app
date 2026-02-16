@@ -1,13 +1,24 @@
 import { Router, Request, Response } from 'express';
-import { JupiterManager } from '../managers';
+import { EarnTokenModel } from '../models';
 
 const router = Router();
-const jupiterManager = new JupiterManager();
 
-// GET /earn/v1/tokens - Get earn tokens from Jupiter Lend API
+// GET /earn/v1/tokens - Get earn tokens from MongoDB
 router.get('/tokens', async (req: Request, res: Response) => {
   try {
-    const tokens = await jupiterManager.getEarnTokens();
+    const { type } = req.query;
+
+    // Build query filter
+    const filter: any = {};
+    if (type && typeof type === 'string') {
+      filter.type = type;
+    }
+
+    // Fetch tokens from MongoDB with selected fields only
+    const tokens = await EarnTokenModel.find(filter)
+      .select('type mint decimals symbol name logoUrl rewardsRate')
+      .sort({ symbol: 1 })
+      .lean();
 
     res.json({
       success: true,
@@ -16,7 +27,7 @@ router.get('/tokens', async (req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Error fetching earn tokens:', error);
+    console.error('Error fetching earn tokens from database:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch earn tokens',

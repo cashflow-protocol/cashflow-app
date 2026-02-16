@@ -7,6 +7,8 @@ import { prop, getModelForClass, index, modelOptions } from '@typegoose/typegoos
   },
 })
 @index({ type: 1, mint: 1 }, { unique: true })
+@index({ type: 1, symbol: 1 })
+@index({ symbol: 1 })
 export class EarnToken {
   @prop({ required: true, enum: ['jupiter', 'kamino', 'drift'] })
   public type!: 'jupiter' | 'kamino' | 'drift';

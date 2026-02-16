@@ -47,9 +47,38 @@ npm start
 
 ### Earn Endpoints
 
-- `GET /earn/v1/tokens` - Get earn tokens from Jupiter Lend API
+- `GET /earn/v1/tokens` - Get earn tokens from database
   - Returns tokens with lending/earn opportunities and their APYs across different platforms
-  - Example: `/earn/v1/tokens`
+  - Data is automatically synced from Jupiter API every minute via background cron job
+  - Query params:
+    - `type` - Filter by platform type (optional): `jupiter`, `kamino`, or `drift`
+  - Response fields:
+    - `type` - Platform type (jupiter/kamino/drift)
+    - `mint` - Token mint address
+    - `decimals` - Token decimals
+    - `symbol` - Token symbol
+    - `name` - Token name
+    - `logoUrl` - Token logo URL
+    - `rewardsRate` - APY rate as a number
+  - Examples:
+    - `/earn/v1/tokens` - Get all tokens
+    - `/earn/v1/tokens?type=jupiter` - Get only Jupiter tokens
+
+## Background Tasks
+
+The server runs scheduled tasks using `node-cron`:
+
+### Jupiter Earn Tokens Sync
+- **Frequency**: Every minute
+- **Description**: Fetches latest earn tokens from Jupiter Lend API and updates MongoDB
+- **Status**: Runs automatically on server startup and continues in background
+
+You'll see log messages like:
+```
+🔄 [Cron] Starting Jupiter Earn tokens update...
+✅ Saved X new tokens, updated Y existing tokens
+✅ [Cron] Jupiter Earn tokens update completed
+```
 
 ## Tech Stack
 
@@ -57,4 +86,5 @@ npm start
 - **TypeScript** - Type safety
 - **MongoDB** - Database
 - **Typegoose** - TypeScript models for MongoDB
+- **node-cron** - Task scheduler for background jobs
 - **Nodemon** - Development auto-reload
