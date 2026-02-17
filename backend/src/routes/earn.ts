@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { EarnTokenModel } from '../models';
+import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
 const router = Router();
 
@@ -14,11 +15,17 @@ router.get('/tokens', async (req: Request, res: Response) => {
       filter.type = type;
     }
 
-    // Fetch tokens from MongoDB with selected fields only
-    const tokens = await EarnTokenModel.find(filter)
-      .select('type mint decimals symbol name logoUrl rewardsRate')
+    // Fetch tokens from MongoDB
+    const dbTokens = await EarnTokenModel.find(filter)
+      .select('type mint symbol rewardsRate')
       .sort({ symbol: 1 })
       .lean();
+
+    // Merge DB data with static token info from constants
+    const tokens = dbTokens.map(({ _id, ...token }) => ({
+      ...token,
+      ...SUPPORTED_TOKENS_BY_MINT[token.mint],
+    }));
 
     res.json({
       success: true,

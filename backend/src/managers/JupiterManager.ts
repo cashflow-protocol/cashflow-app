@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { EarnTokenModel } from '../models';
+import { SUPPORTED_TOKEN_MINTS } from '../constants';
 
 interface JupiterAsset {
   address: string;
@@ -92,7 +93,11 @@ export class JupiterManager {
    */
   private async saveTokensToDatabase(tokens: JupiterEarnTokenResponse[]): Promise<void> {
     try {
-      const bulkOps = tokens.map((token) => ({
+      const supportedTokens = tokens.filter((token) =>
+        SUPPORTED_TOKEN_MINTS.includes(token.asset.address)
+      );
+
+      const bulkOps = supportedTokens.map((token) => ({
         updateOne: {
           filter: {
             type: 'jupiter' as const,
@@ -102,11 +107,8 @@ export class JupiterManager {
             $set: {
               type: 'jupiter' as const,
               mint: token.asset.address,
-              decimals: token.asset.decimals,
               symbol: token.asset.symbol,
-              name: token.asset.name,
               rewardsRate: parseFloat(token.totalRate),
-              logoUrl: token.asset.logoUrl,
               jupiterToken: token, // Save the whole token data
             },
           },

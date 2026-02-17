@@ -17,19 +17,10 @@ export class EarnToken {
   public mint!: string;
 
   @prop({ required: true })
-  public decimals!: number;
-
-  @prop({ required: true })
   public symbol!: string;
 
   @prop({ required: true })
-  public name!: string;
-
-  @prop({ required: true })
   public rewardsRate!: number;
-
-  @prop({ required: true })
-  public logoUrl!: string;
 
   @prop({ type: () => Object })
   public jupiterToken?: Record<string, any>;
