@@ -109,6 +109,7 @@ export class JupiterManager {
               type: 'jupiter' as const,
               mint: token.asset.address,
               vaultAddress: token.address,
+              vaultTitle: `Jupiter Lend - ${token.asset.symbol}`,
               symbol: token.asset.symbol,
               rewardsRate: parseFloat(token.totalRate),
               jupiterToken: token, // Save the whole token data

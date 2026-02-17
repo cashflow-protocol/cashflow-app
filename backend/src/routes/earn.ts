@@ -17,15 +17,15 @@ router.get('/tokens', async (req: Request, res: Response) => {
 
     // Fetch tokens from MongoDB
     const dbTokens = await EarnTokenModel.find(filter)
-      .select('type mint vaultAddress symbol rewardsRate')
+      .select('type mint vaultAddress vaultTitle symbol rewardsRate')
       .sort({ symbol: 1 })
       .lean();
 
-    // Merge DB data with static token info from constants
-    const tokens = dbTokens.map(({ _id, ...token }) => ({
-      ...token,
-      ...SUPPORTED_TOKENS_BY_MINT[token.mint],
-    }));
+    // Merge DB data with static token info from constants (excluding logoUrl)
+    const tokens = dbTokens.map(({ _id, ...token }) => {
+      const { logoUrl, ...tokenInfo } = SUPPORTED_TOKENS_BY_MINT[token.mint] ?? {};
+      return { ...token, ...tokenInfo };
+    });
 
     res.json({
       success: true,

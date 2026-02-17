@@ -20,6 +20,9 @@ export class EarnToken {
   public vaultAddress!: string;
 
   @prop({ required: true })
+  public vaultTitle!: string;
+
+  @prop({ required: true })
   public symbol!: string;
 
   @prop({ required: true })
@@ -27,6 +30,9 @@ export class EarnToken {
 
   @prop({ type: () => Object })
   public jupiterToken?: Record<string, any>;
+
+  @prop({ type: () => Object })
+  public kaminoToken?: Record<string, any>;
 }
 
 export const EarnTokenModel = getModelForClass(EarnToken);

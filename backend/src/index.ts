@@ -3,6 +3,7 @@ import express, { Application } from 'express';
 import mongoose from 'mongoose';
 import earnRouter from './routes/earn';
 import { initializeScheduler } from './services';
+import { EarnTokenModel } from './models';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
@@ -23,8 +24,13 @@ app.get('/health', (req, res) => {
 // Database connection
 mongoose
   .connect(MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log('✅ Connected to MongoDB');
+
+    // Sync indexes to match current model definitions
+    await EarnTokenModel.syncIndexes();
+    console.log('✅ MongoDB indexes synced');
+
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);
 
