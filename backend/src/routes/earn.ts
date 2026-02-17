@@ -17,7 +17,7 @@ router.get('/tokens', async (req: Request, res: Response) => {
 
     // Fetch tokens from MongoDB
     const dbTokens = await EarnTokenModel.find(filter)
-      .select('type mint symbol rewardsRate')
+      .select('type mint vaultAddress symbol rewardsRate')
       .sort({ symbol: 1 })
       .lean();
 

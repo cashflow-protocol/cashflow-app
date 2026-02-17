@@ -102,11 +102,13 @@ export class JupiterManager {
           filter: {
             type: 'jupiter' as const,
             mint: token.asset.address,
+            vaultAddress: token.address,
           },
           update: {
             $set: {
               type: 'jupiter' as const,
               mint: token.asset.address,
+              vaultAddress: token.address,
               symbol: token.asset.symbol,
               rewardsRate: parseFloat(token.totalRate),
               jupiterToken: token, // Save the whole token data
