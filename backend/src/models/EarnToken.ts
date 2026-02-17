@@ -1,9 +1,17 @@
 import { prop, getModelForClass, index, modelOptions } from '@typegoose/typegoose';
+import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
 @modelOptions({
   schemaOptions: {
     timestamps: true,
     collection: 'earn_tokens',
+    toJSON: {
+      transform: (_doc, ret) => {
+        const { _id, __v, jupiterToken, kaminoToken, createdAt, updatedAt, ...fields } = ret;
+        const { logoUrl, ...tokenInfo } = SUPPORTED_TOKENS_BY_MINT[fields.mint] ?? {};
+        return { ...fields, ...tokenInfo };
+      },
+    },
   },
 })
 @index({ type: 1, mint: 1, vaultAddress: 1 }, { unique: true })

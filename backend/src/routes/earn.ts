@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { EarnTokenModel } from '../models';
-import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
 const router = Router();
 
@@ -16,16 +15,9 @@ router.get('/tokens', async (req: Request, res: Response) => {
     }
 
     // Fetch tokens from MongoDB
-    const dbTokens = await EarnTokenModel.find(filter)
+    const tokens = await EarnTokenModel.find(filter)
       .select('type mint vaultAddress vaultTitle symbol rewardsRate')
-      .sort({ symbol: 1 })
-      .lean();
-
-    // Merge DB data with static token info from constants (excluding logoUrl)
-    const tokens = dbTokens.map(({ _id, ...token }) => {
-      const { logoUrl, ...tokenInfo } = SUPPORTED_TOKENS_BY_MINT[token.mint] ?? {};
-      return { ...token, ...tokenInfo };
-    });
+      .sort({ symbol: 1 });
 
     res.json({
       success: true,
