@@ -55,8 +55,40 @@ interface KaminoVault {
 }
 
 interface KaminoMetrics {
-  apy: number;
-  [key: string]: any;
+  apy: string;
+  apy7d: string;
+  apy24h: string;
+  apy30d: string;
+  apy90d: string;
+  apy180d: string;
+  apy365d: string;
+  apyTheoretical: string;
+  apyActual: string;
+  apyFarmRewards: string;
+  apyIncentives: string;
+  apyReservesIncentives: string;
+  tokenPrice: string;
+  solPrice: string;
+  tokensAvailable: string;
+  tokensAvailableUsd: string;
+  tokensInvested: string;
+  tokensInvestedUsd: string;
+  sharePrice: string;
+  tokensPerShare: string;
+  numberOfHolders: number;
+  sharesIssued: string;
+  cumulativeInterestEarned: string;
+  cumulativeInterestEarnedUsd: string;
+  cumulativeInterestEarnedSol: string;
+  interestEarnedPerSecond: string;
+  interestEarnedPerSecondUsd: string;
+  interestEarnedPerSecondSol: string;
+  cumulativePerformanceFees: string;
+  cumulativePerformanceFeesUsd: string;
+  cumulativePerformanceFeesSol: string;
+  cumulativeManagementFees: string;
+  cumulativeManagementFeesUsd: string;
+  cumulativeManagementFeesSol: string;
 }
 
 const METRICS_DELAY_MS = 200;
@@ -152,7 +184,7 @@ export class KaminoManager {
                   vaultAddress: vault.address,
                   vaultTitle: vault.state.name,
                   symbol,
-                  rewardsRate: metrics!.apy * 100,
+                  rewardsRate: (parseFloat(metrics!.apy) + parseFloat(metrics!.apyIncentives) + parseFloat(metrics!.apyReservesIncentives)) * 100,
                   kaminoToken: { ...vault, metrics }, // Full vault data + metrics
                 },
               },
