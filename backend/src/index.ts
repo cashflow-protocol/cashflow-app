@@ -33,10 +33,10 @@ mongoose
 
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);
-
-      // Initialize cron scheduler after server starts
-      initializeScheduler();
     });
+
+    // Initialize cron scheduler after server starts
+    await initializeScheduler();
   })
   .catch((error) => {
     console.error('❌ MongoDB connection error:', error);

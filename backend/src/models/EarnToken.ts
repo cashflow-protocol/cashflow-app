@@ -7,7 +7,7 @@ import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
     collection: 'earn_tokens',
     toJSON: {
       transform: (_doc, ret) => {
-        const { _id, __v, jupiterToken, kaminoToken, createdAt, updatedAt, ...fields } = ret;
+        const { _id, __v, jupiterToken, kaminoToken, driftToken, createdAt, updatedAt, ...fields } = ret;
         const { logoUrl, ...tokenInfo } = SUPPORTED_TOKENS_BY_MINT[fields.mint] ?? {};
         return { ...fields, ...tokenInfo };
       },
@@ -45,6 +45,9 @@ export class EarnToken {
 
   @prop({ type: () => Object })
   public kaminoToken?: Record<string, any>;
+
+  @prop({ type: () => Object })
+  public driftToken?: Record<string, any>;
 }
 
 export const EarnTokenModel = getModelForClass(EarnToken);
