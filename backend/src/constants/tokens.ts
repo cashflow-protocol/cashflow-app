@@ -56,6 +56,13 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     decimals: 6,
     logoUrl: 'https://coin-images.coingecko.com/coins/images/39926/large/usds.webp?1726666683',
   },
+  {
+    mint: '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo',
+    symbol: 'PYUSD',
+    name: 'PayPal USD',
+    decimals: 6,
+    logoUrl: 'https://assets.coingecko.com/coins/images/31212/standard/PYUSD_Token_Logo_2x.png?1765987788',
+  },
 
 ];
 
