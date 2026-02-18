@@ -1,4 +1,18 @@
 import axios, { AxiosInstance } from 'axios';
+import {
+  address,
+  pipe,
+  createSolanaRpc,
+  createTransactionMessage,
+  setTransactionMessageFeePayer,
+  setTransactionMessageLifetimeUsingBlockhash,
+  appendTransactionMessageInstruction,
+  compileTransaction,
+  getBase64EncodedWireTransaction,
+  getBase64Encoder,
+  AccountRole,
+} from '@solana/kit';
+import type { Rpc, SolanaRpcApi } from '@solana/kit';
 import { EarnTokenModel } from '../models';
 import { SUPPORTED_TOKEN_MINTS } from '../constants';
 
@@ -47,16 +61,35 @@ interface JupiterEarnTokenResponse {
   rewards: any[];
 }
 
+export interface JupiterPosition {
+  token: JupiterEarnTokenResponse;
+  ownerAddress: string;
+  shares: string;
+  underlyingAssets: string;
+  underlyingBalance: string;
+  allowance: string;
+}
+
+interface InstructionResponse {
+  programId: string;
+  accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[];
+  data: string;
+}
+
 export class JupiterManager {
   private api: AxiosInstance;
+  private rpc: Rpc<SolanaRpcApi>;
   private readonly baseURL = 'https://api.jup.ag';
 
   constructor() {
     const apiKey = process.env.JUPITER_API_KEY;
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
     if (!apiKey) {
       console.warn('Warning: JUPITER_API_KEY not set in environment variables');
     }
+
+    this.rpc = createSolanaRpc(rpcUrl);
 
     this.api = axios.create({
       baseURL: this.baseURL,
@@ -85,6 +118,91 @@ export class JupiterManager {
       console.error('Error fetching Jupiter earn tokens:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get wallet positions from Jupiter Lend API
+   */
+  async getWalletPositions(walletAddress: string): Promise<JupiterPosition[]> {
+    try {
+      const response = await this.api.get<JupiterPosition[]>('/lend/v1/earn/positions', {
+        params: { users: walletAddress },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching Jupiter wallet positions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get an unsigned deposit transaction from Jupiter Lend
+   * @param mint Token mint address
+   * @param amount Deposit amount in raw token units
+   * @param walletAddress Wallet address (overrides env default)
+   */
+  async deposit(mint: string, amount: string, walletAddress: string): Promise<string> {
+    try {
+      const response = await this.api.post<InstructionResponse>(
+        '/lend/v1/earn/deposit-instructions',
+        { asset: mint, signer: walletAddress, amount },
+      );
+      return await this.buildTransaction(response.data, walletAddress);
+    } catch (error) {
+      console.error('Error creating Jupiter deposit transaction:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get an unsigned withdraw transaction from Jupiter Lend
+   * @param mint Token mint address
+   * @param amount Withdrawal amount in raw token units
+   * @param walletAddress Wallet address (overrides env default)
+   */
+  async withdraw(mint: string, amount: string, walletAddress: string): Promise<string> {
+    try {
+      const response = await this.api.post<InstructionResponse>(
+        '/lend/v1/earn/withdraw-instructions',
+        { asset: mint, signer: walletAddress, amount },
+      );
+      return await this.buildTransaction(response.data, walletAddress);
+    } catch (error) {
+      console.error('Error creating Jupiter withdraw transaction:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Convert an instruction response into a base64-encoded unsigned versioned transaction
+   */
+  private async buildTransaction(ix: InstructionResponse, feePayer: string): Promise<string> {
+    const instruction = {
+      programAddress: address(ix.programId),
+      accounts: ix.accounts.map((acc) => ({
+        address: address(acc.pubkey),
+        role: acc.isSigner && acc.isWritable
+          ? AccountRole.WRITABLE_SIGNER
+          : acc.isSigner
+            ? AccountRole.READONLY_SIGNER
+            : acc.isWritable
+              ? AccountRole.WRITABLE
+              : AccountRole.READONLY,
+      })),
+      data: getBase64Encoder().encode(ix.data),
+    };
+
+    const { value: latestBlockhash } = await this.rpc.getLatestBlockhash().send();
+
+    const transactionMessage = pipe(
+      createTransactionMessage({ version: 0 }),
+      (tx) => setTransactionMessageFeePayer(address(feePayer), tx),
+      (tx) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, tx),
+      (tx) => appendTransactionMessageInstruction(instruction, tx),
+    );
+
+    const compiled = compileTransaction(transactionMessage);
+    return getBase64EncodedWireTransaction(compiled);
   }
 
   /**

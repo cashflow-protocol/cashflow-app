@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express, { Application } from 'express';
 import mongoose from 'mongoose';
 import earnRouter from './routes/earn';
+import solanaRouter from './routes/solana';
 import { initializeScheduler } from './services';
 import { EarnTokenModel } from './models';
 
@@ -15,6 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/earn/v1', earnRouter);
+app.use('/solana/v1', solanaRouter);
 
 // Health check
 app.get('/health', (req, res) => {
