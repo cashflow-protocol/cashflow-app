@@ -15,6 +15,7 @@ import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
   },
 })
 @index({ type: 1, mint: 1, vaultAddress: 1 }, { unique: true })
+@index({ status: 1, type: 1 })
 @index({ type: 1, symbol: 1 })
 @index({ symbol: 1 })
 export class EarnToken {
@@ -35,6 +36,9 @@ export class EarnToken {
 
   @prop({ required: true })
   public rewardsRate!: number;
+
+  @prop({ required: true, enum: ['active', 'inactive'], default: 'inactive' })
+  public status!: 'active' | 'inactive';
 
   @prop({ type: () => Object })
   public jupiterToken?: Record<string, any>;

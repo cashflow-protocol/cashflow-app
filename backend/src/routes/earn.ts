@@ -9,14 +9,14 @@ router.get('/tokens', async (req: Request, res: Response) => {
     const { type } = req.query;
 
     // Build query filter
-    const filter: any = {};
+    const filter: any = { status: 'active' };
     if (type && typeof type === 'string') {
       filter.type = type;
     }
 
     // Fetch tokens from MongoDB
     const tokens = await EarnTokenModel.find(filter)
-      .select('type mint vaultAddress vaultTitle symbol rewardsRate')
+      .select('type mint vaultAddress vaultTitle symbol rewardsRate status')
       .sort({ symbol: 1 });
 
     res.json({

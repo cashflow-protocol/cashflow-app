@@ -91,7 +91,7 @@ interface KaminoMetrics {
   cumulativeManagementFeesSol: string;
 }
 
-const METRICS_DELAY_MS = 200;
+const METRICS_DELAY_MS = 500;
 
 export class KaminoManager {
   private api: AxiosInstance;
@@ -184,8 +184,11 @@ export class KaminoManager {
                   vaultAddress: vault.address,
                   vaultTitle: vault.state.name,
                   symbol,
-                  rewardsRate: (parseFloat(metrics!.apy) + parseFloat(metrics!.apyIncentives) + parseFloat(metrics!.apyReservesIncentives)) * 100,
-                  kaminoToken: { ...vault, metrics }, // Full vault data + metrics
+                  rewardsRate: (parseFloat(metrics!.apy) + parseFloat(metrics!.apyIncentives) + parseFloat(metrics!.apyReservesIncentives) + parseFloat(metrics!.apyFarmRewards)) * 10000,
+                  kaminoToken: { ...vault, metrics },
+                },
+                $setOnInsert: {
+                  status: 'inactive' as const,
                 },
               },
               upsert: true,

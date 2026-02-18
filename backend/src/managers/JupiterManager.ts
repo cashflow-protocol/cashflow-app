@@ -112,7 +112,10 @@ export class JupiterManager {
               vaultTitle: `Jupiter Lend - ${token.asset.symbol}`,
               symbol: token.asset.symbol,
               rewardsRate: parseFloat(token.totalRate),
-              jupiterToken: token, // Save the whole token data
+              jupiterToken: token,
+            },
+            $setOnInsert: {
+              status: 'inactive' as const,
             },
           },
           upsert: true, // Create if doesn't exist, update if exists
