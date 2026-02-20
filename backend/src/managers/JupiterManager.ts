@@ -76,6 +76,10 @@ interface InstructionResponse {
   data: string;
 }
 
+interface InstructionsResponse {
+  instructions: InstructionResponse[];
+}
+
 export class JupiterManager {
   private api: AxiosInstance;
   private rpc: Rpc<SolanaRpcApi>;
@@ -143,11 +147,11 @@ export class JupiterManager {
    */
   async deposit(mint: string, amount: string, walletAddress: string): Promise<string> {
     try {
-      const response = await this.api.post<InstructionResponse>(
+      const response = await this.api.post<InstructionsResponse>(
         '/lend/v1/earn/deposit-instructions',
         { asset: mint, signer: walletAddress, amount },
       );
-      return await this.buildTransaction(response.data, walletAddress);
+      return await this.buildTransaction(response.data.instructions, walletAddress);
     } catch (error) {
       console.error('Error creating Jupiter deposit transaction:', error);
       throw error;
@@ -162,11 +166,11 @@ export class JupiterManager {
    */
   async withdraw(mint: string, amount: string, walletAddress: string): Promise<string> {
     try {
-      const response = await this.api.post<InstructionResponse>(
+      const response = await this.api.post<InstructionsResponse>(
         '/lend/v1/earn/withdraw-instructions',
         { asset: mint, signer: walletAddress, amount },
       );
-      return await this.buildTransaction(response.data, walletAddress);
+      return await this.buildTransaction(response.data.instructions, walletAddress);
     } catch (error) {
       console.error('Error creating Jupiter withdraw transaction:', error);
       throw error;
@@ -176,8 +180,8 @@ export class JupiterManager {
   /**
    * Convert an instruction response into a base64-encoded unsigned versioned transaction
    */
-  private async buildTransaction(ix: InstructionResponse, feePayer: string): Promise<string> {
-    const instruction = {
+  private async buildTransaction(ixs: InstructionResponse[], feePayer: string): Promise<string> {
+    const instructions = ixs.map((ix) => ({
       programAddress: address(ix.programId),
       accounts: ix.accounts.map((acc) => ({
         address: address(acc.pubkey),
@@ -190,7 +194,7 @@ export class JupiterManager {
               : AccountRole.READONLY,
       })),
       data: getBase64Encoder().encode(ix.data),
-    };
+    }));
 
     const { value: latestBlockhash } = await this.rpc.getLatestBlockhash().send();
 
@@ -198,7 +202,8 @@ export class JupiterManager {
       createTransactionMessage({ version: 0 }),
       (tx) => setTransactionMessageFeePayer(address(feePayer), tx),
       (tx) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, tx),
-      (tx) => appendTransactionMessageInstruction(instruction, tx),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (tx) => instructions.reduce((msg: any, ix) => appendTransactionMessageInstruction(ix, msg), tx),
     );
 
     const compiled = compileTransaction(transactionMessage);

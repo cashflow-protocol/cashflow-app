@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { EarnTokenModel } from '../models';
 import { JupiterManager } from '../managers';
+import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import type { IBalance } from '../types';
 
 const router = Router();
 
@@ -48,11 +50,27 @@ router.get('/positions', async (req: Request, res: Response) => {
     }
     const jupiterPositions = await jupiterManager.getWalletPositions(walletAddress);
 
+    const positions = jupiterPositions
+      .filter((p) => Number(p.underlyingAssets) > 0)
+      .map((p) => {
+        const mint = p.token.assetAddress;
+        const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+        const decimals = tokenInfo?.decimals ?? 0;
+        return {
+          type: 'jupiter',
+          mint,
+          symbol: tokenInfo?.symbol ?? '',
+          balance: {
+            amount: p.underlyingAssets,
+            decimals,
+            uiAmount: Number(p.underlyingAssets) / 10 ** decimals,
+          } as IBalance,
+        };
+      });
+
     res.json({
       success: true,
-      data: {
-        jupiter: jupiterPositions,
-      },
+      data: positions,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
