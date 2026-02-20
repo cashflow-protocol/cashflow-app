@@ -1,4 +1,18 @@
 import axios, { AxiosInstance } from 'axios';
+import {
+  address,
+  pipe,
+  createSolanaRpc,
+  createTransactionMessage,
+  setTransactionMessageFeePayer,
+  setTransactionMessageLifetimeUsingBlockhash,
+  appendTransactionMessageInstruction,
+  compileTransaction,
+  getBase64EncodedWireTransaction,
+  compressTransactionMessageUsingAddressLookupTables,
+  AccountRole,
+} from '@solana/kit';
+import type { Rpc, SolanaRpcApi, Address } from '@solana/kit';
 import { EarnTokenModel } from '../models';
 import { SUPPORTED_TOKEN_MINTS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
@@ -91,13 +105,39 @@ interface KaminoMetrics {
   cumulativeManagementFeesSol: string;
 }
 
+interface KaminoAccountMeta {
+  address: string;
+  role: 'WRITABLE_SIGNER' | 'WRITABLE' | 'READONLY_SIGNER' | 'READONLY';
+}
+
+interface KaminoInstruction {
+  programAddress: string;
+  accounts: KaminoAccountMeta[];
+  data: string | null;
+}
+
+interface KaminoInstructionsResponse {
+  instructions: KaminoInstruction[];
+  lutsByAddress: Record<string, string[]>;
+}
+
+const ROLE_MAP: Record<string, AccountRole> = {
+  WRITABLE_SIGNER: AccountRole.WRITABLE_SIGNER,
+  READONLY_SIGNER: AccountRole.READONLY_SIGNER,
+  WRITABLE: AccountRole.WRITABLE,
+  READONLY: AccountRole.READONLY,
+};
+
 const METRICS_DELAY_MS = 500;
 
 export class KaminoManager {
   private api: AxiosInstance;
+  private rpc: Rpc<SolanaRpcApi>;
   private readonly baseURL = 'https://api.kamino.finance';
 
   constructor() {
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    this.rpc = createSolanaRpc(rpcUrl);
     this.api = axios.create({
       baseURL: this.baseURL,
       timeout: 30000,
@@ -210,6 +250,126 @@ export class KaminoManager {
       console.error('Error saving Kamino tokens to database:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get wallet positions across all active Kamino vaults
+   * Fetches per-vault position and converts shares to underlying token amounts
+   */
+  async getWalletPositions(walletAddress: string): Promise<{ vaultAddress: string; mint: string; amount: string }[]> {
+    try {
+      const vaults = await EarnTokenModel.find({ type: 'kamino', status: 'active' }).lean();
+      if (vaults.length === 0) return [];
+
+      const positions = await Promise.all(
+        vaults.map(async (vault) => {
+          try {
+            const response = await this.api.get<{ vaultAddress: string; stakedShares: string; unstakedShares: string; totalShares: string }>(
+              `/kvaults/users/${walletAddress}/positions/${vault.vaultAddress}`,
+            );
+
+            const totalShares = parseFloat(response.data.totalShares);
+            if (totalShares <= 0) return null;
+
+            const tokensPerShare = parseFloat(vault.kaminoToken?.metrics?.tokensPerShare ?? '1');
+            const tokenDecimals = vault.kaminoToken?.state?.tokenMintDecimals ?? 6;
+            const underlyingAmount = Math.floor(totalShares * tokensPerShare * 10 ** tokenDecimals);
+
+            return {
+              vaultAddress: vault.vaultAddress!,
+              mint: vault.mint,
+              amount: underlyingAmount.toString(),
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+
+      return positions.filter((p): p is NonNullable<typeof p> => p !== null);
+    } catch (error) {
+      console.error('Error fetching Kamino wallet positions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get an unsigned deposit transaction from Kamino
+   * @param vaultAddress Kamino vault address (kvault)
+   * @param amount Amount in decimal format (e.g. "0.1")
+   * @param walletAddress Wallet address
+   */
+  async deposit(vaultAddress: string, amount: string, walletAddress: string): Promise<string> {
+    try {
+      const response = await this.api.post<KaminoInstructionsResponse>(
+        '/ktx/kvault/deposit-instructions',
+        { wallet: walletAddress, kvault: vaultAddress, amount },
+      );
+      return await this.buildTransaction(response.data, walletAddress);
+    } catch (error) {
+      console.error('Error creating Kamino deposit transaction:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get an unsigned withdraw transaction from Kamino
+   * @param vaultAddress Kamino vault address (kvault)
+   * @param amount Amount in decimal format (e.g. "0.1"), use U64 max to withdraw all
+   * @param walletAddress Wallet address
+   */
+  async withdraw(vaultAddress: string, amount: string, walletAddress: string): Promise<string> {
+    try {
+      const response = await this.api.post<KaminoInstructionsResponse>(
+        '/ktx/kvault/withdraw-instructions',
+        { wallet: walletAddress, kvault: vaultAddress, amount },
+      );
+      return await this.buildTransaction(response.data, walletAddress);
+    } catch (error) {
+      console.error('Error creating Kamino withdraw transaction:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Convert Kamino instructions response into a base64-encoded unsigned versioned transaction
+   */
+  private async buildTransaction(data: KaminoInstructionsResponse, feePayer: string): Promise<string> {
+    const instructions = data.instructions.map((ix) => ({
+      programAddress: address(ix.programAddress),
+      accounts: ix.accounts.map((acc) => ({
+        address: address(acc.address),
+        role: ROLE_MAP[acc.role] ?? AccountRole.READONLY,
+      })),
+      data: ix.data ? new Uint8Array(Buffer.from(ix.data, 'base64')) : new Uint8Array(0),
+    }));
+
+    const { value: latestBlockhash } = await this.rpc.getLatestBlockhash().send();
+
+    const baseMessage = pipe(
+      createTransactionMessage({ version: 0 }),
+      (tx) => setTransactionMessageFeePayer(address(feePayer), tx),
+      (tx) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, tx),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (tx) => instructions.reduce((msg: any, ix) => appendTransactionMessageInstruction(ix, msg), tx),
+    );
+
+    // Compress using address lookup tables if provided
+    const lutEntries = Object.entries(data.lutsByAddress);
+    let transactionMessage = baseMessage;
+    if (lutEntries.length > 0) {
+      const addressesByLookupTableAddress: { [key: Address]: Address[] } = {};
+      for (const [lutAddress, addresses] of lutEntries) {
+        addressesByLookupTableAddress[address(lutAddress)] = addresses.map((a) => address(a));
+      }
+      transactionMessage = compressTransactionMessageUsingAddressLookupTables(
+        baseMessage,
+        addressesByLookupTableAddress,
+      ) as typeof baseMessage;
+    }
+
+    const compiled = compileTransaction(transactionMessage);
+    return getBase64EncodedWireTransaction(compiled);
   }
 }
 

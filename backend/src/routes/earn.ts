@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { EarnTokenModel } from '../models';
-import { JupiterManager } from '../managers';
+import { JupiterManager, KaminoManager } from '../managers';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import type { IBalance } from '../types';
 
@@ -40,6 +40,7 @@ router.get('/tokens', async (req: Request, res: Response) => {
 
 // GET /earn/v1/positions/:wallet - Get wallet positions across protocols
 const jupiterManager = new JupiterManager();
+const kaminoManager = new KaminoManager();
 
 router.get('/positions', async (req: Request, res: Response) => {
   try {
@@ -48,25 +49,45 @@ router.get('/positions', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'walletAddress query param is required' });
       return;
     }
-    const jupiterPositions = await jupiterManager.getWalletPositions(walletAddress);
+    const [jupiterPositions, kaminoPositions] = await Promise.all([
+      jupiterManager.getWalletPositions(walletAddress),
+      kaminoManager.getWalletPositions(walletAddress),
+    ]);
 
-    const positions = jupiterPositions
-      .filter((p) => Number(p.underlyingAssets) > 0)
-      .map((p) => {
-        const mint = p.token.assetAddress;
-        const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+    const positions = [
+      ...jupiterPositions
+        .filter((p) => Number(p.underlyingAssets) > 0)
+        .map((p) => {
+          const mint = p.token.assetAddress;
+          const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+          const decimals = tokenInfo?.decimals ?? 0;
+          return {
+            type: 'jupiter' as const,
+            mint,
+            symbol: tokenInfo?.symbol ?? '',
+            balance: {
+              amount: p.underlyingAssets,
+              decimals,
+              uiAmount: Number(p.underlyingAssets) / 10 ** decimals,
+            } as IBalance,
+          };
+        }),
+      ...kaminoPositions.map((p) => {
+        const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
         const decimals = tokenInfo?.decimals ?? 0;
         return {
-          type: 'jupiter',
-          mint,
+          type: 'kamino' as const,
+          mint: p.mint,
+          vaultAddress: p.vaultAddress,
           symbol: tokenInfo?.symbol ?? '',
           balance: {
-            amount: p.underlyingAssets,
+            amount: p.amount,
             decimals,
-            uiAmount: Number(p.underlyingAssets) / 10 ** decimals,
+            uiAmount: Number(p.amount) / 10 ** decimals,
           } as IBalance,
         };
-      });
+      }),
+    ];
 
     res.json({
       success: true,
@@ -93,6 +114,12 @@ router.post('/deposit', async (req: Request, res: Response) => {
       case 'jupiter':
         transaction = await jupiterManager.deposit(mint, amount, walletAddress);
         break;
+      case 'kamino': {
+        const decimals = SUPPORTED_TOKENS_BY_MINT[mint]?.decimals ?? 0;
+        const decimalAmount = (Number(amount) / 10 ** decimals).toString();
+        transaction = await kaminoManager.deposit(vaultAddress, decimalAmount, walletAddress);
+        break;
+      }
       default:
         res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
         return;
@@ -123,6 +150,12 @@ router.post('/withdraw', async (req: Request, res: Response) => {
       case 'jupiter':
         transaction = await jupiterManager.withdraw(mint, amount, walletAddress);
         break;
+      case 'kamino': {
+        const decimals = SUPPORTED_TOKENS_BY_MINT[mint]?.decimals ?? 0;
+        const decimalAmount = (Number(amount) / 10 ** decimals).toString();
+        transaction = await kaminoManager.withdraw(vaultAddress, decimalAmount, walletAddress);
+        break;
+      }
       default:
         res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
         return;
