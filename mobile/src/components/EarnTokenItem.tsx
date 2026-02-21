@@ -40,45 +40,51 @@ export default function EarnTokenItem({
   const protocolIcon = PROTOCOL_ICONS[type];
   const protocolLabel = PROTOCOL_LABELS[type];
   const localIcon = getTokenIcon(mint);
+  const hasPosition = positionAmount != null && positionAmount > 0;
 
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
-      {/* Icon stack: stablecoin icon with protocol badge */}
-      <View style={styles.iconStack}>
-        <View style={styles.tokenIconContainer}>
-          <Image source={localIcon ?? { uri: logoUrl }} style={styles.tokenIcon} />
+      <View style={styles.row}>
+        {/* Icon stack: stablecoin icon with protocol badge */}
+        <View style={styles.iconStack}>
+          <View style={styles.tokenIconContainer}>
+            <Image source={localIcon ?? { uri: logoUrl }} style={styles.tokenIcon} />
+          </View>
+          <View style={styles.protocolBadge}>
+            <Image source={protocolIcon} style={styles.protocolIcon} />
+          </View>
         </View>
-        <View style={styles.protocolBadge}>
-          <Image source={protocolIcon} style={styles.protocolIcon} />
+
+        {/* Info */}
+        <View style={styles.info}>
+          <Text style={styles.name} numberOfLines={1}>{vaultTitle || `${protocolLabel} - ${symbol}`}</Text>
+          <Text style={styles.protocol}>{protocolLabel} · {symbol}</Text>
         </View>
-      </View>
 
-      {/* Info */}
-      <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>{vaultTitle}</Text>
-        <Text style={styles.protocol}>{protocolLabel} · {symbol}</Text>
-      </View>
-
-      {/* Right side: APY and position */}
-      <View style={styles.rightSection}>
+        {/* Right side: APY */}
         <Text style={styles.apy}>{apyPercent}%</Text>
-        {positionAmount != null && positionAmount > 0 ? (
-          <Text style={styles.position}>${positionAmount.toFixed(2)}</Text>
-        ) : (
-          <Text style={styles.apyLabel}>APY</Text>
-        )}
       </View>
+
+      {hasPosition && (
+        <View style={styles.positionBar}>
+          <Text style={styles.positionLabel}>Your deposit</Text>
+          <Text style={styles.positionAmount}>{positionAmount.toFixed(2)} {symbol}</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 14,
+    gap: 10,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
   iconStack: {
@@ -131,22 +137,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#808080',
   },
-  rightSection: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
   apy: {
     fontSize: 17,
     fontWeight: '700',
     color: '#138001',
   },
-  apyLabel: {
-    fontSize: 12,
-    color: '#808080',
+  positionBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#EEF4FB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  position: {
+  positionLabel: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#294E90',
+    color: '#6B7B8D',
+  },
+  positionAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#175DA3',
   },
 });

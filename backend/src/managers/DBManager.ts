@@ -78,7 +78,7 @@ export class DBManager {
 
     return EarnTokenModel.find(query)
       .select('type mint vaultAddress vaultTitle symbol rewardsRate status')
-      .sort({ symbol: 1 });
+      .sort({ rewardsRate: -1 });
   }
 
   /**

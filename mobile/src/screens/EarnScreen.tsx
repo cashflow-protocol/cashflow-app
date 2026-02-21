@@ -14,7 +14,7 @@ import { useEarnTokens } from '../hooks/useEarnTokens';
 import EarnTokenItem from '../components/EarnTokenItem';
 
 export default function EarnScreen() {
-  const { tokens, loading, error, refresh } = useEarnTokens();
+  const { tokens, loading, refreshing, error, refresh } = useEarnTokens();
 
   return (
     <View style={styles.container}>
@@ -31,7 +31,7 @@ export default function EarnScreen() {
       <SafeAreaView edges={['top']} style={styles.header}>
         <Text style={styles.title}>Earn</Text>
         <Text style={styles.subtitle}>
-          Deposit stablecoins into DeFi protocols and earn yield
+          Passively earn yield using DeFi protocols
         </Text>
       </SafeAreaView>
 
@@ -55,7 +55,7 @@ export default function EarnScreen() {
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             onRefresh={refresh}
-            refreshing={loading}
+            refreshing={refreshing}
             renderItem={({ item }) => (
               <EarnTokenItem
                 type={item.type}
