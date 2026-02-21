@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
-import { DBManager, JupiterManager, KaminoManager, DriftManager } from '../managers';
+import { DBManager, JupiterManager, KaminoManager, DriftManager, PriceManager } from '../managers';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { TransactionAction } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
 
 const router = Router();
 const dbManager = new DBManager();
+const priceManager = new PriceManager();
 
 // GET /earn/v1/tokens - Get earn tokens from MongoDB
 router.get('/tokens', async (req: Request, res: Response) => {
@@ -68,44 +69,53 @@ router.get('/positions', async (req: Request, res: Response) => {
           const mint = p.token.assetAddress;
           const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
           const decimals = tokenInfo?.decimals ?? 0;
+          const symbol = tokenInfo?.symbol ?? '';
+          const uiAmount = Number(p.underlyingAssets) / 10 ** decimals;
           return {
             type: EarnTokenType.JUPITER,
             mint,
-            symbol: tokenInfo?.symbol ?? '',
+            symbol,
             balance: {
               amount: p.underlyingAssets,
               decimals,
-              uiAmount: Number(p.underlyingAssets) / 10 ** decimals,
+              uiAmount,
+              usdValue: priceManager.getUsdValue(symbol, uiAmount),
             } as IBalance,
           };
         }),
       ...kaminoPositions.map((p: any) => {
         const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
         const decimals = tokenInfo?.decimals ?? 0;
+        const symbol = tokenInfo?.symbol ?? '';
+        const uiAmount = Number(p.amount) / 10 ** decimals;
         return {
           type: EarnTokenType.KAMINO,
           mint: p.mint,
           vaultAddress: p.vaultAddress,
-          symbol: tokenInfo?.symbol ?? '',
+          symbol,
           balance: {
             amount: p.amount,
             decimals,
-            uiAmount: Number(p.amount) / 10 ** decimals,
+            uiAmount,
+            usdValue: priceManager.getUsdValue(symbol, uiAmount),
           } as IBalance,
         };
       }),
       ...driftPositions.map((p: any) => {
         const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
         const decimals = tokenInfo?.decimals ?? 0;
+        const symbol = tokenInfo?.symbol ?? '';
+        const uiAmount = Number(p.amount) / 10 ** decimals;
         return {
           type: EarnTokenType.DRIFT,
           mint: p.mint,
           vaultAddress: p.vaultAddress,
-          symbol: tokenInfo?.symbol ?? '',
+          symbol,
           balance: {
             amount: p.amount,
             decimals,
-            uiAmount: Number(p.amount) / 10 ** decimals,
+            uiAmount,
+            usdValue: priceManager.getUsdValue(symbol, uiAmount),
           } as IBalance,
         };
       }),

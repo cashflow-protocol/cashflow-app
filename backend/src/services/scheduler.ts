@@ -1,12 +1,13 @@
 import cron from 'node-cron';
 import { createSolanaRpc } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
-import { JupiterManager, KaminoManager, DriftManager, DBManager } from '../managers';
+import { JupiterManager, KaminoManager, DriftManager, DBManager, PriceManager } from '../managers';
 import { TransactionStatus } from '../models';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
 const dbManager = new DBManager();
+const priceManager = new PriceManager();
 
 const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
@@ -57,6 +58,13 @@ async function updateDriftEarnTokens() {
   } catch (error) {
     console.error('❌ [Cron] Failed to update Drift Earn tokens:', error);
   }
+}
+
+/**
+ * Fetch token prices from Binance
+ */
+async function updatePrices() {
+  await priceManager.fetchPrices();
 }
 
 /**
@@ -118,6 +126,11 @@ export async function initializeScheduler() {
     }
   }
 
+  // Fetch token prices every minute
+  cron.schedule('* * * * *', updatePrices, {
+    timezone: 'UTC',
+  });
+
   // Fetch Jupiter Earn tokens every minute
   cron.schedule('* * * * *', updateJupiterEarnTokens, {
     timezone: 'UTC',
@@ -142,6 +155,7 @@ export async function initializeScheduler() {
 
   console.log('✅ Cron scheduler initialized');
   console.log('📋 Scheduled tasks:');
+  console.log('  - Token prices: Every minute');
   console.log('  - Jupiter Earn tokens: Every minute');
   console.log('  - Kamino Earn tokens: Every minute');
   if (driftManager) {
@@ -150,6 +164,7 @@ export async function initializeScheduler() {
   console.log('  - Confirm transactions: Every 30 seconds');
 
   // Run immediately on startup
+  updatePrices();
   updateJupiterEarnTokens();
   updateKaminoEarnTokens();
   if (driftManager) {
