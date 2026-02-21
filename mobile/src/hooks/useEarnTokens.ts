@@ -9,9 +9,25 @@ export interface EarnTokenWithPosition extends EarnToken {
   position?: EarnPosition;
 }
 
+// Module-level cache — persists across tab switches, cleared on app restart
+let cachedTokens: EarnTokenWithPosition[] | null = null;
+
+function mergeTokensAndPositions(earnTokens: EarnToken[], positions: EarnPosition[]): EarnTokenWithPosition[] {
+  const positionMap = new Map<string, EarnPosition>();
+  positions.forEach((p) => {
+    const key = [p.type, p.mint, p.vaultAddress].filter(Boolean).join(':');
+    positionMap.set(key, p);
+  });
+
+  return earnTokens.map((token) => ({
+    ...token,
+    position: positionMap.get([token.type, token.mint, token.vaultAddress].filter(Boolean).join(':')),
+  }));
+}
+
 export function useEarnTokens() {
-  const [tokens, setTokens] = useState<EarnTokenWithPosition[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tokens, setTokens] = useState<EarnTokenWithPosition[]>(cachedTokens ?? []);
+  const [loading, setLoading] = useState(cachedTokens === null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,17 +44,8 @@ export function useEarnTokens() {
         apiService.getPositions(HARDCODED_WALLET),
       ]);
 
-      const positionMap = new Map<string, EarnPosition>();
-      positions.forEach((p) => {
-        const key = [p.type, p.mint, p.vaultAddress].filter(Boolean).join(':');
-        positionMap.set(key, p);
-      });
-
-      const merged: EarnTokenWithPosition[] = earnTokens.map((token) => ({
-        ...token,
-        position: positionMap.get([token.type, token.mint, token.vaultAddress].filter(Boolean).join(':')),
-      }));
-
+      const merged = mergeTokensAndPositions(earnTokens, positions);
+      cachedTokens = merged;
       setTokens(merged);
     } catch (err: any) {
       setError(err.message ?? 'Failed to fetch earn tokens');
@@ -49,7 +56,9 @@ export function useEarnTokens() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    if (cachedTokens === null) {
+      fetchData();
+    }
   }, [fetchData]);
 
   const refresh = useCallback(() => fetchData(true), [fetchData]);
