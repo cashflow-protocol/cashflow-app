@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { EarnTokenModel } from '../models';
-import { JupiterManager, KaminoManager } from '../managers';
+import { JupiterManager, KaminoManager, DriftManager } from '../managers';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import type { IBalance } from '../types';
 
@@ -38,9 +38,18 @@ router.get('/tokens', async (req: Request, res: Response) => {
   }
 });
 
-// GET /earn/v1/positions/:wallet - Get wallet positions across protocols
+// Manager instances
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
+
+let driftManager: DriftManager | null = null;
+let driftReady: Promise<void> | null = null;
+try {
+  driftManager = new DriftManager();
+  driftReady = driftManager.initialize();
+} catch {
+  // Drift not configured (missing env vars)
+}
 
 router.get('/positions', async (req: Request, res: Response) => {
   try {
@@ -49,15 +58,21 @@ router.get('/positions', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'walletAddress query param is required' });
       return;
     }
-    const [jupiterPositions, kaminoPositions] = await Promise.all([
+    const positionPromises: Promise<any[]>[] = [
       jupiterManager.getWalletPositions(walletAddress),
       kaminoManager.getWalletPositions(walletAddress),
-    ]);
+    ];
+    if (driftManager) {
+      positionPromises.push(
+        (async () => { await driftReady; return driftManager!.getWalletPositions(walletAddress); })(),
+      );
+    }
+    const [jupiterPositions, kaminoPositions, driftPositions = []] = await Promise.all(positionPromises);
 
     const positions = [
       ...jupiterPositions
-        .filter((p) => Number(p.underlyingAssets) > 0)
-        .map((p) => {
+        .filter((p: any) => Number(p.underlyingAssets) > 0)
+        .map((p: any) => {
           const mint = p.token.assetAddress;
           const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
           const decimals = tokenInfo?.decimals ?? 0;
@@ -72,11 +87,26 @@ router.get('/positions', async (req: Request, res: Response) => {
             } as IBalance,
           };
         }),
-      ...kaminoPositions.map((p) => {
+      ...kaminoPositions.map((p: any) => {
         const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
         const decimals = tokenInfo?.decimals ?? 0;
         return {
           type: 'kamino' as const,
+          mint: p.mint,
+          vaultAddress: p.vaultAddress,
+          symbol: tokenInfo?.symbol ?? '',
+          balance: {
+            amount: p.amount,
+            decimals,
+            uiAmount: Number(p.amount) / 10 ** decimals,
+          } as IBalance,
+        };
+      }),
+      ...driftPositions.map((p: any) => {
+        const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
+        const decimals = tokenInfo?.decimals ?? 0;
+        return {
+          type: 'drift' as const,
           mint: p.mint,
           vaultAddress: p.vaultAddress,
           symbol: tokenInfo?.symbol ?? '',
@@ -120,6 +150,15 @@ router.post('/deposit', async (req: Request, res: Response) => {
         transaction = await kaminoManager.deposit(vaultAddress, decimalAmount, walletAddress);
         break;
       }
+      case 'drift': {
+        if (!driftManager) {
+          res.status(400).json({ success: false, error: 'Drift not configured' });
+          return;
+        }
+        await driftReady;
+        transaction = await driftManager.deposit(vaultAddress, amount, walletAddress);
+        break;
+      }
       default:
         res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
         return;
@@ -154,6 +193,15 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         const decimals = SUPPORTED_TOKENS_BY_MINT[mint]?.decimals ?? 0;
         const decimalAmount = (Number(amount) / 10 ** decimals).toString();
         transaction = await kaminoManager.withdraw(vaultAddress, decimalAmount, walletAddress);
+        break;
+      }
+      case 'drift': {
+        if (!driftManager) {
+          res.status(400).json({ success: false, error: 'Drift not configured' });
+          return;
+        }
+        await driftReady;
+        transaction = await driftManager.withdraw(vaultAddress, amount, walletAddress);
         break;
       }
       default:
