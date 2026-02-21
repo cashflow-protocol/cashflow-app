@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { useEarnTokens } from '../hooks/useEarnTokens';
 import EarnTokenItem from '../components/EarnTokenItem';
+import { LifetimeEarnedIcon, Last7DIcon, AvgApyIcon } from '../assets/stat-icons';
 
 const ALL_FILTER = 'All';
 const STABLES_FILTER = 'Stables';
@@ -35,6 +36,18 @@ export default function EarnScreen() {
     return tokens.reduce((sum, t) => sum + (t.position?.balance.usdValue ?? 0), 0);
   }, [tokens]);
 
+  // Weighted average APY across positions
+  const avgApy = useMemo(() => {
+    const withPositions = tokens.filter((t) => t.position && t.position.balance.usdValue > 0);
+    if (withPositions.length === 0) return null;
+    const totalUsd = withPositions.reduce((sum, t) => sum + t.position!.balance.usdValue, 0);
+    const weightedSum = withPositions.reduce(
+      (sum, t) => sum + (t.rewardsRate / 100) * t.position!.balance.usdValue,
+      0,
+    );
+    return weightedSum / totalUsd;
+  }, [tokens]);
+
   // Filtered tokens
   const filteredTokens = useMemo(() => {
     if (activeFilter === ALL_FILTER) return tokens;
@@ -52,7 +65,7 @@ export default function EarnScreen() {
 
       {/* Header Gradient */}
       <LinearGradient
-        colors={['#175DA3', '#347AC0', '#8EB2D8', '#E8EAF1']}
+        colors={['#1E8260', '#19C394']}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -61,36 +74,80 @@ export default function EarnScreen() {
       <SafeAreaView edges={['top']} style={styles.header}>
         <Text style={styles.title}>Earn</Text>
         <Text style={styles.totalAmount}>${formatTotal(totalDeposited)}</Text>
-
-        {/* Filter chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtersContainer}
-          style={styles.filtersScroll}
-        >
-          {filters.map((filter) => (
-            <TouchableOpacity
-              key={filter}
-              style={[
-                styles.filterChip,
-                activeFilter === filter && styles.filterChipActive,
-              ]}
-              onPress={() => setActiveFilter(filter)}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.filterText,
-                  activeFilter === filter && styles.filterTextActive,
-                ]}
-              >
-                {filter}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
       </SafeAreaView>
+
+      {/* Stat cards */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.statsContainer}
+        style={styles.statsScroll}
+      >
+        <View style={styles.statCard}>
+          <View style={styles.statRow}>
+            <View style={styles.statIconCircle}>
+              <LifetimeEarnedIcon size={20} />
+            </View>
+            <View>
+              <Text style={styles.statLabel}>Lifetime earned</Text>
+              <Text style={styles.statValue}>$0.00</Text>
+            </View>
+          </View>
+        </View>
+        <View style={styles.statCard}>
+          <View style={styles.statRow}>
+            <View style={styles.statIconCircle}>
+              <Last7DIcon size={20} />
+            </View>
+            <View>
+              <Text style={styles.statLabel}>Last 7D</Text>
+              <Text style={styles.statValue}>$0.00</Text>
+            </View>
+          </View>
+        </View>
+        {avgApy !== null && (
+          <View style={styles.statCard}>
+            <View style={styles.statRow}>
+              <View style={styles.statIconCircle}>
+                <AvgApyIcon size={20} />
+              </View>
+              <View>
+                <Text style={styles.statLabel}>Your avg APY</Text>
+                <Text style={styles.statValue}>{avgApy.toFixed(2)}%</Text>
+              </View>
+            </View>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Filter chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filtersContainer}
+        style={styles.filtersScroll}
+      >
+        {filters.map((filter) => (
+          <TouchableOpacity
+            key={filter}
+            style={[
+              styles.filterChip,
+              activeFilter === filter && styles.filterChipActive,
+            ]}
+            onPress={() => setActiveFilter(filter)}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                activeFilter === filter && styles.filterTextActive,
+              ]}
+            >
+              {filter}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
       {/* Content */}
       <View style={styles.content}>
@@ -147,12 +204,12 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 280,
+    height: 220,
   },
   header: {
     alignItems: 'center',
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 16,
   },
   title: {
     fontSize: 18,
@@ -164,10 +221,50 @@ const styles = StyleSheet.create({
     fontSize: 44,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 16,
+    marginBottom: 0,
+  },
+  statsScroll: {
+    maxHeight: 70,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  statsContainer: {
+    paddingHorizontal: 14,
+    gap: 10,
+  },
+  statCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minWidth: 150,
+  },
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#19C394',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 13,
+    color: '#6B7B8D',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
   },
   filtersScroll: {
     maxHeight: 36,
+    marginBottom: 12,
   },
   filtersContainer: {
     paddingHorizontal: 14,
@@ -177,18 +274,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
   },
   filterChipActive: {
-    backgroundColor: '#fff',
+    backgroundColor: '#19C394',
   },
   filterText: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: '#6B7B8D',
   },
   filterTextActive: {
-    color: '#175DA3',
+    color: '#fff',
   },
   content: {
     flex: 1,
