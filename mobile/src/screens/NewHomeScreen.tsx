@@ -16,6 +16,9 @@ import AssetItem from '../components/AssetItem';
 import SectionCard from '../components/SectionCard';
 import StatBox from '../components/StatBox';
 
+// Bottom padding to account for floating tab bar
+const TAB_BAR_PADDING = 120;
+
 export default function NewHomeScreen() {
   const { wallet, balance, connect } = useWallet();
 
@@ -190,34 +193,10 @@ export default function NewHomeScreen() {
           </View>
         </SectionCard>
 
-        <View style={{ height: 100 }} />
+        <View style={{ height: TAB_BAR_PADDING }} />
       </ScrollView>
 
-      {/* Bottom Tab Bar */}
-      <View style={styles.tabBarContainer}>
-        <LinearGradient
-          colors={['rgba(165, 165, 165, 0)', 'rgba(165, 165, 165, 0.3)']}
-          style={styles.tabBarGlow}
-        />
-        <View style={styles.tabBar}>
-          <TouchableOpacity style={styles.tabItem}>
-            <Text style={styles.tabIconActive}>🏠</Text>
-            <Text style={styles.tabLabelActive}>Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tabItem}>
-            <Text style={styles.tabIcon}>💰</Text>
-            <Text style={styles.tabLabel}>Earn</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tabItem}>
-            <Text style={styles.tabIcon}>💼</Text>
-            <Text style={styles.tabLabel}>Assets</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tabItem}>
-            <Text style={styles.tabIcon}>⋯</Text>
-            <Text style={styles.tabLabel}>More</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      {/* Tab bar is rendered by App.tsx */}
     </View>
   );
 }
@@ -376,59 +355,5 @@ const styles = StyleSheet.create({
   helpButtonText: {
     fontSize: 14,
     color: '#000',
-  },
-  tabBarContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 116,
-  },
-  tabBarGlow: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 116,
-  },
-  tabBar: {
-    position: 'absolute',
-    bottom: 28,
-    left: '50%',
-    transform: [{ translateX: -154.5 }],
-    width: 309,
-    height: 56,
-    backgroundColor: '#FDFDFE',
-    borderRadius: 28,
-    borderWidth: 0.5,
-    borderColor: '#EEECEC',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 3,
-  },
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-  },
-  tabIcon: {
-    fontSize: 20,
-    marginBottom: 2,
-  },
-  tabIconActive: {
-    fontSize: 20,
-    marginBottom: 2,
-  },
-  tabLabel: {
-    fontSize: 10,
-    color: '#B2B2B2',
-    fontWeight: '500',
-  },
-  tabLabelActive: {
-    fontSize: 10,
-    color: '#F95357',
-    fontWeight: '500',
   },
 });
