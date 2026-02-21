@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   FlatList,
   ActivityIndicator,
   TouchableOpacity,
+  ScrollView,
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,8 +14,37 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { useEarnTokens } from '../hooks/useEarnTokens';
 import EarnTokenItem from '../components/EarnTokenItem';
 
+const ALL_FILTER = 'All';
+const STABLES_FILTER = 'Stables';
+const STABLECOIN_SYMBOLS = new Set(['USDC', 'USDT', 'JupUSD', 'USDG', 'USDS', 'PYUSD']);
+const PINNED_FILTERS = [ALL_FILTER, STABLES_FILTER, 'SOL', 'USDC'];
+
 export default function EarnScreen() {
   const { tokens, loading, refreshing, error, refresh } = useEarnTokens();
+  const [activeFilter, setActiveFilter] = useState(ALL_FILTER);
+
+  // Build filter list: All, Stables, USDC, then remaining symbols
+  const filters = useMemo(() => {
+    const allSymbols = [...new Set(tokens.map((t) => t.symbol))];
+    const remaining = allSymbols.filter((s) => !PINNED_FILTERS.includes(s));
+    return [...PINNED_FILTERS, ...remaining];
+  }, [tokens]);
+
+  // Total deposited (sum of all position uiAmounts)
+  const totalDeposited = useMemo(() => {
+    return tokens.reduce((sum, t) => sum + (t.position?.balance.usdValue ?? 0), 0);
+  }, [tokens]);
+
+  // Filtered tokens
+  const filteredTokens = useMemo(() => {
+    if (activeFilter === ALL_FILTER) return tokens;
+    if (activeFilter === STABLES_FILTER) return tokens.filter((t) => STABLECOIN_SYMBOLS.has(t.symbol));
+    return tokens.filter((t) => t.symbol === activeFilter);
+  }, [tokens, activeFilter]);
+
+  const formatTotal = (amount: number) => {
+    return amount.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  };
 
   return (
     <View style={styles.container}>
@@ -30,9 +60,36 @@ export default function EarnScreen() {
 
       <SafeAreaView edges={['top']} style={styles.header}>
         <Text style={styles.title}>Earn</Text>
-        <Text style={styles.subtitle}>
-          Passively earn yield using DeFi protocols
-        </Text>
+        <Text style={styles.totalAmount}>${formatTotal(totalDeposited)}</Text>
+
+        {/* Filter chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersContainer}
+          style={styles.filtersScroll}
+        >
+          {filters.map((filter) => (
+            <TouchableOpacity
+              key={filter}
+              style={[
+                styles.filterChip,
+                activeFilter === filter && styles.filterChipActive,
+              ]}
+              onPress={() => setActiveFilter(filter)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.filterText,
+                  activeFilter === filter && styles.filterTextActive,
+                ]}
+              >
+                {filter}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </SafeAreaView>
 
       {/* Content */}
@@ -50,7 +107,7 @@ export default function EarnScreen() {
           </View>
         ) : (
           <FlatList
-            data={tokens}
+            data={filteredTokens}
             keyExtractor={(item) => `${item.type}:${item.mint}${item.vaultAddress ? `:${item.vaultAddress}` : ''}`}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
@@ -90,22 +147,48 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 200,
+    height: 280,
   },
   header: {
-    paddingHorizontal: 20,
+    alignItems: 'center',
     paddingTop: 8,
-    paddingBottom: 16,
+    paddingBottom: 12,
   },
   title: {
-    fontSize: 28,
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 8,
+  },
+  totalAmount: {
+    fontSize: 44,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 4,
+    marginBottom: 16,
   },
-  subtitle: {
+  filtersScroll: {
+    maxHeight: 36,
+  },
+  filtersContainer: {
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  filterChipActive: {
+    backgroundColor: '#fff',
+  },
+  filterText: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.85)',
+  },
+  filterTextActive: {
+    color: '#175DA3',
   },
   content: {
     flex: 1,

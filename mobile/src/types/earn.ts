@@ -22,5 +22,6 @@ export interface EarnPosition {
     amount: string;
     decimals: number;
     uiAmount: number;
+    usdValue: number;
   };
 }
