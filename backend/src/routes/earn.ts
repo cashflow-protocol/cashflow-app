@@ -1,26 +1,17 @@
 import { Router, Request, Response } from 'express';
-import { EarnTokenModel } from '../models';
-import { JupiterManager, KaminoManager, DriftManager } from '../managers';
+import { DBManager, JupiterManager, KaminoManager, DriftManager } from '../managers';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import type { IBalance } from '../types';
 
 const router = Router();
+const dbManager = new DBManager();
 
 // GET /earn/v1/tokens - Get earn tokens from MongoDB
 router.get('/tokens', async (req: Request, res: Response) => {
   try {
     const { type } = req.query;
-
-    // Build query filter
-    const filter: any = { status: 'active' };
-    if (type && typeof type === 'string') {
-      filter.type = type;
-    }
-
-    // Fetch tokens from MongoDB
-    const tokens = await EarnTokenModel.find(filter)
-      .select('type mint vaultAddress vaultTitle symbol rewardsRate status')
-      .sort({ symbol: 1 });
+    const typeFilter = type && typeof type === 'string' ? { type } : undefined;
+    const tokens = await dbManager.getTokens(typeFilter);
 
     res.json({
       success: true,

@@ -10,11 +10,15 @@ import {
   compileTransaction,
   getBase64EncodedWireTransaction,
   compressTransactionMessageUsingAddressLookupTables,
-  AccountRole,
+  fetchAddressesForLookupTables,
 } from '@solana/kit';
-import type { Rpc, SolanaRpcApi, Address } from '@solana/kit';
-import { EarnTokenModel } from '../models';
+import type { Rpc, SolanaRpcApi, Instruction, TransactionSigner } from '@solana/kit';
+import { KaminoVault } from '@kamino-finance/klend-sdk';
+import Decimal from 'decimal.js';
 import { SUPPORTED_TOKEN_MINTS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import { DBManager, EarnTokenUpsert } from './DBManager';
+
+// --- REST API types (used by getEarnTokens cron job) ---
 
 interface KaminoAllocationStrategy {
   reserve: string;
@@ -27,44 +31,42 @@ interface KaminoAllocationStrategy {
   tokenTargetAllocation: string;
 }
 
-interface KaminoVaultState {
-  vaultAdminAuthority: string;
-  baseVaultAuthority: string;
-  baseVaultAuthorityBump: number;
-  tokenMint: string;
-  tokenMintDecimals: number;
-  tokenVault: string;
-  tokenProgram: string;
-  sharesMint: string;
-  sharesMintDecimals: number;
-  tokenAvailable: string;
-  sharesIssued: string;
-  availableCrankFunds: string;
-  performanceFeeBps: number;
-  managementFeeBps: number;
-  lastFeeChargeTimestamp: number;
-  prevAum: string;
-  pendingFees: string;
-  vaultAllocationStrategy: KaminoAllocationStrategy[];
-  minDepositAmount: string;
-  minWithdrawAmount: string;
-  minInvestAmount: string;
-  minInvestDelaySlots: number;
-  crankFundFeePerReserve: string;
-  pendingAdmin: string;
-  cumulativeEarnedInterest: string;
-  cumulativeMgmtFees: string;
-  cumulativePerfFees: string;
-  name: string;
-  vaultLookupTable: string;
-  vaultFarm: string;
-  creationTimestamp: number;
-  allocationAdmin: string;
-}
-
-interface KaminoVault {
+interface KaminoVaultResponse {
   address: string;
-  state: KaminoVaultState;
+  state: {
+    vaultAdminAuthority: string;
+    baseVaultAuthority: string;
+    baseVaultAuthorityBump: number;
+    tokenMint: string;
+    tokenMintDecimals: number;
+    tokenVault: string;
+    tokenProgram: string;
+    sharesMint: string;
+    sharesMintDecimals: number;
+    tokenAvailable: string;
+    sharesIssued: string;
+    availableCrankFunds: string;
+    performanceFeeBps: number;
+    managementFeeBps: number;
+    lastFeeChargeTimestamp: number;
+    prevAum: string;
+    pendingFees: string;
+    vaultAllocationStrategy: KaminoAllocationStrategy[];
+    minDepositAmount: string;
+    minWithdrawAmount: string;
+    minInvestAmount: string;
+    minInvestDelaySlots: number;
+    crankFundFeePerReserve: string;
+    pendingAdmin: string;
+    cumulativeEarnedInterest: string;
+    cumulativeMgmtFees: string;
+    cumulativePerfFees: string;
+    name: string;
+    vaultLookupTable: string;
+    vaultFarm: string;
+    creationTimestamp: number;
+    allocationAdmin: string;
+  };
   programId: string;
 }
 
@@ -105,39 +107,30 @@ interface KaminoMetrics {
   cumulativeManagementFeesSol: string;
 }
 
-interface KaminoAccountMeta {
-  address: string;
-  role: 'WRITABLE_SIGNER' | 'WRITABLE' | 'READONLY_SIGNER' | 'READONLY';
-}
-
-interface KaminoInstruction {
-  programAddress: string;
-  accounts: KaminoAccountMeta[];
-  data: string | null;
-}
-
-interface KaminoInstructionsResponse {
-  instructions: KaminoInstruction[];
-  lutsByAddress: Record<string, string[]>;
-}
-
-const ROLE_MAP: Record<string, AccountRole> = {
-  WRITABLE_SIGNER: AccountRole.WRITABLE_SIGNER,
-  READONLY_SIGNER: AccountRole.READONLY_SIGNER,
-  WRITABLE: AccountRole.WRITABLE,
-  READONLY: AccountRole.READONLY,
-};
-
 const METRICS_DELAY_MS = 500;
+
+/**
+ * Create a noop TransactionSigner for building unsigned transactions.
+ * The signer has the correct address for PDA derivation and account setup,
+ * but does not actually sign — the mobile client signs after receiving the tx.
+ */
+function createNoopSigner(walletAddr: string): TransactionSigner {
+  return {
+    address: address(walletAddr),
+    signTransactions: async (txs: any[]) => txs.map(() => ({})),
+  } as TransactionSigner;
+}
 
 export class KaminoManager {
   private api: AxiosInstance;
   private rpc: Rpc<SolanaRpcApi>;
+  private db: DBManager;
   private readonly baseURL = 'https://api.kamino.finance';
 
   constructor() {
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
     this.rpc = createSolanaRpc(rpcUrl);
+    this.db = new DBManager();
     this.api = axios.create({
       baseURL: this.baseURL,
       timeout: 30000,
@@ -149,11 +142,10 @@ export class KaminoManager {
 
   /**
    * Fetch earn tokens from Kamino API and save to MongoDB
-   * @returns List of all Kamino vaults
    */
-  async getEarnTokens(): Promise<KaminoVault[]> {
+  async getEarnTokens(): Promise<KaminoVaultResponse[]> {
     try {
-      const response = await this.api.get<KaminoVault[]>('/kvaults/vaults');
+      const response = await this.api.get<KaminoVaultResponse[]>('/kvaults/vaults');
 
       const supportedVaults = response.data.filter((vault) =>
         SUPPORTED_TOKEN_MINTS.includes(vault.state.tokenMint)
@@ -172,9 +164,6 @@ export class KaminoManager {
     }
   }
 
-  /**
-   * Fetch metrics for a specific vault
-   */
   private async fetchMetrics(vaultAddress: string): Promise<KaminoMetrics | null> {
     try {
       const response = await this.api.get<KaminoMetrics>(
@@ -191,89 +180,51 @@ export class KaminoManager {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /**
-   * Save or update Kamino earn tokens in MongoDB
-   */
-  private async saveTokensToDatabase(vaults: KaminoVault[]): Promise<void> {
-    try {
-      // Fetch metrics for each vault with delays to respect rate limits
-      const vaultsWithMetrics: { vault: KaminoVault; metrics: KaminoMetrics | null }[] = [];
+  private async saveTokensToDatabase(vaults: KaminoVaultResponse[]): Promise<void> {
+    const vaultsWithMetrics: { vault: KaminoVaultResponse; metrics: KaminoMetrics | null }[] = [];
 
-      for (const vault of vaults) {
-        const metrics = await this.fetchMetrics(vault.address);
-        vaultsWithMetrics.push({ vault, metrics });
-        await this.delay(METRICS_DELAY_MS);
-      }
-
-      const bulkOps = vaultsWithMetrics
-        .filter(({ metrics }) => metrics !== null)
-        .map(({ vault, metrics }) => {
-          const symbol = SUPPORTED_TOKENS_BY_MINT[vault.state.tokenMint]?.symbol ?? '';
-
-          return {
-            updateOne: {
-              filter: {
-                type: 'kamino' as const,
-                mint: vault.state.tokenMint,
-                vaultAddress: vault.address,
-              },
-              update: {
-                $set: {
-                  type: 'kamino' as const,
-                  mint: vault.state.tokenMint,
-                  vaultAddress: vault.address,
-                  vaultTitle: vault.state.name,
-                  symbol,
-                  rewardsRate: (parseFloat(metrics!.apy) + parseFloat(metrics!.apyIncentives) + parseFloat(metrics!.apyReservesIncentives) + parseFloat(metrics!.apyFarmRewards)) * 10000,
-                  kaminoToken: { ...vault, metrics },
-                },
-                $setOnInsert: {
-                  status: 'inactive' as const,
-                },
-              },
-              upsert: true,
-            },
-          };
-        });
-
-      if (bulkOps.length === 0) {
-        console.log('⚠️ [Kamino] No tokens with valid metrics to save');
-        return;
-      }
-
-      const result = await EarnTokenModel.bulkWrite(bulkOps as any);
-
-      console.log(
-        `✅ [Kamino] Saved ${result.upsertedCount} new tokens, updated ${result.modifiedCount} existing tokens`
-      );
-    } catch (error) {
-      console.error('Error saving Kamino tokens to database:', error);
-      throw error;
+    for (const vault of vaults) {
+      const metrics = await this.fetchMetrics(vault.address);
+      vaultsWithMetrics.push({ vault, metrics });
+      await this.delay(METRICS_DELAY_MS);
     }
+
+    const upserts: EarnTokenUpsert[] = vaultsWithMetrics
+      .filter(({ metrics }) => metrics !== null)
+      .map(({ vault, metrics }) => ({
+        type: 'kamino' as const,
+        mint: vault.state.tokenMint,
+        vaultAddress: vault.address,
+        vaultTitle: vault.state.name,
+        symbol: SUPPORTED_TOKENS_BY_MINT[vault.state.tokenMint]?.symbol ?? '',
+        rewardsRate: (parseFloat(metrics!.apy) + parseFloat(metrics!.apyIncentives) + parseFloat(metrics!.apyReservesIncentives) + parseFloat(metrics!.apyFarmRewards)) * 10000,
+        protocolData: { ...vault, metrics },
+      }));
+
+    await this.db.upsertEarnTokens(upserts);
   }
 
   /**
-   * Get wallet positions across all active Kamino vaults
-   * Fetches per-vault position and converts shares to underlying token amounts
+   * Get wallet positions across all active Kamino vaults using SDK
    */
   async getWalletPositions(walletAddress: string): Promise<{ vaultAddress: string; mint: string; amount: string }[]> {
     try {
-      const vaults = await EarnTokenModel.find({ type: 'kamino', status: 'active' }).lean();
+      const vaults = await this.db.getActiveVaults('kamino');
       if (vaults.length === 0) return [];
 
       const positions = await Promise.all(
         vaults.map(async (vault) => {
           try {
-            const response = await this.api.get<{ vaultAddress: string; stakedShares: string; unstakedShares: string; totalShares: string }>(
-              `/kvaults/users/${walletAddress}/positions/${vault.vaultAddress}`,
-            );
+            const kaminoVault = new KaminoVault(this.rpc as any, address(vault.vaultAddress!));
+            const shares = await kaminoVault.getUserShares(address(walletAddress));
+            if (shares.totalShares.lte(0)) return null;
 
-            const totalShares = parseFloat(response.data.totalShares);
-            if (totalShares <= 0) return null;
-
-            const tokensPerShare = parseFloat(vault.kaminoToken?.metrics?.tokensPerShare ?? '1');
+            const exchangeRate = await kaminoVault.getExchangeRate();
             const tokenDecimals = vault.kaminoToken?.state?.tokenMintDecimals ?? 6;
-            const underlyingAmount = Math.floor(totalShares * tokensPerShare * 10 ** tokenDecimals);
+            const underlyingAmount = shares.totalShares
+              .mul(exchangeRate)
+              .mul(new Decimal(10).pow(tokenDecimals))
+              .floor();
 
             return {
               vaultAddress: vault.vaultAddress!,
@@ -294,18 +245,26 @@ export class KaminoManager {
   }
 
   /**
-   * Get an unsigned deposit transaction from Kamino
+   * Get an unsigned deposit transaction using klend-sdk
    * @param vaultAddress Kamino vault address (kvault)
    * @param amount Amount in decimal format (e.g. "0.1")
    * @param walletAddress Wallet address
    */
   async deposit(vaultAddress: string, amount: string, walletAddress: string): Promise<string> {
     try {
-      const response = await this.api.post<KaminoInstructionsResponse>(
-        '/ktx/kvault/deposit-instructions',
-        { wallet: walletAddress, kvault: vaultAddress, amount },
-      );
-      return await this.buildTransaction(response.data, walletAddress);
+      const vault = new KaminoVault(this.rpc as any, address(vaultAddress));
+      const signer = createNoopSigner(walletAddress);
+
+      const depositResult = await vault.depositIxs(signer as any, new Decimal(amount));
+
+      const allIxs = [
+        ...depositResult.depositIxs,
+        ...depositResult.stakeInFarmIfNeededIxs,
+      ];
+
+      // Get vault state for LUT address
+      const vaultState = await vault.getState();
+      return await this.buildTransaction(allIxs as any, walletAddress, vaultState.vaultLookupTable as unknown as string);
     } catch (error) {
       console.error('Error creating Kamino deposit transaction:', error);
       throw error;
@@ -313,18 +272,31 @@ export class KaminoManager {
   }
 
   /**
-   * Get an unsigned withdraw transaction from Kamino
+   * Get an unsigned withdraw transaction using klend-sdk
    * @param vaultAddress Kamino vault address (kvault)
-   * @param amount Amount in decimal format (e.g. "0.1"), use U64 max to withdraw all
+   * @param amount Amount in decimal format (e.g. "0.1") — underlying token amount
    * @param walletAddress Wallet address
    */
   async withdraw(vaultAddress: string, amount: string, walletAddress: string): Promise<string> {
     try {
-      const response = await this.api.post<KaminoInstructionsResponse>(
-        '/ktx/kvault/withdraw-instructions',
-        { wallet: walletAddress, kvault: vaultAddress, amount },
-      );
-      return await this.buildTransaction(response.data, walletAddress);
+      const vault = new KaminoVault(this.rpc as any, address(vaultAddress));
+      const signer = createNoopSigner(walletAddress);
+
+      // Convert underlying token amount to share amount
+      const exchangeRate = await vault.getExchangeRate();
+      const shareAmount = new Decimal(amount).div(exchangeRate);
+
+      const withdrawResult = await vault.withdrawIxs(signer as any, shareAmount);
+
+      const allIxs = [
+        ...withdrawResult.unstakeFromFarmIfNeededIxs,
+        ...withdrawResult.withdrawIxs,
+        ...withdrawResult.postWithdrawIxs,
+      ];
+
+      // Get vault state for LUT address
+      const vaultState = await vault.getState();
+      return await this.buildTransaction(allIxs as any, walletAddress, vaultState.vaultLookupTable as unknown as string);
     } catch (error) {
       console.error('Error creating Kamino withdraw transaction:', error);
       throw error;
@@ -332,18 +304,10 @@ export class KaminoManager {
   }
 
   /**
-   * Convert Kamino instructions response into a base64-encoded unsigned versioned transaction
+   * Build a base64-encoded unsigned versioned transaction from instructions,
+   * optionally compressing with the vault's address lookup table
    */
-  private async buildTransaction(data: KaminoInstructionsResponse, feePayer: string): Promise<string> {
-    const instructions = data.instructions.map((ix) => ({
-      programAddress: address(ix.programAddress),
-      accounts: ix.accounts.map((acc) => ({
-        address: address(acc.address),
-        role: ROLE_MAP[acc.role] ?? AccountRole.READONLY,
-      })),
-      data: ix.data ? new Uint8Array(Buffer.from(ix.data, 'base64')) : new Uint8Array(0),
-    }));
-
+  private async buildTransaction(instructions: Instruction[], feePayer: string, lutAddress?: string): Promise<string> {
     const { value: latestBlockhash } = await this.rpc.getLatestBlockhash().send();
 
     const baseMessage = pipe(
@@ -354,18 +318,21 @@ export class KaminoManager {
       (tx) => instructions.reduce((msg: any, ix) => appendTransactionMessageInstruction(ix, msg), tx),
     );
 
-    // Compress using address lookup tables if provided
-    const lutEntries = Object.entries(data.lutsByAddress);
+    // Compress using vault's address lookup table if available
     let transactionMessage = baseMessage;
-    if (lutEntries.length > 0) {
-      const addressesByLookupTableAddress: { [key: Address]: Address[] } = {};
-      for (const [lutAddress, addresses] of lutEntries) {
-        addressesByLookupTableAddress[address(lutAddress)] = addresses.map((a) => address(a));
+    if (lutAddress) {
+      try {
+        const lutAddr = address(lutAddress);
+        const addressesByLut = await fetchAddressesForLookupTables([lutAddr], this.rpc);
+        if (addressesByLut[lutAddr]?.length > 0) {
+          transactionMessage = compressTransactionMessageUsingAddressLookupTables(
+            baseMessage,
+            addressesByLut,
+          ) as typeof baseMessage;
+        }
+      } catch (err) {
+        console.warn('[Kamino] Failed to fetch LUT, sending without compression:', err);
       }
-      transactionMessage = compressTransactionMessageUsingAddressLookupTables(
-        baseMessage,
-        addressesByLookupTableAddress,
-      ) as typeof baseMessage;
     }
 
     const compiled = compileTransaction(transactionMessage);

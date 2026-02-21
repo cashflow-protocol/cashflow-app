@@ -32,8 +32,8 @@ import {
   AccountRole,
 } from '@solana/kit';
 import type { Rpc, SolanaRpcApi } from '@solana/kit';
-import { EarnTokenModel } from '../models';
 import { SUPPORTED_TOKEN_MINTS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import { DBManager, EarnTokenUpsert } from './DBManager';
 
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 
@@ -50,6 +50,7 @@ export class DriftManager {
   private driftClient: DriftClient;
   private connection: Connection;
   private rpc: Rpc<SolanaRpcApi>;
+  private db: DBManager;
   private initialized: boolean = false;
 
   constructor() {
@@ -65,6 +66,7 @@ export class DriftManager {
 
     this.connection = new Connection(rpcUrl, { commitment: 'confirmed' });
     this.rpc = createSolanaRpc(rpcUrl);
+    this.db = new DBManager();
 
     const keypair = loadKeypair(privateKey);
     const wallet = new Wallet(keypair);
@@ -332,7 +334,7 @@ export class DriftManager {
    */
   async getWalletPositions(walletAddress: string): Promise<{ vaultAddress: string; mint: string; amount: string }[]> {
     try {
-      const vaults = await EarnTokenModel.find({ type: 'drift', status: 'active' }).lean();
+      const vaults = await this.db.getActiveVaults('drift');
       if (vaults.length === 0) return [];
 
       const programId = this.driftClient.program.programId;
@@ -420,50 +422,17 @@ export class DriftManager {
   }
 
   private async saveTokensToDatabase(markets: DriftSpotMarketData[]): Promise<void> {
-    try {
-      const bulkOps = markets.map((market) => {
-        const symbol = SUPPORTED_TOKENS_BY_MINT[market.mint]?.symbol ?? '';
+    const upserts: EarnTokenUpsert[] = markets.map((market) => ({
+      type: 'drift' as const,
+      mint: market.mint,
+      vaultAddress: market.pubkey,
+      vaultTitle: `Drift - ${SUPPORTED_TOKENS_BY_MINT[market.mint]?.symbol ?? ''}`,
+      symbol: SUPPORTED_TOKENS_BY_MINT[market.mint]?.symbol ?? '',
+      rewardsRate: market.depositRate * 10000,
+      protocolData: market.rawAccount,
+    }));
 
-        return {
-          updateOne: {
-            filter: {
-              type: 'drift' as const,
-              mint: market.mint,
-              vaultAddress: market.pubkey,
-            },
-            update: {
-              $set: {
-                type: 'drift' as const,
-                mint: market.mint,
-                vaultAddress: market.pubkey,
-                vaultTitle: `Drift - ${symbol}`,
-                symbol,
-                rewardsRate: market.depositRate * 10000,
-                driftToken: market.rawAccount,
-              },
-              $setOnInsert: {
-                status: 'inactive' as const,
-              },
-            },
-            upsert: true,
-          },
-        };
-      });
-
-      if (bulkOps.length === 0) {
-        console.log('⚠️ [Drift] No supported spot markets to save');
-        return;
-      }
-
-      const result = await EarnTokenModel.bulkWrite(bulkOps as any);
-
-      console.log(
-        `✅ [Drift] Saved ${result.upsertedCount} new tokens, updated ${result.modifiedCount} existing tokens`
-      );
-    } catch (error) {
-      console.error('Error saving Drift tokens to database:', error);
-      throw error;
-    }
+    await this.db.upsertEarnTokens(upserts);
   }
 }
 

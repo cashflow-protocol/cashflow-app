@@ -13,8 +13,8 @@ import {
   AccountRole,
 } from '@solana/kit';
 import type { Rpc, SolanaRpcApi } from '@solana/kit';
-import { EarnTokenModel } from '../models';
 import { SUPPORTED_TOKEN_MINTS } from '../constants';
+import { DBManager, EarnTokenUpsert } from './DBManager';
 
 interface JupiterAsset {
   address: string;
@@ -83,6 +83,7 @@ interface InstructionsResponse {
 export class JupiterManager {
   private api: AxiosInstance;
   private rpc: Rpc<SolanaRpcApi>;
+  private db: DBManager;
   private readonly baseURL = 'https://api.jup.ag';
 
   constructor() {
@@ -94,6 +95,7 @@ export class JupiterManager {
     }
 
     this.rpc = createSolanaRpc(rpcUrl);
+    this.db = new DBManager();
 
     this.api = axios.create({
       baseURL: this.baseURL,
@@ -210,48 +212,20 @@ export class JupiterManager {
     return getBase64EncodedWireTransaction(compiled);
   }
 
-  /**
-   * Save or update earn tokens in MongoDB
-   * @param tokens Array of Jupiter earn tokens
-   */
   private async saveTokensToDatabase(tokens: JupiterEarnTokenResponse[]): Promise<void> {
-    try {
-      const supportedTokens = tokens.filter((token) =>
-        SUPPORTED_TOKEN_MINTS.includes(token.asset.address)
-      );
-
-      const bulkOps = supportedTokens.map((token) => ({
-        updateOne: {
-          filter: {
-            type: 'jupiter' as const,
-            mint: token.asset.address,
-            vaultAddress: token.address,
-          },
-          update: {
-            $set: {
-              type: 'jupiter' as const,
-              mint: token.asset.address,
-              vaultAddress: token.address,
-              vaultTitle: `Jupiter Lend - ${token.asset.symbol}`,
-              symbol: token.asset.symbol,
-              rewardsRate: parseFloat(token.totalRate),
-              jupiterToken: token,
-            },
-            $setOnInsert: {
-              status: 'inactive' as const,
-            },
-          },
-          upsert: true, // Create if doesn't exist, update if exists
-        },
+    const upserts: EarnTokenUpsert[] = tokens
+      .filter((token) => SUPPORTED_TOKEN_MINTS.includes(token.asset.address))
+      .map((token) => ({
+        type: 'jupiter' as const,
+        mint: token.asset.address,
+        vaultAddress: token.address,
+        vaultTitle: `Jupiter Lend - ${token.asset.symbol}`,
+        symbol: token.asset.symbol,
+        rewardsRate: parseFloat(token.totalRate),
+        protocolData: token,
       }));
 
-      const result = await EarnTokenModel.bulkWrite(bulkOps as any);
-
-      console.log(`✅ Saved ${result.upsertedCount} new tokens, updated ${result.modifiedCount} existing tokens`);
-    } catch (error) {
-      console.error('Error saving tokens to database:', error);
-      throw error;
-    }
+    await this.db.upsertEarnTokens(upserts);
   }
 }
 

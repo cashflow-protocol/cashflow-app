@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import earnRouter from './routes/earn';
 import solanaRouter from './routes/solana';
 import { initializeScheduler } from './services';
-import { EarnTokenModel } from './models';
+import { DBManager } from './managers';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
@@ -30,7 +30,7 @@ mongoose
     console.log('✅ Connected to MongoDB');
 
     // Sync indexes to match current model definitions
-    await EarnTokenModel.syncIndexes();
+    await new DBManager().syncIndexes();
     console.log('✅ MongoDB indexes synced');
 
     app.listen(PORT, () => {
