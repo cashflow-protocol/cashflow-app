@@ -7,6 +7,10 @@ const router = Router();
 const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
 
+// BigInt-safe JSON replacer (RPC returns BigInt for unitsConsumed, etc.)
+const bigIntReplacer = (_key: string, value: unknown) =>
+  typeof value === 'bigint' ? value.toString() : value;
+
 // POST /solana/v1/send - Send a signed transaction on-chain
 router.post('/send', async (req: Request, res: Response) => {
   try {
@@ -17,8 +21,36 @@ router.post('/send', async (req: Request, res: Response) => {
       return;
     }
 
+    // Simulate first to get detailed error info (including `err` field)
+    const simResult = await rpc
+      .simulateTransaction(transaction as Base64EncodedWireTransaction, {
+        encoding: 'base64',
+        commitment: 'confirmed',
+        sigVerify: false,
+      })
+      .send();
+
+    if (simResult.value.err) {
+      const errJson = JSON.stringify(simResult.value.err, bigIntReplacer);
+      console.error('Simulation error:', errJson);
+      console.error('Simulation logs:', simResult.value.logs);
+      res.json({
+        success: false,
+        error: 'Transaction simulation failed',
+        simulationError: JSON.parse(errJson),
+        logs: simResult.value.logs,
+        unitsConsumed: Number(simResult.value.unitsConsumed ?? 0),
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
     const signature = await rpc
-      .sendTransaction(transaction as Base64EncodedWireTransaction, { encoding: 'base64', preflightCommitment: 'confirmed' })
+      .sendTransaction(transaction as Base64EncodedWireTransaction, {
+        encoding: 'base64',
+        skipPreflight: true,
+        preflightCommitment: 'confirmed',
+      })
       .send();
 
     res.json({
@@ -26,11 +58,12 @@ router.post('/send', async (req: Request, res: Response) => {
       signature,
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
-    console.error('Error sending transaction:', error);
+  } catch (error: any) {
+    console.error('Error sending transaction:', error?.message, error?.context);
+
     res.status(500).json({
       success: false,
-      error: 'Failed to send transaction',
+      error: error?.message || 'Failed to send transaction',
       timestamp: new Date().toISOString(),
     });
   }
