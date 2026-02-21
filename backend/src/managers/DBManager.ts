@@ -107,6 +107,22 @@ export class DBManager {
   }
 
   /**
+   * Get all transactions that have been submitted but not yet confirmed/failed
+   */
+  async getSubmittedTransactions() {
+    return TransactionModel.find({ status: TransactionStatus.SUBMITTED })
+      .select('_id signature updatedAt')
+      .lean();
+  }
+
+  /**
+   * Update transaction status to confirmed or failed
+   */
+  async confirmTransaction(transactionId: string, status: TransactionStatus.CONFIRMED | TransactionStatus.FAILED) {
+    return TransactionModel.findByIdAndUpdate(transactionId, { status });
+  }
+
+  /**
    * Sync MongoDB indexes to match model definitions
    */
   async syncIndexes(): Promise<void> {

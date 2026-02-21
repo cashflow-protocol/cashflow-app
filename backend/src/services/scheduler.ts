@@ -1,8 +1,15 @@
 import cron from 'node-cron';
-import { JupiterManager, KaminoManager, DriftManager } from '../managers';
+import { createSolanaRpc } from '@solana/kit';
+import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
+import { JupiterManager, KaminoManager, DriftManager, DBManager } from '../managers';
+import { TransactionStatus } from '../models';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
+const dbManager = new DBManager();
+
+const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
 
 // DriftManager requires SOLANA_RPC_URL and DRIFT_PRIVATE_KEY
 let driftManager: DriftManager | null = null;
@@ -53,6 +60,49 @@ async function updateDriftEarnTokens() {
 }
 
 /**
+ * Check submitted transactions and update their status to confirmed or failed
+ */
+async function confirmTransactions() {
+  try {
+    const submitted = await dbManager.getSubmittedTransactions();
+    if (submitted.length === 0) return;
+
+    console.log(`[Cron] Checking ${submitted.length} submitted transaction(s)...`);
+
+    const signatures = submitted.map((tx) => tx.signature as Signature);
+
+    const statuses = await rpc
+      .getSignatureStatuses(signatures, { searchTransactionHistory: true })
+      .send();
+
+    for (let i = 0; i < submitted.length; i++) {
+      const tx = submitted[i];
+      const status = statuses.value[i];
+
+      if (!status) {
+        // If not found on-chain after 5 minutes, mark as failed
+        const updatedAt = new Date((tx as any).updatedAt).getTime();
+        if (Date.now() - updatedAt > 5 * 60 * 1000) {
+          await dbManager.confirmTransaction(String(tx._id), TransactionStatus.FAILED);
+          console.log(`[Cron] Transaction ${tx.signature} FAILED (timeout)`);
+        }
+        continue;
+      }
+
+      if (status.err) {
+        await dbManager.confirmTransaction(String(tx._id), TransactionStatus.FAILED);
+        console.log(`[Cron] Transaction ${tx.signature} FAILED`);
+      } else if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') {
+        await dbManager.confirmTransaction(String(tx._id), TransactionStatus.CONFIRMED);
+        console.log(`[Cron] Transaction ${tx.signature} CONFIRMED`);
+      }
+    }
+  } catch (error) {
+    console.error('[Cron] Failed to confirm transactions:', error);
+  }
+}
+
+/**
  * Initialize all scheduled tasks
  */
 export async function initializeScheduler() {
@@ -85,6 +135,11 @@ export async function initializeScheduler() {
     });
   }
 
+  // Confirm submitted transactions every 30 seconds
+  cron.schedule('*/30 * * * * *', confirmTransactions, {
+    timezone: 'UTC',
+  });
+
   console.log('✅ Cron scheduler initialized');
   console.log('📋 Scheduled tasks:');
   console.log('  - Jupiter Earn tokens: Every minute');
@@ -92,6 +147,7 @@ export async function initializeScheduler() {
   if (driftManager) {
     console.log('  - Drift Earn tokens: Every minute');
   }
+  console.log('  - Confirm transactions: Every 30 seconds');
 
   // Run immediately on startup
   updateJupiterEarnTokens();
