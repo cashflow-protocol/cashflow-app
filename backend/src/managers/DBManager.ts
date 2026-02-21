@@ -1,7 +1,8 @@
 import { EarnTokenModel } from '../models';
+import { EarnTokenType } from '../types';
 
 export interface EarnTokenUpsert {
-  type: 'jupiter' | 'kamino' | 'drift';
+  type: EarnTokenType;
   mint: string;
   vaultAddress: string;
   vaultTitle: string;
@@ -10,10 +11,10 @@ export interface EarnTokenUpsert {
   protocolData?: Record<string, any>;
 }
 
-const PROTOCOL_DATA_FIELD: Record<string, string> = {
-  jupiter: 'jupiterToken',
-  kamino: 'kaminoToken',
-  drift: 'driftToken',
+const PROTOCOL_DATA_FIELD: Record<EarnTokenType, string> = {
+  [EarnTokenType.JUPITER]: 'jupiterToken',
+  [EarnTokenType.KAMINO]: 'kaminoToken',
+  [EarnTokenType.DRIFT]: 'driftToken',
 };
 
 export class DBManager {
@@ -62,7 +63,7 @@ export class DBManager {
   /**
    * Get active vaults for a given protocol type (lean documents for read-only use)
    */
-  async getActiveVaults(type: string) {
+  async getActiveVaults(type: EarnTokenType) {
     return EarnTokenModel.find({ type, status: 'active' }).lean();
   }
 

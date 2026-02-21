@@ -16,6 +16,7 @@ import type { Rpc, SolanaRpcApi, Instruction, TransactionSigner } from '@solana/
 import { KaminoVault } from '@kamino-finance/klend-sdk';
 import Decimal from 'decimal.js';
 import { SUPPORTED_TOKEN_MINTS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import { EarnTokenType } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
 // --- REST API types (used by getEarnTokens cron job) ---
@@ -192,7 +193,7 @@ export class KaminoManager {
     const upserts: EarnTokenUpsert[] = vaultsWithMetrics
       .filter(({ metrics }) => metrics !== null)
       .map(({ vault, metrics }) => ({
-        type: 'kamino' as const,
+        type: EarnTokenType.KAMINO,
         mint: vault.state.tokenMint,
         vaultAddress: vault.address,
         vaultTitle: vault.state.name,
@@ -209,7 +210,7 @@ export class KaminoManager {
    */
   async getWalletPositions(walletAddress: string): Promise<{ vaultAddress: string; mint: string; amount: string }[]> {
     try {
-      const vaults = await this.db.getActiveVaults('kamino');
+      const vaults = await this.db.getActiveVaults(EarnTokenType.KAMINO);
       if (vaults.length === 0) return [];
 
       const positions = await Promise.all(

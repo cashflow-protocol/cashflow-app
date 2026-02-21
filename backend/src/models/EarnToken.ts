@@ -1,5 +1,6 @@
 import { prop, getModelForClass, index, modelOptions } from '@typegoose/typegoose';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import { EarnTokenType } from '../types';
 
 @modelOptions({
   schemaOptions: {
@@ -19,8 +20,8 @@ import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 @index({ type: 1, symbol: 1 })
 @index({ symbol: 1 })
 export class EarnToken {
-  @prop({ required: true, enum: ['jupiter', 'kamino', 'drift'] })
-  public type!: 'jupiter' | 'kamino' | 'drift';
+  @prop({ required: true, enum: EarnTokenType })
+  public type!: EarnTokenType;
 
   @prop({ required: true })
   public mint!: string;

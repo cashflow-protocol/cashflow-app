@@ -33,6 +33,7 @@ import {
 } from '@solana/kit';
 import type { Rpc, SolanaRpcApi } from '@solana/kit';
 import { SUPPORTED_TOKEN_MINTS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import { EarnTokenType } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
@@ -334,7 +335,7 @@ export class DriftManager {
    */
   async getWalletPositions(walletAddress: string): Promise<{ vaultAddress: string; mint: string; amount: string }[]> {
     try {
-      const vaults = await this.db.getActiveVaults('drift');
+      const vaults = await this.db.getActiveVaults(EarnTokenType.DRIFT);
       if (vaults.length === 0) return [];
 
       const programId = this.driftClient.program.programId;
@@ -423,7 +424,7 @@ export class DriftManager {
 
   private async saveTokensToDatabase(markets: DriftSpotMarketData[]): Promise<void> {
     const upserts: EarnTokenUpsert[] = markets.map((market) => ({
-      type: 'drift' as const,
+      type: EarnTokenType.DRIFT,
       mint: market.mint,
       vaultAddress: market.pubkey,
       vaultTitle: `Drift - ${SUPPORTED_TOKENS_BY_MINT[market.mint]?.symbol ?? ''}`,

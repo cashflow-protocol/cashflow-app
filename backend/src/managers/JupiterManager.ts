@@ -14,6 +14,7 @@ import {
 } from '@solana/kit';
 import type { Rpc, SolanaRpcApi } from '@solana/kit';
 import { SUPPORTED_TOKEN_MINTS } from '../constants';
+import { EarnTokenType } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
 interface JupiterAsset {
@@ -216,7 +217,7 @@ export class JupiterManager {
     const upserts: EarnTokenUpsert[] = tokens
       .filter((token) => SUPPORTED_TOKEN_MINTS.includes(token.asset.address))
       .map((token) => ({
-        type: 'jupiter' as const,
+        type: EarnTokenType.JUPITER,
         mint: token.asset.address,
         vaultAddress: token.address,
         vaultTitle: `Jupiter Lend - ${token.asset.symbol}`,

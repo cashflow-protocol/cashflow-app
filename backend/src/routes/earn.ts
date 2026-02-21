@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { DBManager, JupiterManager, KaminoManager, DriftManager } from '../managers';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
-import type { IBalance } from '../types';
+import { EarnTokenType, type IBalance } from '../types';
 
 const router = Router();
 const dbManager = new DBManager();
@@ -68,7 +68,7 @@ router.get('/positions', async (req: Request, res: Response) => {
           const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
           const decimals = tokenInfo?.decimals ?? 0;
           return {
-            type: 'jupiter' as const,
+            type: EarnTokenType.JUPITER,
             mint,
             symbol: tokenInfo?.symbol ?? '',
             balance: {
@@ -82,7 +82,7 @@ router.get('/positions', async (req: Request, res: Response) => {
         const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
         const decimals = tokenInfo?.decimals ?? 0;
         return {
-          type: 'kamino' as const,
+          type: EarnTokenType.KAMINO,
           mint: p.mint,
           vaultAddress: p.vaultAddress,
           symbol: tokenInfo?.symbol ?? '',
@@ -97,7 +97,7 @@ router.get('/positions', async (req: Request, res: Response) => {
         const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
         const decimals = tokenInfo?.decimals ?? 0;
         return {
-          type: 'drift' as const,
+          type: EarnTokenType.DRIFT,
           mint: p.mint,
           vaultAddress: p.vaultAddress,
           symbol: tokenInfo?.symbol ?? '',
@@ -132,16 +132,16 @@ router.post('/deposit', async (req: Request, res: Response) => {
 
     let transaction: string;
     switch (type) {
-      case 'jupiter':
+      case EarnTokenType.JUPITER:
         transaction = await jupiterManager.deposit(mint, amount, walletAddress);
         break;
-      case 'kamino': {
+      case EarnTokenType.KAMINO: {
         const decimals = SUPPORTED_TOKENS_BY_MINT[mint]?.decimals ?? 0;
         const decimalAmount = (Number(amount) / 10 ** decimals).toString();
         transaction = await kaminoManager.deposit(vaultAddress, decimalAmount, walletAddress);
         break;
       }
-      case 'drift': {
+      case EarnTokenType.DRIFT: {
         if (!driftManager) {
           res.status(400).json({ success: false, error: 'Drift not configured' });
           return;
@@ -177,16 +177,16 @@ router.post('/withdraw', async (req: Request, res: Response) => {
 
     let transaction: string;
     switch (type) {
-      case 'jupiter':
+      case EarnTokenType.JUPITER:
         transaction = await jupiterManager.withdraw(mint, amount, walletAddress);
         break;
-      case 'kamino': {
+      case EarnTokenType.KAMINO: {
         const decimals = SUPPORTED_TOKENS_BY_MINT[mint]?.decimals ?? 0;
         const decimalAmount = (Number(amount) / 10 ** decimals).toString();
         transaction = await kaminoManager.withdraw(vaultAddress, decimalAmount, walletAddress);
         break;
       }
-      case 'drift': {
+      case EarnTokenType.DRIFT: {
         if (!driftManager) {
           res.status(400).json({ success: false, error: 'Drift not configured' });
           return;
