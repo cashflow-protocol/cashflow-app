@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { createSolanaRpc } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from '@solana/kit';
+import { DBManager } from '../managers';
 
 const router = Router();
+const dbManager = new DBManager();
 
 const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
@@ -14,7 +16,7 @@ const bigIntReplacer = (_key: string, value: unknown) =>
 // POST /solana/v1/send - Send a signed transaction on-chain
 router.post('/send', async (req: Request, res: Response) => {
   try {
-    const { transaction } = req.body;
+    const { transaction, transactionId } = req.body;
 
     if (!transaction || typeof transaction !== 'string') {
       res.status(400).json({ success: false, error: 'transaction (base64) is required' });
@@ -52,6 +54,11 @@ router.post('/send', async (req: Request, res: Response) => {
         preflightCommitment: 'confirmed',
       })
       .send();
+
+    // Update transaction record with on-chain signature
+    if (transactionId) {
+      await dbManager.submitTransaction(transactionId, signature);
+    }
 
     res.json({
       success: true,

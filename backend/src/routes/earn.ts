@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { DBManager, JupiterManager, KaminoManager, DriftManager } from '../managers';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import { TransactionAction } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
 
 const router = Router();
@@ -155,8 +156,19 @@ router.post('/deposit', async (req: Request, res: Response) => {
         return;
     }
 
+    const record = await dbManager.createTransaction({
+      action: TransactionAction.DEPOSIT,
+      type,
+      mint,
+      vaultAddress,
+      amount,
+      walletAddress,
+      unsignedTransaction: transaction,
+    });
+
     res.json({
       success: true,
+      transactionId: record._id,
       transaction,
       timestamp: new Date().toISOString(),
     });
@@ -200,8 +212,19 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         return;
     }
 
+    const record = await dbManager.createTransaction({
+      action: TransactionAction.WITHDRAW,
+      type,
+      mint,
+      vaultAddress,
+      amount,
+      walletAddress,
+      unsignedTransaction: transaction,
+    });
+
     res.json({
       success: true,
+      transactionId: record._id,
       transaction,
       timestamp: new Date().toISOString(),
     });

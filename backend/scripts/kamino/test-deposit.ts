@@ -5,6 +5,7 @@ import {
   getBase64Encoder,
   signTransaction,
   getBase64EncodedWireTransaction,
+  getSignatureFromTransaction,
 } from '@solana/kit';
 
 import 'dotenv/config';
@@ -44,21 +45,21 @@ async function main() {
     console.error('Deposit request failed:', depositData);
     return;
   }
-  console.log('Got unsigned transaction');
+  console.log('Got unsigned transaction, transactionId:', depositData.transactionId);
 
   // 3. Decode, sign, re-encode
   const txBytes = getBase64Encoder().encode(depositData.transaction);
   const decoded = getTransactionDecoder().decode(txBytes);
   const signed = await signTransaction([keypair], decoded);
   const signedBase64 = getBase64EncodedWireTransaction(signed);
-  console.log('Transaction signed');
+  console.log('Transaction signed, signature:', getSignatureFromTransaction(signed));
 
   // 4. Send signed transaction
   console.log('Sending transaction...');
   const sendRes = await fetch(`${API_BASE}/solana/v1/send`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transaction: signedBase64 }),
+    body: JSON.stringify({ transaction: signedBase64, transactionId: depositData.transactionId }),
   });
 
   const sendData = await sendRes.json();

@@ -1,4 +1,4 @@
-import { EarnTokenModel } from '../models';
+import { EarnTokenModel, TransactionModel, TransactionAction, TransactionStatus } from '../models';
 import { EarnTokenType } from '../types';
 
 export interface EarnTokenUpsert {
@@ -82,9 +82,35 @@ export class DBManager {
   }
 
   /**
+   * Create a transaction record when a deposit/withdraw is requested
+   */
+  async createTransaction(data: {
+    action: TransactionAction;
+    type: EarnTokenType;
+    mint: string;
+    vaultAddress: string;
+    amount: string;
+    walletAddress: string;
+    unsignedTransaction: string;
+  }) {
+    return TransactionModel.create(data);
+  }
+
+  /**
+   * Update a transaction record with its on-chain signature after sending
+   */
+  async submitTransaction(transactionId: string, signature: string) {
+    return TransactionModel.findByIdAndUpdate(transactionId, {
+      status: TransactionStatus.SUBMITTED,
+      signature,
+    });
+  }
+
+  /**
    * Sync MongoDB indexes to match model definitions
    */
   async syncIndexes(): Promise<void> {
     await EarnTokenModel.syncIndexes();
+    await TransactionModel.syncIndexes();
   }
 }
