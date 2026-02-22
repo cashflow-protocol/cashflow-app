@@ -79,6 +79,13 @@ class ApiService {
     }>('/earn/v1/withdraw', params);
     return { transactionId: res.transactionId, transaction: res.transaction };
   }
+  async sendTransaction(transaction: string, transactionId: string): Promise<{ signature: string }> {
+    const res = await this.post<{
+      success: boolean;
+      signature: string;
+    }>('/solana/v1/send', { transaction, transactionId });
+    return { signature: res.signature };
+  }
 }
 
 export default new ApiService();

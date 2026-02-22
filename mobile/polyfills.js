@@ -13,6 +13,15 @@ if (typeof global.TextEncoder === 'undefined') {
   global.TextDecoder = TextDecoder;
 }
 
+// Polyfill crypto.subtle for @noble/ed25519 and @solana/kit
+const quickCrypto = require('react-native-quick-crypto');
+if (!global.crypto) {
+  global.crypto = {};
+}
+if (!global.crypto.subtle) {
+  global.crypto.subtle = quickCrypto.subtle;
+}
+
 // Process polyfill
 if (typeof global.process === 'undefined') {
   global.process = { env: {} };

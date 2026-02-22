@@ -14,15 +14,13 @@ import {
 import type { EarnTokenType, EarnPosition } from '../types/earn';
 import { getTokenIcon } from '../assets/token-icons';
 import apiService from '../services/apiService';
+import { getDevWalletAddress, signAndSendTransaction } from '../services/signingService';
 
 const PROTOCOL_LABELS: Record<EarnTokenType, string> = {
   jupiter: 'Jupiter',
   kamino: 'Kamino',
   drift: 'Drift',
 };
-
-// TODO: replace with useWallet() once wallet signing is implemented
-const HARDCODED_WALLET = '8NZMiChYeGFhrZPSrVMacVXkgvMhK5RvAgQLBcZJUSLp';
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const SOL_RENT_RESERVE = BigInt(10_000_000); // 0.01 SOL in lamports
 
@@ -62,6 +60,7 @@ export default function VaultModal({
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [walletBalance, setWalletBalance] = useState<bigint | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
 
   // Convert raw bigint amount to UI display string
   const toUiAmount = (raw: bigint, dec: number): string => {
@@ -89,9 +88,12 @@ export default function VaultModal({
       setLoading(false);
       setResult(null);
       setWalletBalance(null);
-      apiService.getWalletBalance(HARDCODED_WALLET, mint)
-        .then(({ amount }) => setWalletBalance(BigInt(amount)))
-        .catch(() => setWalletBalance(null));
+      getDevWalletAddress().then((addr) => {
+        setWalletAddress(addr);
+        apiService.getWalletBalance(addr, mint)
+          .then(({ amount }) => setWalletBalance(BigInt(amount)))
+          .catch(() => setWalletBalance(null));
+      });
     }
   }, [visible, mint]);
 
@@ -110,7 +112,7 @@ export default function VaultModal({
   const exceedsBalance =
     (mode === 'withdraw' && hasPosition && parsedRaw > BigInt(position!.balance.amount)) ||
     (mode === 'deposit' && walletBalance !== null && parsedRaw > walletBalance);
-  const canSubmit = isValidAmount && !exceedsBalance && !loading;
+  const canSubmit = isValidAmount && !exceedsBalance && !loading && walletAddress !== null;
 
   const handleMaxPress = () => {
     if (mode === 'withdraw' && hasPosition) {
@@ -136,17 +138,21 @@ export default function VaultModal({
       mint,
       vaultAddress,
       amount: rawAmount,
-      walletAddress: HARDCODED_WALLET,
+      walletAddress: walletAddress!,
     };
 
     try {
+      // 1. Get unsigned transaction from backend
       const res = mode === 'deposit'
         ? await apiService.deposit(params)
         : await apiService.withdraw(params);
 
+      // 2. Sign and send on-chain
+      const { signature } = await signAndSendTransaction(res.transaction, res.transactionId);
+
       setResult({
         success: true,
-        message: `Transaction created: ${res.transactionId.slice(0, 8)}...`,
+        message: `Sent: ${signature.slice(0, 8)}...`,
       });
 
       // Refresh parent data after short delay so user sees the success message

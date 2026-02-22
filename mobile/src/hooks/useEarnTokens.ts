@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import apiService from '../services/apiService';
+import { getDevWalletAddress } from '../services/signingService';
 import type { EarnToken, EarnPosition } from '../types/earn';
-
-// TODO: Replace with actual wallet connection
-const HARDCODED_WALLET = '8NZMiChYeGFhrZPSrVMacVXkgvMhK5RvAgQLBcZJUSLp';
 
 export interface EarnTokenWithPosition extends EarnToken {
   position?: EarnPosition;
@@ -39,9 +37,10 @@ export function useEarnTokens() {
     }
     setError(null);
     try {
+      const walletAddress = await getDevWalletAddress();
       const [earnTokens, positions] = await Promise.all([
         apiService.getEarnTokens(),
-        apiService.getPositions(HARDCODED_WALLET),
+        apiService.getPositions(walletAddress),
       ]);
 
       const merged = mergeTokensAndPositions(earnTokens, positions);
