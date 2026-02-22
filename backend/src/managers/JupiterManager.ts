@@ -187,8 +187,9 @@ export class JupiterManager {
       );
 
       if (mint === SOL_MINT) {
-        const { preIxs, postIxs } = await this.buildSolWrapIxs(walletAddress);
-        return await this.buildTransaction(response.data.instructions, walletAddress, preIxs, postIxs);
+        // Jupiter already creates the wSOL ATA — just close it after to unwrap
+        const { postIxs } = await this.buildSolWrapIxs(walletAddress);
+        return await this.buildTransaction(response.data.instructions, walletAddress, [], postIxs);
       }
 
       return await this.buildTransaction(response.data.instructions, walletAddress);
