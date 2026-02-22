@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   },
   statsScroll: {
     maxHeight: 70,
-    marginTop: 8,
+    marginTop: 16,
     marginBottom: 12,
   },
   statsContainer: {
