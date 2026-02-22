@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { createSolanaRpc } from '@solana/kit';
+import { createSolanaRpc, address } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from '@solana/kit';
 import { DBManager } from '../managers';
+import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
 const router = Router();
 const dbManager = new DBManager();
@@ -71,6 +72,57 @@ router.post('/send', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error?.message || 'Failed to send transaction',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /solana/v1/wallet-balance - Get wallet balance for a specific token
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+
+router.get('/wallet-balance', async (req: Request, res: Response) => {
+  try {
+    const { walletAddress, mint } = req.query;
+    if (!walletAddress || typeof walletAddress !== 'string' || !mint || typeof mint !== 'string') {
+      res.status(400).json({ success: false, error: 'walletAddress and mint query params are required' });
+      return;
+    }
+
+    const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+    const decimals = tokenInfo?.decimals ?? 0;
+    let uiAmount = 0;
+    let amount = '0';
+
+    if (mint === SOL_MINT) {
+      const balanceResult = await rpc.getBalance(address(walletAddress)).send();
+      amount = balanceResult.value.toString();
+      uiAmount = Number(balanceResult.value) / 10 ** decimals;
+    } else {
+      const accounts = await rpc.getTokenAccountsByOwner(
+        address(walletAddress),
+        { mint: address(mint) },
+        { encoding: 'jsonParsed' },
+      ).send();
+
+      if (accounts.value.length > 0) {
+        const parsed = accounts.value[0].account.data as any;
+        amount = parsed.parsed.info.tokenAmount.amount ?? 0;
+        uiAmount = parsed.parsed.info.tokenAmount.uiAmount ?? 0;
+      }
+    }
+
+    console.log('walletBalance uiAmount:', uiAmount);
+
+    res.json({
+      success: true,
+      data: { mint, amount, uiAmount },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error fetching wallet balance:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch wallet balance',
       timestamp: new Date().toISOString(),
     });
   }

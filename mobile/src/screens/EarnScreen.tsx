@@ -13,7 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { useEarnTokens } from '../hooks/useEarnTokens';
 import EarnTokenItem from '../components/EarnTokenItem';
+import VaultModal from '../components/VaultModal';
 import { LifetimeEarnedIcon, Last7DIcon, AvgApyIcon } from '../assets/stat-icons';
+import type { EarnTokenWithPosition } from '../hooks/useEarnTokens';
 
 const ALL_FILTER = 'All';
 const STABLES_FILTER = 'Stables';
@@ -23,6 +25,7 @@ const PINNED_FILTERS = [ALL_FILTER, STABLES_FILTER, 'SOL', 'USDC'];
 export default function EarnScreen() {
   const { tokens, loading, refreshing, error, refresh } = useEarnTokens();
   const [activeFilter, setActiveFilter] = useState(ALL_FILTER);
+  const [selectedToken, setSelectedToken] = useState<EarnTokenWithPosition | null>(null);
 
   // Build filter list: All, Stables, USDC, then remaining symbols
   const filters = useMemo(() => {
@@ -179,7 +182,7 @@ export default function EarnScreen() {
                 logoUrl={item.logoUrl}
                 rewardsRate={item.rewardsRate}
                 positionAmount={item.position?.balance.uiAmount}
-                onPress={() => console.log('Token pressed:', item.vaultTitle)}
+                onPress={() => setSelectedToken(item)}
               />
             )}
             ListEmptyComponent={
@@ -190,6 +193,27 @@ export default function EarnScreen() {
           />
         )}
       </View>
+
+      {/* Deposit/Withdraw Modal */}
+      {selectedToken && (
+        <VaultModal
+          visible={selectedToken !== null}
+          onClose={() => setSelectedToken(null)}
+          onSuccess={() => {
+            refresh();
+            setSelectedToken(null);
+          }}
+          type={selectedToken.type}
+          mint={selectedToken.mint}
+          vaultAddress={selectedToken.vaultAddress}
+          vaultTitle={selectedToken.vaultTitle}
+          symbol={selectedToken.symbol}
+          decimals={selectedToken.decimals}
+          logoUrl={selectedToken.logoUrl}
+          rewardsRate={selectedToken.rewardsRate}
+          position={selectedToken.position}
+        />
+      )}
     </View>
   );
 }
