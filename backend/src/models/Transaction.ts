@@ -31,8 +31,8 @@ export class Transaction {
   @prop({ required: true })
   public mint!: string;
 
-  @prop({ required: true })
-  public vaultAddress!: string;
+  @prop()
+  public vaultAddress?: string;
 
   @prop({ required: true })
   public amount!: string;
