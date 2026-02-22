@@ -9,6 +9,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { WalletProvider } from './src/hooks/useWallet';
 import NewHomeScreen from './src/screens/NewHomeScreen';
 import EarnScreen from './src/screens/EarnScreen';
+import AssetsScreen from './src/screens/AssetsScreen';
+import MoreScreen from './src/screens/MoreScreen';
 import TabBar, { type TabName } from './src/components/TabBar';
 
 function App() {
@@ -18,6 +20,10 @@ function App() {
     switch (activeTab) {
       case 'earn':
         return <EarnScreen />;
+      case 'assets':
+        return <AssetsScreen />;
+      case 'more':
+        return <MoreScreen />;
       case 'home':
       default:
         return <NewHomeScreen />;

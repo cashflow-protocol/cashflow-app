@@ -251,7 +251,6 @@ const styles = StyleSheet.create({
     fontSize: 44,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 0,
   },
   statsScroll: {
     maxHeight: 70,
@@ -268,6 +267,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     minWidth: 150,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   statRow: {
     flexDirection: 'row',
