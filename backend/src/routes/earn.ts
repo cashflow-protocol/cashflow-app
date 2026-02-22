@@ -141,14 +141,19 @@ router.post('/deposit', async (req: Request, res: Response) => {
   try {
     const { type, mint, vaultAddress, amount, walletAddress } = req.body;
 
+    const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+    console.log(`DEPOSIT walletAddress: ${walletAddress}, type: ${type}, mint: ${mint}, symbol: ${tokenInfo?.symbol}, amount (raw): ${amount}, decimals: ${tokenInfo?.decimals}, vaultAddress: ${vaultAddress}`)
+
     let transaction: string;
     switch (type) {
       case EarnTokenType.JUPITER:
+        console.log(`  -> Jupiter deposit: raw amount = ${amount}`);
         transaction = await jupiterManager.deposit(mint, amount, walletAddress);
         break;
       case EarnTokenType.KAMINO: {
-        const decimals = SUPPORTED_TOKENS_BY_MINT[mint]?.decimals ?? 0;
+        const decimals = tokenInfo?.decimals ?? 0;
         const decimalAmount = (Number(amount) / 10 ** decimals).toString();
+        console.log(`  -> Kamino deposit: raw=${amount}, decimal=${decimalAmount}, decimals=${decimals}`);
         transaction = await kaminoManager.deposit(vaultAddress, decimalAmount, walletAddress);
         break;
       }

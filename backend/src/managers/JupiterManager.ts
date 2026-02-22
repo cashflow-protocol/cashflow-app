@@ -12,10 +12,20 @@ import {
   getBase64Encoder,
   AccountRole,
 } from '@solana/kit';
-import type { Rpc, SolanaRpcApi } from '@solana/kit';
+import type { Rpc, SolanaRpcApi, TransactionSigner } from '@solana/kit';
+import {
+  findAssociatedTokenPda,
+  getCreateAssociatedTokenIdempotentInstruction,
+  getSyncNativeInstruction,
+  getCloseAccountInstruction,
+  TOKEN_PROGRAM_ADDRESS,
+} from '@solana-program/token';
+import { getTransferSolInstruction } from '@solana-program/system';
 import { SUPPORTED_TOKEN_MINTS } from '../constants';
 import { EarnTokenType } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
+
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
 interface JupiterAsset {
   address: string;
@@ -144,9 +154,7 @@ export class JupiterManager {
 
   /**
    * Get an unsigned deposit transaction from Jupiter Lend
-   * @param mint Token mint address
-   * @param amount Deposit amount in raw token units
-   * @param walletAddress Wallet address (overrides env default)
+   * For SOL deposits, wraps native SOL → wSOL before depositing.
    */
   async deposit(mint: string, amount: string, walletAddress: string): Promise<string> {
     try {
@@ -154,6 +162,12 @@ export class JupiterManager {
         '/lend/v1/earn/deposit-instructions',
         { asset: mint, signer: walletAddress, amount },
       );
+
+      if (mint === SOL_MINT) {
+        const { preIxs, postIxs } = await this.buildSolWrapIxs(walletAddress, BigInt(amount));
+        return await this.buildTransaction(response.data.instructions, walletAddress, preIxs, postIxs);
+      }
+
       return await this.buildTransaction(response.data.instructions, walletAddress);
     } catch (error) {
       console.error('Error creating Jupiter deposit transaction:', error);
@@ -163,9 +177,7 @@ export class JupiterManager {
 
   /**
    * Get an unsigned withdraw transaction from Jupiter Lend
-   * @param mint Token mint address
-   * @param amount Withdrawal amount in raw token units
-   * @param walletAddress Wallet address (overrides env default)
+   * For SOL withdrawals, unwraps wSOL → native SOL after withdrawing.
    */
   async withdraw(mint: string, amount: string, walletAddress: string): Promise<string> {
     try {
@@ -173,6 +185,12 @@ export class JupiterManager {
         '/lend/v1/earn/withdraw-instructions',
         { asset: mint, signer: walletAddress, amount },
       );
+
+      if (mint === SOL_MINT) {
+        const { preIxs, postIxs } = await this.buildSolWrapIxs(walletAddress);
+        return await this.buildTransaction(response.data.instructions, walletAddress, preIxs, postIxs);
+      }
+
       return await this.buildTransaction(response.data.instructions, walletAddress);
     } catch (error) {
       console.error('Error creating Jupiter withdraw transaction:', error);
@@ -181,10 +199,70 @@ export class JupiterManager {
   }
 
   /**
+   * Build SOL wrap/unwrap instructions.
+   * @param walletAddress The wallet address
+   * @param amount If provided, transfer this many lamports into the wSOL ATA (for deposits).
+   *               If omitted, only create ATA + close (for withdrawals).
+   */
+  private async buildSolWrapIxs(walletAddress: string, amount?: bigint) {
+    const signer = this.createNoopSigner(walletAddress);
+    const solMint = address(SOL_MINT);
+    const owner = address(walletAddress);
+
+    const [wsolAta] = await findAssociatedTokenPda({
+      owner,
+      tokenProgram: TOKEN_PROGRAM_ADDRESS,
+      mint: solMint,
+    });
+
+    const preIxs: any[] = [
+      getCreateAssociatedTokenIdempotentInstruction({
+        payer: signer,
+        ata: wsolAta,
+        owner,
+        mint: solMint,
+      }),
+    ];
+
+    if (amount !== undefined) {
+      preIxs.push(
+        getTransferSolInstruction({
+          source: signer,
+          destination: wsolAta,
+          amount,
+        }),
+        getSyncNativeInstruction({ account: wsolAta }),
+      );
+    }
+
+    const postIxs: any[] = [
+      getCloseAccountInstruction({
+        account: wsolAta,
+        destination: owner,
+        owner: signer,
+      }),
+    ];
+
+    return { preIxs, postIxs };
+  }
+
+  private createNoopSigner(walletAddr: string): TransactionSigner {
+    return {
+      address: address(walletAddr),
+      signTransactions: async (txs: any[]) => txs.map(() => ({})),
+    } as TransactionSigner;
+  }
+
+  /**
    * Convert an instruction response into a base64-encoded unsigned versioned transaction
    */
-  private async buildTransaction(ixs: InstructionResponse[], feePayer: string): Promise<string> {
-    const instructions = ixs.map((ix) => ({
+  private async buildTransaction(
+    ixs: InstructionResponse[],
+    feePayer: string,
+    preInstructions: any[] = [],
+    postInstructions: any[] = [],
+  ): Promise<string> {
+    const jupiterIxs = ixs.map((ix) => ({
       programAddress: address(ix.programId),
       accounts: ix.accounts.map((acc) => ({
         address: address(acc.pubkey),
@@ -199,6 +277,8 @@ export class JupiterManager {
       data: getBase64Encoder().encode(ix.data),
     }));
 
+    const allInstructions = [...preInstructions, ...jupiterIxs, ...postInstructions];
+
     const { value: latestBlockhash } = await this.rpc.getLatestBlockhash().send();
 
     const transactionMessage = pipe(
@@ -206,7 +286,7 @@ export class JupiterManager {
       (tx) => setTransactionMessageFeePayer(address(feePayer), tx),
       (tx) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, tx),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (tx) => instructions.reduce((msg: any, ix) => appendTransactionMessageInstruction(ix, msg), tx),
+      (tx) => allInstructions.reduce((msg: any, ix) => appendTransactionMessageInstruction(ix, msg), tx),
     );
 
     const compiled = compileTransaction(transactionMessage);

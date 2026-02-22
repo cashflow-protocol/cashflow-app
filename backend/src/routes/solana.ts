@@ -37,7 +37,7 @@ router.post('/send', async (req: Request, res: Response) => {
       const errJson = JSON.stringify(simResult.value.err, bigIntReplacer);
       console.error('Simulation error:', errJson);
       console.error('Simulation logs:', simResult.value.logs);
-      res.json({
+      res.status(400).json({
         success: false,
         error: 'Transaction simulation failed',
         simulationError: JSON.parse(errJson),
