@@ -76,123 +76,129 @@ export default function EarnScreen() {
 
       <SafeAreaView edges={['top']} style={styles.header}>
         <Text style={styles.title}>Earn</Text>
-        <Text style={styles.totalAmount}>${formatTotal(totalDeposited)}</Text>
+        {!loading && <Text style={styles.totalAmount}>${formatTotal(totalDeposited)}</Text>}
       </SafeAreaView>
 
-      {/* Stat cards */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.statsContainer}
-        style={styles.statsScroll}
-      >
-        <View style={styles.statCard}>
-          <View style={styles.statRow}>
-            <View style={styles.statIconCircle}>
-              <LifetimeEarnedIcon size={20} />
-            </View>
-            <View>
-              <Text style={styles.statLabel}>Lifetime earned</Text>
-              <Text style={styles.statValue}>$0.00</Text>
-            </View>
-          </View>
+      {/* Loading state — only header + spinner */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#19C394" />
+          <Text style={styles.loadingText}>Loading vaults...</Text>
         </View>
-        <View style={styles.statCard}>
-          <View style={styles.statRow}>
-            <View style={styles.statIconCircle}>
-              <Last7DIcon size={20} />
-            </View>
-            <View>
-              <Text style={styles.statLabel}>Last 7D</Text>
-              <Text style={styles.statValue}>$0.00</Text>
-            </View>
-          </View>
-        </View>
-        {avgApy !== null && (
-          <View style={styles.statCard}>
-            <View style={styles.statRow}>
-              <View style={styles.statIconCircle}>
-                <AvgApyIcon size={20} />
-              </View>
-              <View>
-                <Text style={styles.statLabel}>Your avg APY</Text>
-                <Text style={styles.statValue}>{avgApy.toFixed(2)}%</Text>
-              </View>
-            </View>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filtersContainer}
-        style={styles.filtersScroll}
-      >
-        {filters.map((filter) => (
-          <TouchableOpacity
-            key={filter}
-            style={[
-              styles.filterChip,
-              activeFilter === filter && styles.filterChipActive,
-            ]}
-            onPress={() => setActiveFilter(filter)}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.filterText,
-                activeFilter === filter && styles.filterTextActive,
-              ]}
-            >
-              {filter}
-            </Text>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorEmoji}>!</Text>
+          <Text style={styles.errorTitle}>Something went wrong</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={refresh}>
+            <Text style={styles.retryText}>Try again</Text>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Content */}
-      <View style={styles.content}>
-        {loading ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color="#175DA3" />
-          </View>
-        ) : error ? (
-          <View style={styles.centered}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={refresh}>
-              <Text style={styles.retryText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <FlatList
-            data={filteredTokens}
-            keyExtractor={(item) => `${item.type}:${item.mint}${item.vaultAddress ? `:${item.vaultAddress}` : ''}`}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            onRefresh={refresh}
-            refreshing={refreshing}
-            renderItem={({ item }) => (
-              <EarnTokenItem
-                type={item.type}
-                mint={item.mint}
-                symbol={item.symbol}
-                vaultTitle={item.vaultTitle}
-                logoUrl={item.logoUrl}
-                rewardsRate={item.rewardsRate}
-                positionAmount={item.position?.balance.uiAmount}
-                onPress={() => setSelectedToken(item)}
-              />
-            )}
-            ListEmptyComponent={
-              <View style={styles.centered}>
-                <Text style={styles.emptyText}>No earn opportunities available</Text>
+        </View>
+      ) : (
+        <>
+          {/* Stat cards */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.statsContainer}
+            style={styles.statsScroll}
+          >
+            <View style={styles.statCard}>
+              <View style={styles.statRow}>
+                <View style={styles.statIconCircle}>
+                  <LifetimeEarnedIcon size={20} />
+                </View>
+                <View>
+                  <Text style={styles.statLabel}>Lifetime earned</Text>
+                  <Text style={styles.statValue}>$0.00</Text>
+                </View>
               </View>
-            }
-          />
-        )}
-      </View>
+            </View>
+            <View style={styles.statCard}>
+              <View style={styles.statRow}>
+                <View style={styles.statIconCircle}>
+                  <Last7DIcon size={20} />
+                </View>
+                <View>
+                  <Text style={styles.statLabel}>Last 7D</Text>
+                  <Text style={styles.statValue}>$0.00</Text>
+                </View>
+              </View>
+            </View>
+            {avgApy !== null && (
+              <View style={styles.statCard}>
+                <View style={styles.statRow}>
+                  <View style={styles.statIconCircle}>
+                    <AvgApyIcon size={20} />
+                  </View>
+                  <View>
+                    <Text style={styles.statLabel}>Your avg APY</Text>
+                    <Text style={styles.statValue}>{avgApy.toFixed(2)}%</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Filter chips */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersContainer}
+            style={styles.filtersScroll}
+          >
+            {filters.map((filter) => (
+              <TouchableOpacity
+                key={filter}
+                style={[
+                  styles.filterChip,
+                  activeFilter === filter && styles.filterChipActive,
+                ]}
+                onPress={() => setActiveFilter(filter)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    activeFilter === filter && styles.filterTextActive,
+                  ]}
+                >
+                  {filter}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Vault list */}
+          <View style={styles.content}>
+            <FlatList
+              data={filteredTokens}
+              keyExtractor={(item) => `${item.type}:${item.mint}${item.vaultAddress ? `:${item.vaultAddress}` : ''}`}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              onRefresh={refresh}
+              refreshing={refreshing}
+              renderItem={({ item }) => (
+                <EarnTokenItem
+                  type={item.type}
+                  mint={item.mint}
+                  symbol={item.symbol}
+                  vaultTitle={item.vaultTitle}
+                  logoUrl={item.logoUrl}
+                  rewardsRate={item.rewardsRate}
+                  positionAmount={item.position?.balance.uiAmount}
+                  onPress={() => setSelectedToken(item)}
+                />
+              )}
+              ListEmptyComponent={
+                <View style={styles.centered}>
+                  <Text style={styles.emptyText}>No earn opportunities available</Text>
+                </View>
+              }
+            />
+          </View>
+        </>
+      )}
 
       {/* Deposit/Withdraw Modal */}
       {selectedToken && (
@@ -320,28 +326,66 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
     gap: 8,
   },
-  centered: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 60,
+    gap: 16,
+    marginTop: -60,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#6B7B8D',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    gap: 8,
+    marginTop: -40,
+  },
+  errorEmoji: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#F95357',
+    backgroundColor: '#FFEBEE',
+    width: 52,
+    height: 52,
+    lineHeight: 52,
+    textAlign: 'center',
+    borderRadius: 26,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
   },
   errorText: {
-    fontSize: 15,
-    color: '#F95357',
-    marginBottom: 12,
+    fontSize: 14,
+    color: '#6B7B8D',
     textAlign: 'center',
+    marginBottom: 8,
   },
   retryButton: {
-    backgroundColor: '#175DA3',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
+    backgroundColor: '#000',
+    paddingHorizontal: 28,
+    paddingVertical: 12,
     borderRadius: 12,
   },
   retryText: {
     color: '#fff',
     fontWeight: '600',
     fontSize: 15,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 60,
   },
   emptyText: {
     fontSize: 15,
