@@ -9,8 +9,8 @@
 import * as Keychain from 'react-native-keychain';
 import { Buffer } from 'buffer';
 
-const CLOUD_SERVICE = 'com.cashflow.squad.cloudKey';
-const DEVICE_SERVICE = 'com.cashflow.squad.deviceKey';
+const CLOUD_SERVICE = 'fun.cashflow.cloudKey';
+const DEVICE_SERVICE = 'fun.cashflow.deviceKey';
 
 /**
  * Save the cloud keypair (syncs to iCloud Keychain on iOS).

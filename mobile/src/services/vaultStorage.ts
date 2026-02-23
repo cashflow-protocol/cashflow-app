@@ -6,7 +6,7 @@
 
 import * as Keychain from 'react-native-keychain';
 
-const VAULT_SERVICE = 'com.cashflow.squad.vaultData';
+const VAULT_SERVICE = 'fun.cashflow.vaultData';
 
 export interface VaultData {
   multisigAddress: string;
