@@ -9,7 +9,14 @@ import * as multisig from '@sqds/multisig';
 import { SOLANA_CONFIG } from '../config/solana';
 import { signAndSendTransaction } from './signingService';
 import { saveVault, type VaultData } from './vaultStorage';
-import { saveCloudKeypair, saveDeviceKeypair, getCloudKeypair, getDeviceKeypair } from './keypairStorage';
+import {
+  generateAndStoreCloudKeypair,
+  generateAndStoreDeviceKeypair,
+  getCloudPublicKey,
+  getDevicePublicKey,
+  signWithCloud,
+  signWithDevice,
+} from './keypairStorage';
 
 const { Permission, Permissions } = multisig.types;
 
@@ -38,28 +45,56 @@ export interface CreateMultisigResult {
 }
 
 /**
+ * Sign a VersionedTransaction using the native signing module.
+ * Finds the signature slots for the given public keys and writes
+ * the native Ed25519 signatures into the correct positions.
+ */
+async function signTransactionNatively(
+  tx: VersionedTransaction,
+  signers: Array<{
+    pubkey: PublicKey;
+    signFn: (messageBase64: string) => Promise<string>;
+  }>,
+): Promise<void> {
+  const messageBytes = tx.message.serialize();
+  const messageBase64 = Buffer.from(messageBytes).toString('base64');
+
+  for (const { pubkey, signFn } of signers) {
+    const sigBase64 = await signFn(messageBase64);
+    const sigBytes = new Uint8Array(Buffer.from(sigBase64, 'base64'));
+
+    // Find the signature slot for this pubkey
+    const accountKeys = tx.message.staticAccountKeys;
+    const index = accountKeys.findIndex((k: PublicKey) => k.equals(pubkey));
+    if (index === -1) {
+      throw new Error(`Signer ${pubkey.toBase58()} not found in transaction`);
+    }
+
+    tx.signatures[index] = sigBytes;
+  }
+}
+
+/**
  * Create a new Squads V4 multisig (2-of-3) with:
- * - cloudKeypair: all permissions, stored in iCloud Keychain
+ * - cloudKeypair: all permissions, stored in iCloud Keychain (iOS) / encrypted native storage (Android)
  * - deviceKeypair: all permissions, stored device-only (no backup)
  * - main wallet: Vote permission only
  *
- * Generates an ephemeral createKey for PDA derivation, builds and partially
- * signs the tx, then passes to signingService for the fee payer signature + broadcast.
+ * Keypairs are generated and stored entirely in native code — private keys
+ * never enter the JS heap. Only public keys are returned to JS.
  */
 export async function createMultisig(
   walletAddress: string,
 ): Promise<CreateMultisigResult> {
   const creatorPubkey = new PublicKey(walletAddress);
 
-  // Generate the two Squad member keypairs
-  const cloudKeypair = Keypair.generate();
-  const deviceKeypair = Keypair.generate();
+  // Generate keypairs in native code — returns base58 public keys only
+  const cloudPubkeyBase58 = await generateAndStoreCloudKeypair();
+  const devicePubkeyBase58 = await generateAndStoreDeviceKeypair();
+  const cloudPubkey = new PublicKey(cloudPubkeyBase58);
+  const devicePubkey = new PublicKey(devicePubkeyBase58);
 
-  // Store keypairs securely before broadcasting (fail early if storage fails)
-  await saveCloudKeypair(cloudKeypair.secretKey);
-  await saveDeviceKeypair(deviceKeypair.secretKey);
-
-  // Generate ephemeral createKey (only used once for PDA derivation)
+  // Generate ephemeral createKey (only used once for PDA derivation, then discarded)
   const createKey = Keypair.generate();
 
   // Derive PDAs
@@ -92,11 +127,11 @@ export async function createMultisig(
     threshold: 2,
     members: [
       {
-        key: cloudKeypair.publicKey,
+        key: cloudPubkey,
         permissions: Permissions.all(),
       },
       {
-        key: deviceKeypair.publicKey,
+        key: devicePubkey,
         permissions: Permissions.all(),
       },
       {
@@ -109,7 +144,7 @@ export async function createMultisig(
     memo: 'Cashflow',
   });
 
-  // Partially sign with the ephemeral createKey
+  // Partially sign with the ephemeral createKey (single-use, safe in JS)
   tx.sign([createKey]);
 
   // Serialize to base64 for the signing service
@@ -176,8 +211,8 @@ export async function getVaultBalance(multisigAddress: string): Promise<number> 
  * Add a new member to the multisig via the config transaction proposal flow.
  *
  * Uses cloud + device keypairs (which have all permissions) to create,
- * propose, and approve. The hardcoded wallet is the fee payer only.
- * With threshold 2, both cloud and device must approve before execution.
+ * propose, and approve. Signing happens in native code — private keys
+ * never enter JS. The hardcoded wallet is the fee payer only.
  *
  * Step 1: configTransactionCreate + proposalCreate + approve(cloud) + approve(device)
  * Step 2: configTransactionExecute (after step 1 confirms)
@@ -192,14 +227,14 @@ export async function addMember(
   const feePayer = new PublicKey(walletAddress);
   const newMemberPubkey = new PublicKey(newMemberAddress);
 
-  // Load stored keypairs — these have Initiate + Vote + Execute permissions
-  const cloudBytes = await getCloudKeypair();
-  const deviceBytes = await getDeviceKeypair();
-  if (!cloudBytes || !deviceBytes) {
+  // Get public keys from native storage (private keys stay in native code)
+  const cloudPubBase58 = await getCloudPublicKey();
+  const devicePubBase58 = await getDevicePublicKey();
+  if (!cloudPubBase58 || !devicePubBase58) {
     throw new Error('Signing keypairs not found. Please recreate your vault.');
   }
-  const cloudKeypair = Keypair.fromSecretKey(cloudBytes);
-  const deviceKeypair = Keypair.fromSecretKey(deviceBytes);
+  const cloudPubkey = new PublicKey(cloudPubBase58);
+  const devicePubkey = new PublicKey(devicePubBase58);
 
   // Determine permissions for new member
   let permissions: ReturnType<typeof Permissions.all>;
@@ -227,7 +262,7 @@ export async function addMember(
   const configTxIx = multisig.instructions.configTransactionCreate({
     multisigPda,
     transactionIndex,
-    creator: cloudKeypair.publicKey,
+    creator: cloudPubkey,
     actions: [
       {
         __kind: 'AddMember' as const,
@@ -239,22 +274,22 @@ export async function addMember(
   const proposalIx = multisig.instructions.proposalCreate({
     multisigPda,
     transactionIndex,
-    creator: cloudKeypair.publicKey,
+    creator: cloudPubkey,
   });
 
   const approveCloudIx = multisig.instructions.proposalApprove({
     multisigPda,
     transactionIndex,
-    member: cloudKeypair.publicKey,
+    member: cloudPubkey,
   });
 
   const approveDeviceIx = multisig.instructions.proposalApprove({
     multisigPda,
     transactionIndex,
-    member: deviceKeypair.publicKey,
+    member: devicePubkey,
   });
 
-  // Build tx with fee payer = hardcoded wallet, both keypairs as signers
+  // Build tx with fee payer = hardcoded wallet
   const { blockhash: blockhash1 } = await connection.getLatestBlockhash('confirmed');
   const msg1 = new TransactionMessage({
     payerKey: feePayer,
@@ -263,8 +298,11 @@ export async function addMember(
   }).compileToV0Message();
   const tx1 = new VersionedTransaction(msg1);
 
-  // Partially sign with both stored keypairs
-  tx1.sign([cloudKeypair, deviceKeypair]);
+  // Sign with both stored keypairs via native module
+  await signTransactionNatively(tx1, [
+    { pubkey: cloudPubkey, signFn: signWithCloud },
+    { pubkey: devicePubkey, signFn: signWithDevice },
+  ]);
 
   // Send for fee payer signature + broadcast
   const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
@@ -277,7 +315,7 @@ export async function addMember(
   const executeIx = multisig.instructions.configTransactionExecute({
     multisigPda,
     transactionIndex,
-    member: cloudKeypair.publicKey,
+    member: cloudPubkey,
     rentPayer: feePayer,
   });
 
@@ -289,8 +327,10 @@ export async function addMember(
   }).compileToV0Message();
   const tx2 = new VersionedTransaction(msg2);
 
-  // Partially sign with cloud keypair (the executor)
-  tx2.sign([cloudKeypair]);
+  // Sign with cloud keypair (the executor) via native module
+  await signTransactionNatively(tx2, [
+    { pubkey: cloudPubkey, signFn: signWithCloud },
+  ]);
 
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
   const { signature } = await signAndSendTransaction(tx2Base64, '');

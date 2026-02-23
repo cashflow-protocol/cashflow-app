@@ -111,6 +111,9 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
+    // BouncyCastle for Ed25519 signing (Android Keystore doesn't support Ed25519 below API 33)
+    implementation("org.bouncycastle:bcprov-jdk18on:1.79")
+
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {

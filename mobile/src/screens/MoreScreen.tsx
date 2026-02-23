@@ -13,8 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { LifetimeEarnedIcon, Last7DIcon } from '../assets/stat-icons';
 import { getVault, type VaultData } from '../services/vaultStorage';
-import { getCloudKeypair, getDeviceKeypair } from '../services/keypairStorage';
-import bs58 from 'bs58';
+import { getCloudPublicKey, getDevicePublicKey } from '../services/keypairStorage';
 
 const squadAvatar = require('../assets/squad-avatar.webp');
 
@@ -38,14 +37,10 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
       const v = await getVault();
       setVault(v);
 
-      const cloudBytes = await getCloudKeypair();
-      if (cloudBytes) {
-        setCloudPubkey(bs58.encode(cloudBytes.slice(32)));
-      }
-      const deviceBytes = await getDeviceKeypair();
-      if (deviceBytes) {
-        setDevicePubkey(bs58.encode(deviceBytes.slice(32)));
-      }
+      const cloudPub = await getCloudPublicKey();
+      if (cloudPub) setCloudPubkey(cloudPub);
+      const devicePub = await getDevicePublicKey();
+      if (devicePub) setDevicePubkey(devicePub);
     })();
   }, []);
 
