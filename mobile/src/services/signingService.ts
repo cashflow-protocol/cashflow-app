@@ -1,13 +1,11 @@
 import * as ed from '@noble/ed25519';
 import { Buffer } from 'buffer';
 import bs58 from 'bs58';
-import { DEV_PRIVATE_KEY } from '@env';
+import { DEV_PRIVATE_KEY } from '../config/devKey';
 import apiService from './apiService';
 
 // TODO: replace with Mobile Wallet Adapter signing
-const DEV_KEYPAIR_BYTES = new Uint8Array(JSON.parse(DEV_PRIVATE_KEY));
-
-// First 32 bytes = private key seed, last 32 = public key
+const DEV_KEYPAIR_BYTES = new Uint8Array(DEV_PRIVATE_KEY);
 const SECRET_KEY = DEV_KEYPAIR_BYTES.slice(0, 32);
 const PUBLIC_KEY = DEV_KEYPAIR_BYTES.slice(32);
 
@@ -59,4 +57,32 @@ export async function signAndSendTransaction(
   await apiService.sendTransaction(signedBase64, transactionId);
 
   return { signature: signatureBase58 };
+}
+
+/**
+ * Sign a specific signature slot in a partially-signed transaction.
+ * Used when a non-fee-payer signer needs to be added (e.g. createKey for Squads).
+ * Returns the updated base64 transaction.
+ */
+export async function signAtSlot(
+  txBase64: string,
+  secretKey: Uint8Array,
+  slotIndex: number,
+): Promise<string> {
+  const txBytes = Buffer.from(txBase64, 'base64');
+  const [numSignatures, compactLen] = readCompactU16(txBytes, 0);
+
+  if (slotIndex >= numSignatures) {
+    throw new Error(`Slot index ${slotIndex} out of range (${numSignatures} slots)`);
+  }
+
+  const messageOffset = compactLen + numSignatures * 64;
+  const messageBytes = txBytes.slice(messageOffset);
+
+  const signature = await ed.signAsync(messageBytes, secretKey);
+
+  const signedTx = Buffer.from(txBytes);
+  signedTx.set(signature, compactLen + slotIndex * 64);
+
+  return signedTx.toString('base64');
 }

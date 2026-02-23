@@ -8,8 +8,8 @@ export const RPC_ENDPOINTS = {
 } as const;
 
 export const SOLANA_CONFIG = {
-  cluster: 'devnet' as Cluster,
-  rpcEndpoint: RPC_ENDPOINTS.devnet,
+  cluster: 'mainnet-beta' as Cluster,
+  rpcEndpoint: RPC_ENDPOINTS['mainnet-beta'],
   commitment: 'confirmed' as const,
 };
 
