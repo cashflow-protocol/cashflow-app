@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { addMember } from '../services/squadsService';
 import { getVault } from '../services/vaultStorage';
-import { getDevWalletAddress } from '../services/signingService';
+
 
 interface AddMemberScreenProps {
   onNavigate: (screen: string) => void;
@@ -56,14 +56,11 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
         return;
       }
 
-      const walletAddress = await getDevWalletAddress();
-
       setStep('Creating proposal & approving...');
       const { signature } = await addMember(
         vaultData.multisigAddress,
         memberAddress.trim(),
         permissionType,
-        walletAddress,
       );
 
       Alert.alert(

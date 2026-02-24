@@ -168,7 +168,6 @@ export default function VaultModal({
         const result = await executeVaultTransaction(
           vaultData.multisigAddress,
           res.instructions,
-          walletAddress!,
         );
         signature = result.signature;
       } else {

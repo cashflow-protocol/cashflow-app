@@ -7,9 +7,11 @@ import {
   TransactionInstruction,
 } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
+import bs58 from 'bs58';
 import { SOLANA_CONFIG } from '../config/solana';
 import { signAndSendTransaction } from './signingService';
 import { saveVault, type VaultData } from './vaultStorage';
+import apiService from './apiService';
 import {
   generateAndStoreCloudKeypair,
   generateAndStoreDeviceKeypair,
@@ -222,10 +224,8 @@ export async function addMember(
   multisigAddress: string,
   newMemberAddress: string,
   permissionType: 'all' | 'vote' | 'execute',
-  walletAddress: string,
 ): Promise<{ signature: string }> {
   const multisigPda = new PublicKey(multisigAddress);
-  const feePayer = new PublicKey(walletAddress);
   const newMemberPubkey = new PublicKey(newMemberAddress);
 
   // Get public keys from native storage (private keys stay in native code)
@@ -236,6 +236,9 @@ export async function addMember(
   }
   const cloudPubkey = new PublicKey(cloudPubBase58);
   const devicePubkey = new PublicKey(devicePubBase58);
+
+  // Cloud keypair pays for tx fees and rent
+  const feePayer = cloudPubkey;
 
   // Determine permissions for new member
   let permissions: ReturnType<typeof Permissions.all>;
@@ -264,6 +267,7 @@ export async function addMember(
     multisigPda,
     transactionIndex,
     creator: cloudPubkey,
+    rentPayer: feePayer,
     actions: [
       {
         __kind: 'AddMember' as const,
@@ -276,6 +280,7 @@ export async function addMember(
     multisigPda,
     transactionIndex,
     creator: cloudPubkey,
+    rentPayer: feePayer,
   });
 
   const approveCloudIx = multisig.instructions.proposalApprove({
@@ -290,7 +295,6 @@ export async function addMember(
     member: devicePubkey,
   });
 
-  // Build tx with fee payer = hardcoded wallet
   const { blockhash: blockhash1 } = await connection.getLatestBlockhash('confirmed');
   const msg1 = new TransactionMessage({
     payerKey: feePayer,
@@ -299,15 +303,14 @@ export async function addMember(
   }).compileToV0Message();
   const tx1 = new VersionedTransaction(msg1);
 
-  // Sign with both stored keypairs via native module
+  // Sign with cloud (fee payer + creator) + device via native module
   await signTransactionNatively(tx1, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
     { pubkey: devicePubkey, signFn: signWithDevice },
   ]);
 
-  // Send for fee payer signature + broadcast
   const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  await signAndSendTransaction(tx1Base64, '');
+  await apiService.sendTransaction(tx1Base64, '');
 
   // Wait for confirmation before executing
   await sleep(2000);
@@ -328,13 +331,15 @@ export async function addMember(
   }).compileToV0Message();
   const tx2 = new VersionedTransaction(msg2);
 
-  // Sign with cloud keypair (the executor) via native module
+  // Only cloud signs (fee payer + executor)
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
   ]);
 
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-  const { signature } = await signAndSendTransaction(tx2Base64, '');
+  await apiService.sendTransaction(tx2Base64, '');
+
+  const signature = bs58.encode(tx2.signatures[0]);
 
   return { signature };
 }
@@ -343,15 +348,13 @@ export async function addMember(
  * Execute a vault transaction through the Squads proposal flow.
  * Wraps raw instructions in: vaultTransactionCreate → proposalCreate → approve×2 → execute
  *
- * Cloud + device keypairs sign natively. The dev wallet is fee payer only.
+ * Cloud keypair is the fee payer + rent payer. Cloud + device sign natively.
  */
 export async function executeVaultTransaction(
   multisigAddress: string,
   instructions: Array<{ programId: string; accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; data: string }>,
-  walletAddress: string,
 ): Promise<{ signature: string }> {
   const multisigPda = new PublicKey(multisigAddress);
-  const feePayer = new PublicKey(walletAddress);
 
   // Get cloud/device public keys from native storage
   const cloudPubBase58 = await getCloudPublicKey();
@@ -361,6 +364,9 @@ export async function executeVaultTransaction(
   }
   const cloudPubkey = new PublicKey(cloudPubBase58);
   const devicePubkey = new PublicKey(devicePubBase58);
+
+  // Cloud keypair pays for tx fees and rent
+  const feePayer = cloudPubkey;
 
   // Derive vault PDA
   const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
@@ -399,6 +405,7 @@ export async function executeVaultTransaction(
     multisigPda,
     transactionIndex,
     creator: cloudPubkey,
+    rentPayer: feePayer,
     vaultIndex: 0,
     ephemeralSigners: 0,
     transactionMessage: innerMessage,
@@ -408,6 +415,7 @@ export async function executeVaultTransaction(
     multisigPda,
     transactionIndex,
     creator: cloudPubkey,
+    rentPayer: feePayer,
   });
 
   const approveCloudIx = multisig.instructions.proposalApprove({
@@ -430,14 +438,15 @@ export async function executeVaultTransaction(
   }).compileToV0Message();
   const tx1 = new VersionedTransaction(msg1);
 
-  // Sign with cloud + device via native module
+  // Sign with cloud (fee payer + creator) + device via native module
   await signTransactionNatively(tx1, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
     { pubkey: devicePubkey, signFn: signWithDevice },
   ]);
 
+  // Send fully-signed transaction directly (no dev wallet needed)
   const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  await signAndSendTransaction(tx1Base64, '');
+  await apiService.sendTransaction(tx1Base64, '');
 
   // Wait for confirmation before executing
   await sleep(2000);
@@ -459,13 +468,16 @@ export async function executeVaultTransaction(
   }).compileToV0Message(lookupTableAccounts);
   const tx2 = new VersionedTransaction(msg2);
 
-  // Only cloud signs the execute step
+  // Only cloud signs the execute step (it's also the fee payer)
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
   ]);
 
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-  const { signature } = await signAndSendTransaction(tx2Base64, '');
+  await apiService.sendTransaction(tx2Base64, '');
+
+  // Extract signature from TX2 (first 64 bytes after compact-u16 prefix)
+  const signature = bs58.encode(tx2.signatures[0]);
 
   return { signature };
 }
