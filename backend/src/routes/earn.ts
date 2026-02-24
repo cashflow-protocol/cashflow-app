@@ -136,14 +136,61 @@ router.get('/positions', async (req: Request, res: Response) => {
   }
 });
 
-// POST /earn/v1/deposit - Get unsigned deposit transaction
+// POST /earn/v1/deposit - Get unsigned deposit transaction (or raw instructions)
 router.post('/deposit', async (req: Request, res: Response) => {
   try {
-    const { type, mint, vaultAddress, amount, walletAddress } = req.body;
+    const { type, mint, vaultAddress, amount, walletAddress, ownerAddress, returnInstructions } = req.body;
+    const authority = ownerAddress || walletAddress;
 
     const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
-    console.log(`DEPOSIT walletAddress: ${walletAddress}, type: ${type}, mint: ${mint}, symbol: ${tokenInfo?.symbol}, amount (raw): ${amount}, decimals: ${tokenInfo?.decimals}, vaultAddress: ${vaultAddress}`)
+    console.log(`DEPOSIT walletAddress: ${walletAddress}, ownerAddress: ${authority}, type: ${type}, mint: ${mint}, symbol: ${tokenInfo?.symbol}, amount (raw): ${amount}, decimals: ${tokenInfo?.decimals}, vaultAddress: ${vaultAddress}, returnInstructions: ${!!returnInstructions}`)
 
+    // Return raw instructions for Squads vault flow
+    if (returnInstructions) {
+      let instructions: any[];
+      switch (type) {
+        case EarnTokenType.JUPITER:
+          instructions = await jupiterManager.getDepositInstructions(mint, amount, authority);
+          break;
+        case EarnTokenType.KAMINO: {
+          const decimals = tokenInfo?.decimals ?? 0;
+          const decimalAmount = (Number(amount) / 10 ** decimals).toString();
+          instructions = await kaminoManager.getDepositInstructions(vaultAddress, decimalAmount, authority);
+          break;
+        }
+        case EarnTokenType.DRIFT: {
+          if (!driftManager) {
+            res.status(400).json({ success: false, error: 'Drift not configured' });
+            return;
+          }
+          await driftReady;
+          instructions = await driftManager.getDepositInstructions(vaultAddress, amount, authority);
+          break;
+        }
+        default:
+          res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
+          return;
+      }
+
+      const record = await dbManager.createTransaction({
+        action: TransactionAction.DEPOSIT,
+        type,
+        mint,
+        vaultAddress,
+        amount,
+        walletAddress,
+      });
+
+      res.json({
+        success: true,
+        transactionId: record._id,
+        instructions,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Legacy flow: return full unsigned transaction
     let transaction: string;
     switch (type) {
       case EarnTokenType.JUPITER:
@@ -197,11 +244,58 @@ router.post('/deposit', async (req: Request, res: Response) => {
   }
 });
 
-// POST /earn/v1/withdraw - Get unsigned withdraw transaction
+// POST /earn/v1/withdraw - Get unsigned withdraw transaction (or raw instructions)
 router.post('/withdraw', async (req: Request, res: Response) => {
   try {
-    const { type, mint, vaultAddress, amount, walletAddress } = req.body;
+    const { type, mint, vaultAddress, amount, walletAddress, ownerAddress, returnInstructions } = req.body;
+    const authority = ownerAddress || walletAddress;
 
+    // Return raw instructions for Squads vault flow
+    if (returnInstructions) {
+      let instructions: any[];
+      switch (type) {
+        case EarnTokenType.JUPITER:
+          instructions = await jupiterManager.getWithdrawInstructions(mint, amount, authority);
+          break;
+        case EarnTokenType.KAMINO: {
+          const decimals = SUPPORTED_TOKENS_BY_MINT[mint]?.decimals ?? 0;
+          const decimalAmount = (Number(amount) / 10 ** decimals).toString();
+          instructions = await kaminoManager.getWithdrawInstructions(vaultAddress, decimalAmount, authority);
+          break;
+        }
+        case EarnTokenType.DRIFT: {
+          if (!driftManager) {
+            res.status(400).json({ success: false, error: 'Drift not configured' });
+            return;
+          }
+          await driftReady;
+          instructions = await driftManager.getWithdrawInstructions(vaultAddress, amount, authority);
+          break;
+        }
+        default:
+          res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
+          return;
+      }
+
+      const record = await dbManager.createTransaction({
+        action: TransactionAction.WITHDRAW,
+        type,
+        mint,
+        vaultAddress,
+        amount,
+        walletAddress,
+      });
+
+      res.json({
+        success: true,
+        transactionId: record._id,
+        instructions,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Legacy flow: return full unsigned transaction
     let transaction: string;
     switch (type) {
       case EarnTokenType.JUPITER:

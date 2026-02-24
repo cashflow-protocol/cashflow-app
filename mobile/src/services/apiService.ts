@@ -1,6 +1,12 @@
 import { API_CONFIG } from '../config/api';
 import type { EarnToken, EarnPosition } from '../types/earn';
 
+export interface SerializedInstruction {
+  programId: string;
+  accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[];
+  data: string; // base64-encoded
+}
+
 class ApiService {
   private baseUrl = API_CONFIG.baseUrl;
 
@@ -36,7 +42,7 @@ class ApiService {
     return res.data;
   }
 
-  private async post<T>(path: string, body: Record<string, string>): Promise<T> {
+  private async post<T>(path: string, body: Record<string, any>): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const res = await fetch(url, {
       method: 'POST',
@@ -79,6 +85,38 @@ class ApiService {
     }>('/earn/v1/withdraw', params);
     return { transactionId: res.transactionId, transaction: res.transaction };
   }
+  async depositInstructions(params: {
+    type: string;
+    mint: string;
+    vaultAddress: string;
+    amount: string;
+    walletAddress: string;
+    ownerAddress: string;
+  }): Promise<{ transactionId: string; instructions: SerializedInstruction[] }> {
+    const res = await this.post<{
+      success: boolean;
+      transactionId: string;
+      instructions: SerializedInstruction[];
+    }>('/earn/v1/deposit', { ...params, returnInstructions: true });
+    return { transactionId: res.transactionId, instructions: res.instructions };
+  }
+
+  async withdrawInstructions(params: {
+    type: string;
+    mint: string;
+    vaultAddress: string;
+    amount: string;
+    walletAddress: string;
+    ownerAddress: string;
+  }): Promise<{ transactionId: string; instructions: SerializedInstruction[] }> {
+    const res = await this.post<{
+      success: boolean;
+      transactionId: string;
+      instructions: SerializedInstruction[];
+    }>('/earn/v1/withdraw', { ...params, returnInstructions: true });
+    return { transactionId: res.transactionId, instructions: res.instructions };
+  }
+
   async sendTransaction(transaction: string, transactionId: string): Promise<{ signature: string }> {
     const res = await this.post<{
       success: boolean;

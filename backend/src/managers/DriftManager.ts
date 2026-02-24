@@ -34,6 +34,7 @@ import {
 import type { Rpc, SolanaRpcApi } from '@solana/kit';
 import { SUPPORTED_TOKEN_MINTS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { EarnTokenType } from '../types';
+import type { SerializedInstruction } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
@@ -175,6 +176,146 @@ export class DriftManager {
       lastInterestTs: market.lastInterestTs.toString(),
       ordersEnabled: market.ordersEnabled,
     };
+  }
+
+  /**
+   * Get raw deposit instructions for Drift (used by Squads vault flow)
+   */
+  async getDepositInstructions(vaultAddress: string, amount: string, ownerAddress: string): Promise<SerializedInstruction[]> {
+    const userPubkey = new PublicKey(ownerAddress);
+    const spotMarket = this.getSpotMarketByVaultAddress(vaultAddress);
+    const tokenProgramId = getTokenProgramForSpotMarket(spotMarket);
+    const programId = this.driftClient.program.programId;
+
+    const userAccountPubkey = getUserAccountPublicKeySync(programId, userPubkey, 0);
+    const userStatsPubkey = getUserStatsAccountPublicKey(programId, userPubkey);
+    const ata = this.getAssociatedTokenAddress(spotMarket.mint, userPubkey, tokenProgramId);
+    const bnAmount = new BN(amount);
+
+    const instructions: TransactionInstruction[] = [];
+
+    const userAccountInfo = await this.connection.getAccountInfo(userAccountPubkey);
+    const userInitialized = userAccountInfo !== null;
+
+    if (!userInitialized) {
+      const userStatsInfo = await this.connection.getAccountInfo(userStatsPubkey);
+      if (!userStatsInfo) {
+        const initStatsIx = await this.driftClient.program.methods
+          .initializeUserStats()
+          .accounts({
+            userStats: userStatsPubkey,
+            authority: userPubkey,
+            payer: userPubkey,
+            rent: SYSVAR_RENT_PUBKEY,
+            systemProgram: SystemProgram.programId,
+            state: await this.driftClient.getStatePublicKey(),
+          })
+          .instruction();
+        instructions.push(initStatsIx);
+      }
+
+      const initUserIx = await this.driftClient.program.methods
+        .initializeUser(0, encodeName('Main Account'))
+        .accounts({
+          user: userAccountPubkey,
+          userStats: userStatsPubkey,
+          authority: userPubkey,
+          payer: userPubkey,
+          rent: SYSVAR_RENT_PUBKEY,
+          systemProgram: SystemProgram.programId,
+          state: await this.driftClient.getStatePublicKey(),
+        })
+        .instruction();
+      instructions.push(initUserIx);
+    }
+
+    const remainingAccounts = userInitialized
+      ? this.driftClient.getRemainingAccounts({
+          userAccounts: [await this.driftClient.program.account.user.fetch(userAccountPubkey) as UserAccount],
+          writableSpotMarketIndexes: [spotMarket.marketIndex],
+        })
+      : this.driftClient.getRemainingAccounts({
+          userAccounts: [],
+          writableSpotMarketIndexes: [spotMarket.marketIndex],
+        });
+
+    this.driftClient.addTokenMintToRemainingAccounts(spotMarket, remainingAccounts);
+    if (this.driftClient.isTransferHook(spotMarket)) {
+      await this.driftClient.addExtraAccountMetasToRemainingAccounts(spotMarket.mint, remainingAccounts);
+    }
+
+    const depositIx = await this.driftClient.program.methods
+      .deposit(spotMarket.marketIndex, bnAmount, false)
+      .accounts({
+        state: await this.driftClient.getStatePublicKey(),
+        spotMarket: spotMarket.pubkey,
+        spotMarketVault: spotMarket.vault,
+        user: userAccountPubkey,
+        userStats: userStatsPubkey,
+        userTokenAccount: ata,
+        authority: userPubkey,
+        tokenProgram: tokenProgramId,
+      })
+      .remainingAccounts(remainingAccounts)
+      .instruction();
+    instructions.push(depositIx);
+
+    return instructions.map((ix) => this.web3IxToSerialized(ix));
+  }
+
+  /**
+   * Get raw withdraw instructions for Drift (used by Squads vault flow)
+   */
+  async getWithdrawInstructions(vaultAddress: string, amount: string, ownerAddress: string): Promise<SerializedInstruction[]> {
+    const userPubkey = new PublicKey(ownerAddress);
+    const spotMarket = this.getSpotMarketByVaultAddress(vaultAddress);
+    const tokenProgramId = getTokenProgramForSpotMarket(spotMarket);
+    const programId = this.driftClient.program.programId;
+
+    const userAccountPubkey = getUserAccountPublicKeySync(programId, userPubkey, 0);
+    const userStatsPubkey = getUserStatsAccountPublicKey(programId, userPubkey);
+    const ata = this.getAssociatedTokenAddress(spotMarket.mint, userPubkey, tokenProgramId);
+    const bnAmount = new BN(amount);
+
+    const userAccountData = await this.driftClient.program.account.user.fetch(
+      userAccountPubkey,
+    ) as UserAccount;
+
+    const remainingAccounts = this.driftClient.getRemainingAccounts({
+      userAccounts: [userAccountData],
+      writableSpotMarketIndexes: [spotMarket.marketIndex],
+    });
+
+    const createAtaIx = new TransactionInstruction({
+      keys: [
+        { pubkey: userPubkey, isSigner: true, isWritable: true },
+        { pubkey: ata, isSigner: false, isWritable: true },
+        { pubkey: userPubkey, isSigner: false, isWritable: false },
+        { pubkey: spotMarket.mint, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: tokenProgramId, isSigner: false, isWritable: false },
+      ],
+      programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+      data: Buffer.from([1]),
+    });
+
+    const withdrawIx = await this.driftClient.program.methods
+      .withdraw(spotMarket.marketIndex, bnAmount, false)
+      .accounts({
+        state: await this.driftClient.getStatePublicKey(),
+        spotMarket: spotMarket.pubkey,
+        spotMarketVault: spotMarket.vault,
+        driftSigner: getDriftSignerPublicKey(programId),
+        user: userAccountPubkey,
+        userStats: userStatsPubkey,
+        userTokenAccount: ata,
+        authority: userPubkey,
+        tokenProgram: tokenProgramId,
+      })
+      .remainingAccounts(remainingAccounts)
+      .instruction();
+
+    return [createAtaIx, withdrawIx].map((ix) => this.web3IxToSerialized(ix));
   }
 
   /**
@@ -376,6 +517,18 @@ export class DriftManager {
       console.error('Error fetching Drift wallet positions:', error);
       return [];
     }
+  }
+
+  private web3IxToSerialized(ix: TransactionInstruction): SerializedInstruction {
+    return {
+      programId: ix.programId.toBase58(),
+      accounts: ix.keys.map((key) => ({
+        pubkey: key.pubkey.toBase58(),
+        isSigner: key.isSigner,
+        isWritable: key.isWritable,
+      })),
+      data: Buffer.from(ix.data).toString('base64'),
+    };
   }
 
   private getSpotMarketByVaultAddress(vaultAddress: string): SpotMarketAccount {

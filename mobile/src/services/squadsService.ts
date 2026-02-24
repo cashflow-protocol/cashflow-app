@@ -4,6 +4,7 @@ import {
   PublicKey,
   VersionedTransaction,
   TransactionMessage,
+  TransactionInstruction,
 } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { SOLANA_CONFIG } from '../config/solana';
@@ -328,6 +329,137 @@ export async function addMember(
   const tx2 = new VersionedTransaction(msg2);
 
   // Sign with cloud keypair (the executor) via native module
+  await signTransactionNatively(tx2, [
+    { pubkey: cloudPubkey, signFn: signWithCloud },
+  ]);
+
+  const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
+  const { signature } = await signAndSendTransaction(tx2Base64, '');
+
+  return { signature };
+}
+
+/**
+ * Execute a vault transaction through the Squads proposal flow.
+ * Wraps raw instructions in: vaultTransactionCreate → proposalCreate → approve×2 → execute
+ *
+ * Cloud + device keypairs sign natively. The dev wallet is fee payer only.
+ */
+export async function executeVaultTransaction(
+  multisigAddress: string,
+  instructions: Array<{ programId: string; accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; data: string }>,
+  walletAddress: string,
+): Promise<{ signature: string }> {
+  const multisigPda = new PublicKey(multisigAddress);
+  const feePayer = new PublicKey(walletAddress);
+
+  // Get cloud/device public keys from native storage
+  const cloudPubBase58 = await getCloudPublicKey();
+  const devicePubBase58 = await getDevicePublicKey();
+  if (!cloudPubBase58 || !devicePubBase58) {
+    throw new Error('Signing keypairs not found. Please recreate your vault.');
+  }
+  const cloudPubkey = new PublicKey(cloudPubBase58);
+  const devicePubkey = new PublicKey(devicePubBase58);
+
+  // Derive vault PDA
+  const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
+
+  // Get current transaction index
+  const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(
+    connection,
+    multisigPda,
+  );
+  const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
+
+  // Convert serialized instructions → TransactionInstruction[]
+  const txInstructions = instructions.map(
+    (ix) =>
+      new TransactionInstruction({
+        programId: new PublicKey(ix.programId),
+        keys: ix.accounts.map((acc) => ({
+          pubkey: new PublicKey(acc.pubkey),
+          isSigner: acc.isSigner,
+          isWritable: acc.isWritable,
+        })),
+        data: Buffer.from(ix.data, 'base64'),
+      }),
+  );
+
+  // Build inner message (vault PDA as payer for the inner instructions)
+  const { blockhash: innerBlockhash } = await connection.getLatestBlockhash('confirmed');
+  const innerMessage = new TransactionMessage({
+    payerKey: vaultPda,
+    recentBlockhash: innerBlockhash,
+    instructions: txInstructions,
+  });
+
+  // --- TX 1: Create vault tx + propose + approve(cloud) + approve(device) ---
+  const createVaultTxIx = multisig.instructions.vaultTransactionCreate({
+    multisigPda,
+    transactionIndex,
+    creator: cloudPubkey,
+    vaultIndex: 0,
+    ephemeralSigners: 0,
+    transactionMessage: innerMessage,
+  });
+
+  const proposalIx = multisig.instructions.proposalCreate({
+    multisigPda,
+    transactionIndex,
+    creator: cloudPubkey,
+  });
+
+  const approveCloudIx = multisig.instructions.proposalApprove({
+    multisigPda,
+    transactionIndex,
+    member: cloudPubkey,
+  });
+
+  const approveDeviceIx = multisig.instructions.proposalApprove({
+    multisigPda,
+    transactionIndex,
+    member: devicePubkey,
+  });
+
+  const { blockhash: blockhash1 } = await connection.getLatestBlockhash('confirmed');
+  const msg1 = new TransactionMessage({
+    payerKey: feePayer,
+    recentBlockhash: blockhash1,
+    instructions: [createVaultTxIx, proposalIx, approveCloudIx, approveDeviceIx],
+  }).compileToV0Message();
+  const tx1 = new VersionedTransaction(msg1);
+
+  // Sign with cloud + device via native module
+  await signTransactionNatively(tx1, [
+    { pubkey: cloudPubkey, signFn: signWithCloud },
+    { pubkey: devicePubkey, signFn: signWithDevice },
+  ]);
+
+  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
+  await signAndSendTransaction(tx1Base64, '');
+
+  // Wait for confirmation before executing
+  await sleep(2000);
+
+  // --- TX 2: Execute the vault transaction ---
+  const { instruction: executeIx, lookupTableAccounts } =
+    await multisig.instructions.vaultTransactionExecute({
+      connection,
+      multisigPda,
+      transactionIndex,
+      member: cloudPubkey,
+    });
+
+  const { blockhash: blockhash2 } = await connection.getLatestBlockhash('confirmed');
+  const msg2 = new TransactionMessage({
+    payerKey: feePayer,
+    recentBlockhash: blockhash2,
+    instructions: [executeIx],
+  }).compileToV0Message(lookupTableAccounts);
+  const tx2 = new VersionedTransaction(msg2);
+
+  // Only cloud signs the execute step
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
   ]);

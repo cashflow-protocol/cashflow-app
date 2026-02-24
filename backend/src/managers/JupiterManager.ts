@@ -23,6 +23,7 @@ import {
 import { getTransferSolInstruction } from '@solana-program/system';
 import { SUPPORTED_TOKEN_MINTS } from '../constants';
 import { EarnTokenType } from '../types';
+import type { SerializedInstruction } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -150,6 +151,51 @@ export class JupiterManager {
       console.error('Error fetching Jupiter wallet positions:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get raw deposit instructions for Jupiter Lend (used by Squads vault flow)
+   */
+  async getDepositInstructions(mint: string, amount: string, ownerAddress: string): Promise<SerializedInstruction[]> {
+    const response = await this.api.post<InstructionsResponse>(
+      '/lend/v1/earn/deposit-instructions',
+      { asset: mint, signer: ownerAddress, amount },
+    );
+
+    const jupiterIxs: SerializedInstruction[] = response.data.instructions;
+
+    if (mint === SOL_MINT) {
+      const { preIxs, postIxs } = await this.buildSolWrapIxs(ownerAddress, BigInt(amount));
+      return [
+        ...preIxs.map((ix: any) => this.kitIxToSerialized(ix)),
+        ...jupiterIxs,
+        ...postIxs.map((ix: any) => this.kitIxToSerialized(ix)),
+      ];
+    }
+
+    return jupiterIxs;
+  }
+
+  /**
+   * Get raw withdraw instructions for Jupiter Lend (used by Squads vault flow)
+   */
+  async getWithdrawInstructions(mint: string, amount: string, ownerAddress: string): Promise<SerializedInstruction[]> {
+    const response = await this.api.post<InstructionsResponse>(
+      '/lend/v1/earn/withdraw-instructions',
+      { asset: mint, signer: ownerAddress, amount },
+    );
+
+    const jupiterIxs: SerializedInstruction[] = response.data.instructions;
+
+    if (mint === SOL_MINT) {
+      const { postIxs } = await this.buildSolWrapIxs(ownerAddress);
+      return [
+        ...jupiterIxs,
+        ...postIxs.map((ix: any) => this.kitIxToSerialized(ix)),
+      ];
+    }
+
+    return jupiterIxs;
   }
 
   /**
@@ -292,6 +338,18 @@ export class JupiterManager {
 
     const compiled = compileTransaction(transactionMessage);
     return getBase64EncodedWireTransaction(compiled);
+  }
+
+  private kitIxToSerialized(ix: any): SerializedInstruction {
+    return {
+      programId: ix.programAddress as string,
+      accounts: (ix.accounts ?? []).map((acc: any) => ({
+        pubkey: acc.address as string,
+        isSigner: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.READONLY_SIGNER,
+        isWritable: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.WRITABLE,
+      })),
+      data: Buffer.from(ix.data ?? new Uint8Array()).toString('base64'),
+    };
   }
 
   private async saveTokensToDatabase(tokens: JupiterEarnTokenResponse[]): Promise<void> {

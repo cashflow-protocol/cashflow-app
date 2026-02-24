@@ -13,10 +13,12 @@ import {
   fetchAddressesForLookupTables,
 } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Instruction, TransactionSigner } from '@solana/kit';
+import { AccountRole } from '@solana/kit';
 import { KaminoVault } from '@kamino-finance/klend-sdk';
 import Decimal from 'decimal.js';
 import { SUPPORTED_TOKEN_MINTS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { EarnTokenType } from '../types';
+import type { SerializedInstruction } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
 // --- REST API types (used by getEarnTokens cron job) ---
@@ -206,6 +208,44 @@ export class KaminoManager {
   }
 
   /**
+   * Get raw deposit instructions for Kamino (used by Squads vault flow)
+   */
+  async getDepositInstructions(vaultAddress: string, amount: string, ownerAddress: string): Promise<SerializedInstruction[]> {
+    const vault = new KaminoVault(this.rpc as any, address(vaultAddress));
+    const signer = createNoopSigner(ownerAddress);
+
+    const depositResult = await vault.depositIxs(signer as any, new Decimal(amount));
+
+    const allIxs = [
+      ...depositResult.depositIxs,
+      ...depositResult.stakeInFarmIfNeededIxs,
+    ];
+
+    return allIxs.map((ix: any) => this.kitIxToSerialized(ix));
+  }
+
+  /**
+   * Get raw withdraw instructions for Kamino (used by Squads vault flow)
+   */
+  async getWithdrawInstructions(vaultAddress: string, amount: string, ownerAddress: string): Promise<SerializedInstruction[]> {
+    const vault = new KaminoVault(this.rpc as any, address(vaultAddress));
+    const signer = createNoopSigner(ownerAddress);
+
+    const exchangeRate = await vault.getExchangeRate();
+    const shareAmount = new Decimal(amount).div(exchangeRate);
+
+    const withdrawResult = await vault.withdrawIxs(signer as any, shareAmount);
+
+    const allIxs = [
+      ...withdrawResult.unstakeFromFarmIfNeededIxs,
+      ...withdrawResult.withdrawIxs,
+      ...withdrawResult.postWithdrawIxs,
+    ];
+
+    return allIxs.map((ix: any) => this.kitIxToSerialized(ix));
+  }
+
+  /**
    * Get wallet positions across all active Kamino vaults using SDK
    */
   async getWalletPositions(walletAddress: string): Promise<{ vaultAddress: string; mint: string; amount: string }[]> {
@@ -302,6 +342,18 @@ export class KaminoManager {
       console.error('Error creating Kamino withdraw transaction:', error);
       throw error;
     }
+  }
+
+  private kitIxToSerialized(ix: any): SerializedInstruction {
+    return {
+      programId: ix.programAddress as string,
+      accounts: (ix.accounts ?? []).map((acc: any) => ({
+        pubkey: acc.address as string,
+        isSigner: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.READONLY_SIGNER,
+        isWritable: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.WRITABLE,
+      })),
+      data: Buffer.from(ix.data ?? new Uint8Array()).toString('base64'),
+    };
   }
 
   /**

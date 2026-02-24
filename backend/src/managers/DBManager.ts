@@ -91,7 +91,7 @@ export class DBManager {
     vaultAddress: string;
     amount: string;
     walletAddress: string;
-    unsignedTransaction: string;
+    unsignedTransaction?: string;
   }) {
     return TransactionModel.create(data);
   }

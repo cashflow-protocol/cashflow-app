@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import apiService from '../services/apiService';
 import { getDevWalletAddress } from '../services/signingService';
+import { getVault } from '../services/vaultStorage';
 import type { EarnToken, EarnPosition } from '../types/earn';
 
 export interface EarnTokenWithPosition extends EarnToken {
@@ -37,10 +38,11 @@ export function useEarnTokens() {
     }
     setError(null);
     try {
-      const walletAddress = await getDevWalletAddress();
+      const vault = await getVault();
+      const positionsAddress = vault?.vaultAddress ?? await getDevWalletAddress();
       const [earnTokens, positions] = await Promise.all([
         apiService.getEarnTokens(),
-        apiService.getPositions(walletAddress),
+        apiService.getPositions(positionsAddress),
       ]);
 
       const merged = mergeTokensAndPositions(earnTokens, positions);

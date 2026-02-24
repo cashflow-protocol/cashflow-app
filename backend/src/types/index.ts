@@ -10,3 +10,10 @@ export interface IBalance {
   uiAmount: number;
   usdValue: number;
 }
+
+/** Serialized Solana instruction — common format returned to mobile clients. */
+export interface SerializedInstruction {
+  programId: string;
+  accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[];
+  data: string; // base64-encoded
+}

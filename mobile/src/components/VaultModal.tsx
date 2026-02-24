@@ -15,6 +15,8 @@ import type { EarnTokenType, EarnPosition } from '../types/earn';
 import { getTokenIcon } from '../assets/token-icons';
 import apiService from '../services/apiService';
 import { getDevWalletAddress, signAndSendTransaction } from '../services/signingService';
+import { getVault, type VaultData } from '../services/vaultStorage';
+import { executeVaultTransaction } from '../services/squadsService';
 
 const PROTOCOL_LABELS: Record<EarnTokenType, string> = {
   jupiter: 'Jupiter',
@@ -61,6 +63,7 @@ export default function VaultModal({
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [walletBalance, setWalletBalance] = useState<bigint | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [vaultData, setVaultData] = useState<VaultData | null>(null);
 
   // Convert raw bigint amount to UI display string
   const toUiAmount = (raw: bigint, dec: number): string => {
@@ -80,7 +83,7 @@ export default function VaultModal({
     return whole * BigInt(10 ** dec) + BigInt(fracStr);
   };
 
-  // Reset state and fetch wallet balance when modal opens
+  // Reset state and fetch balance when modal opens
   useEffect(() => {
     if (visible) {
       setMode('deposit');
@@ -88,12 +91,22 @@ export default function VaultModal({
       setLoading(false);
       setResult(null);
       setWalletBalance(null);
-      getDevWalletAddress().then((addr) => {
-        setWalletAddress(addr);
-        apiService.getWalletBalance(addr, mint)
-          .then(({ amount }) => setWalletBalance(BigInt(amount)))
-          .catch(() => setWalletBalance(null));
-      });
+      setVaultData(null);
+
+      (async () => {
+        const [vault, devAddr] = await Promise.all([getVault(), getDevWalletAddress()]);
+        setWalletAddress(devAddr);
+        setVaultData(vault);
+
+        // Use vault address for balance if available, otherwise dev wallet
+        const balanceAddr = vault?.vaultAddress ?? devAddr;
+        try {
+          const { amount } = await apiService.getWalletBalance(balanceAddr, mint);
+          setWalletBalance(BigInt(amount));
+        } catch {
+          setWalletBalance(null);
+        }
+      })();
     }
   }, [visible, mint]);
 
@@ -133,22 +146,48 @@ export default function VaultModal({
     setResult(null);
 
     const rawAmount = parsedRaw.toString();
-    const params = {
-      type,
-      mint,
-      vaultAddress,
-      amount: rawAmount,
-      walletAddress: walletAddress!,
-    };
 
     try {
-      // 1. Get unsigned transaction from backend
-      const res = mode === 'deposit'
-        ? await apiService.deposit(params)
-        : await apiService.withdraw(params);
+      let signature: string;
 
-      // 2. Sign and send on-chain
-      const { signature } = await signAndSendTransaction(res.transaction, res.transactionId);
+      if (vaultData) {
+        // Squads vault flow: get raw instructions, execute via multisig
+        const instrParams = {
+          type,
+          mint,
+          vaultAddress,
+          amount: rawAmount,
+          walletAddress: walletAddress!,
+          ownerAddress: vaultData.vaultAddress,
+        };
+
+        const res = mode === 'deposit'
+          ? await apiService.depositInstructions(instrParams)
+          : await apiService.withdrawInstructions(instrParams);
+
+        const result = await executeVaultTransaction(
+          vaultData.multisigAddress,
+          res.instructions,
+          walletAddress!,
+        );
+        signature = result.signature;
+      } else {
+        // Legacy flow: get full unsigned transaction, sign with dev wallet
+        const params = {
+          type,
+          mint,
+          vaultAddress,
+          amount: rawAmount,
+          walletAddress: walletAddress!,
+        };
+
+        const res = mode === 'deposit'
+          ? await apiService.deposit(params)
+          : await apiService.withdraw(params);
+
+        const sendResult = await signAndSendTransaction(res.transaction, res.transactionId);
+        signature = sendResult.signature;
+      }
 
       setResult({
         success: true,
@@ -228,7 +267,7 @@ export default function VaultModal({
               {/* Balance info - contextual per mode */}
               {mode === 'deposit' && (
                 <View style={styles.positionBar}>
-                  <Text style={styles.positionLabel}>Wallet balance</Text>
+                  <Text style={styles.positionLabel}>{vaultData ? 'Vault balance' : 'Wallet balance'}</Text>
                   <Text style={styles.positionAmount}>
                     {walletBalance !== null ? `${toUiAmount(walletBalance, decimals)} ${symbol}` : '—'}
                   </Text>
