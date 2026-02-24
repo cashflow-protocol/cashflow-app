@@ -46,8 +46,8 @@ export class Transaction {
   @prop()
   public signature?: string;
 
-  @prop({ required: true })
-  public unsignedTransaction!: string;
+  @prop()
+  public unsignedTransaction?: string;
 }
 
 export const TransactionModel = getModelForClass(Transaction);

@@ -8,12 +8,13 @@ import {
   TouchableOpacity,
   Clipboard,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { LifetimeEarnedIcon, Last7DIcon } from '../assets/stat-icons';
-import { getVault, type VaultData } from '../services/vaultStorage';
-import { getCloudPublicKey, getDevicePublicKey } from '../services/keypairStorage';
+import { getVault, clearVault, type VaultData } from '../services/vaultStorage';
+import { getCloudPublicKey, getDevicePublicKey, deleteAllKeypairs } from '../services/keypairStorage';
 
 const squadAvatar = require('../assets/squad-avatar.webp');
 
@@ -30,6 +31,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
   const [vault, setVault] = useState<VaultData | null>(null);
   const [cloudPubkey, setCloudPubkey] = useState<string | null>(null);
   const [devicePubkey, setDevicePubkey] = useState<string | null>(null);
+  const [keysLoaded, setKeysLoaded] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,10 +39,13 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
       const v = await getVault();
       setVault(v);
 
-      const cloudPub = await getCloudPublicKey();
-      if (cloudPub) setCloudPubkey(cloudPub);
-      const devicePub = await getDevicePublicKey();
-      if (devicePub) setDevicePubkey(devicePub);
+      const [cloudPub, devicePub] = await Promise.all([
+        getCloudPublicKey(),
+        getDevicePublicKey(),
+      ]);
+      setCloudPubkey(cloudPub);
+      setDevicePubkey(devicePub);
+      setKeysLoaded(true);
     })();
   }, []);
 
@@ -48,6 +53,27 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
     Clipboard.setString(addr);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
+  }, []);
+
+  const handleRemoveVault = useCallback(() => {
+    Alert.alert(
+      'Remove Vault',
+      'This will delete the local vault data and signing keypairs. The on-chain multisig will still exist but you will lose signing access from this device.\n\nAre you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await Promise.all([clearVault(), deleteAllKeypairs()]);
+            setVault(null);
+            setCloudPubkey(null);
+            setDevicePubkey(null);
+            setKeysLoaded(false);
+          },
+        },
+      ],
+    );
   }, []);
 
   return (
@@ -106,6 +132,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
           <Text style={styles.sectionLabel}>Squads</Text>
 
           {vault ? (
+            <>
             <TouchableOpacity
               style={styles.vaultCard}
               onPress={() => onNavigate?.('squads')}
@@ -129,35 +156,50 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
               </View>
 
               {/* Keypairs */}
-              <View style={styles.keypairSection}>
-                {cloudPubkey && (
+              {keysLoaded && (
+                <View style={styles.keypairSection}>
                   <TouchableOpacity
                     style={styles.keypairRow}
-                    onPress={() => copyAddress(cloudPubkey, 'cloud')}
-                    activeOpacity={0.6}
+                    onPress={() => cloudPubkey && copyAddress(cloudPubkey, 'cloud')}
+                    activeOpacity={cloudPubkey ? 0.6 : 1}
                   >
                     <Text style={styles.keypairLabel}>Cloud Key</Text>
-                    <Text style={styles.keypairValue}>
-                      {truncateAddress(cloudPubkey)}
-                      {copiedField === 'cloud' ? '  Copied!' : ''}
-                    </Text>
+                    {cloudPubkey ? (
+                      <Text style={styles.keypairValue}>
+                        {truncateAddress(cloudPubkey)}
+                        {copiedField === 'cloud' ? '  Copied!' : ''}
+                      </Text>
+                    ) : (
+                      <Text style={styles.keypairMissing}>Not found</Text>
+                    )}
                   </TouchableOpacity>
-                )}
-                {devicePubkey && (
                   <TouchableOpacity
                     style={styles.keypairRow}
-                    onPress={() => copyAddress(devicePubkey, 'device')}
-                    activeOpacity={0.6}
+                    onPress={() => devicePubkey && copyAddress(devicePubkey, 'device')}
+                    activeOpacity={devicePubkey ? 0.6 : 1}
                   >
                     <Text style={styles.keypairLabel}>Device Key</Text>
-                    <Text style={styles.keypairValue}>
-                      {truncateAddress(devicePubkey)}
-                      {copiedField === 'device' ? '  Copied!' : ''}
-                    </Text>
+                    {devicePubkey ? (
+                      <Text style={styles.keypairValue}>
+                        {truncateAddress(devicePubkey)}
+                        {copiedField === 'device' ? '  Copied!' : ''}
+                      </Text>
+                    ) : (
+                      <Text style={styles.keypairMissing}>Not found</Text>
+                    )}
                   </TouchableOpacity>
-                )}
-              </View>
+                </View>
+              )}
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.removeButton}
+              onPress={handleRemoveVault}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.removeButtonText}>Remove Vault</Text>
+            </TouchableOpacity>
+            </>
           ) : (
             <TouchableOpacity
               style={styles.menuCard}
@@ -320,6 +362,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#1A1A1A',
+  },
+  keypairMissing: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#F95357',
+  },
+  removeButton: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#F95357',
+  },
+  removeButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#F95357',
   },
   menuCard: {
     backgroundColor: '#fff',

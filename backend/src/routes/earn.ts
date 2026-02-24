@@ -150,7 +150,7 @@ router.post('/deposit', async (req: Request, res: Response) => {
       let instructions: any[];
       switch (type) {
         case EarnTokenType.JUPITER:
-          instructions = await jupiterManager.getDepositInstructions(mint, amount, authority);
+          instructions = await jupiterManager.getDepositInstructions(mint, amount, authority, walletAddress);
           break;
         case EarnTokenType.KAMINO: {
           const decimals = tokenInfo?.decimals ?? 0;
@@ -255,7 +255,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
       let instructions: any[];
       switch (type) {
         case EarnTokenType.JUPITER:
-          instructions = await jupiterManager.getWithdrawInstructions(mint, amount, authority);
+          instructions = await jupiterManager.getWithdrawInstructions(mint, amount, authority, walletAddress);
           break;
         case EarnTokenType.KAMINO: {
           const decimals = SUPPORTED_TOKENS_BY_MINT[mint]?.decimals ?? 0;

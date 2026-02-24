@@ -78,3 +78,14 @@ export async function hasKeypairs(): Promise<boolean> {
   ]);
   return cloud && device;
 }
+
+/**
+ * Delete both cloud and device keypairs from native storage.
+ */
+export async function deleteAllKeypairs(): Promise<void> {
+  const mod = getModule();
+  await Promise.all([
+    mod.deleteKeypair('cloud'),
+    mod.deleteKeypair('device'),
+  ]);
+}

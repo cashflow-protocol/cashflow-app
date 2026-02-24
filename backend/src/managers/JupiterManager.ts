@@ -154,15 +154,29 @@ export class JupiterManager {
   }
 
   /**
-   * Get raw deposit instructions for Jupiter Lend (used by Squads vault flow)
+   * Get raw deposit instructions for Jupiter Lend (used by Squads vault flow).
+   * @param templateSigner If provided, calls Jupiter API with this address
+   *   (e.g. dev wallet) then replaces with ownerAddress in the returned instructions.
+   *   Needed because Jupiter API rejects PDAs as signers.
    */
-  async getDepositInstructions(mint: string, amount: string, ownerAddress: string): Promise<SerializedInstruction[]> {
+  async getDepositInstructions(
+    mint: string,
+    amount: string,
+    ownerAddress: string,
+    templateSigner?: string,
+  ): Promise<SerializedInstruction[]> {
+    const apiSigner = templateSigner || ownerAddress;
+
     const response = await this.api.post<InstructionsResponse>(
       '/lend/v1/earn/deposit-instructions',
-      { asset: mint, signer: ownerAddress, amount },
+      { asset: mint, signer: apiSigner, amount },
     );
 
-    const jupiterIxs: SerializedInstruction[] = response.data.instructions;
+    let jupiterIxs: SerializedInstruction[] = response.data.instructions;
+
+    if (templateSigner && templateSigner !== ownerAddress) {
+      jupiterIxs = await this.replaceAuthority(jupiterIxs, templateSigner, ownerAddress);
+    }
 
     if (mint === SOL_MINT) {
       const { preIxs, postIxs } = await this.buildSolWrapIxs(ownerAddress, BigInt(amount));
@@ -177,15 +191,27 @@ export class JupiterManager {
   }
 
   /**
-   * Get raw withdraw instructions for Jupiter Lend (used by Squads vault flow)
+   * Get raw withdraw instructions for Jupiter Lend (used by Squads vault flow).
+   * @param templateSigner See getDepositInstructions.
    */
-  async getWithdrawInstructions(mint: string, amount: string, ownerAddress: string): Promise<SerializedInstruction[]> {
+  async getWithdrawInstructions(
+    mint: string,
+    amount: string,
+    ownerAddress: string,
+    templateSigner?: string,
+  ): Promise<SerializedInstruction[]> {
+    const apiSigner = templateSigner || ownerAddress;
+
     const response = await this.api.post<InstructionsResponse>(
       '/lend/v1/earn/withdraw-instructions',
-      { asset: mint, signer: ownerAddress, amount },
+      { asset: mint, signer: apiSigner, amount },
     );
 
-    const jupiterIxs: SerializedInstruction[] = response.data.instructions;
+    let jupiterIxs: SerializedInstruction[] = response.data.instructions;
+
+    if (templateSigner && templateSigner !== ownerAddress) {
+      jupiterIxs = await this.replaceAuthority(jupiterIxs, templateSigner, ownerAddress);
+    }
 
     if (mint === SOL_MINT) {
       const { postIxs } = await this.buildSolWrapIxs(ownerAddress);
@@ -338,6 +364,56 @@ export class JupiterManager {
 
     const compiled = compileTransaction(transactionMessage);
     return getBase64EncodedWireTransaction(compiled);
+  }
+
+  /**
+   * Replace a template signer address (and its derived ATAs) with the real
+   * owner address in a set of instructions.  Used when Jupiter API can't
+   * accept a PDA as signer — we call with a normal wallet then swap here.
+   */
+  private async replaceAuthority(
+    instructions: SerializedInstruction[],
+    oldAuthority: string,
+    newAuthority: string,
+  ): Promise<SerializedInstruction[]> {
+    const replacements = new Map<string, string>();
+    replacements.set(oldAuthority, newAuthority);
+
+    // Collect every unique address that appears in any account slot
+    const allAddresses = new Set<string>();
+    for (const ix of instructions) {
+      for (const acc of ix.accounts) {
+        allAddresses.add(acc.pubkey);
+      }
+    }
+
+    // For each address that could be a mint, check whether there's a
+    // matching ATA derived from oldAuthority.  If so, compute the
+    // replacement ATA derived from newAuthority.
+    for (const potentialMint of allAddresses) {
+      const [oldAta] = await findAssociatedTokenPda({
+        owner: address(oldAuthority),
+        tokenProgram: TOKEN_PROGRAM_ADDRESS,
+        mint: address(potentialMint),
+      });
+
+      if (allAddresses.has(oldAta as string) && !replacements.has(oldAta as string)) {
+        const [newAta] = await findAssociatedTokenPda({
+          owner: address(newAuthority),
+          tokenProgram: TOKEN_PROGRAM_ADDRESS,
+          mint: address(potentialMint),
+        });
+        replacements.set(oldAta as string, newAta as string);
+      }
+    }
+
+    return instructions.map((ix) => ({
+      ...ix,
+      accounts: ix.accounts.map((acc) => {
+        const replacement = replacements.get(acc.pubkey);
+        return replacement ? { ...acc, pubkey: replacement } : acc;
+      }),
+    }));
   }
 
   private kitIxToSerialized(ix: any): SerializedInstruction {

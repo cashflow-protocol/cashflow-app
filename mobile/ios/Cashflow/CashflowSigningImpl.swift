@@ -78,6 +78,7 @@ class CashflowSigningImpl: NSObject {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: servicePrefix + tag,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecReturnData as String: false,
     ]
     let status = SecItemCopyMatching(query as CFDictionary, nil)
@@ -92,6 +93,7 @@ class CashflowSigningImpl: NSObject {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: servicePrefix + tag,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
     ]
     let status = SecItemDelete(query as CFDictionary)
     if status == errSecSuccess || status == errSecItemNotFound {
@@ -104,10 +106,11 @@ class CashflowSigningImpl: NSObject {
   // MARK: - Keychain helpers
 
   private func storePrivateKey(_ keyData: Data, tag: String, cloudSync: Bool) throws {
-    // Delete any existing key first
+    // Delete any existing key first (kSecAttrSynchronizableAny matches both synced and non-synced)
     let deleteQuery: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: servicePrefix + tag,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
     ]
     SecItemDelete(deleteQuery as CFDictionary)
 
@@ -136,6 +139,7 @@ class CashflowSigningImpl: NSObject {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: servicePrefix + tag,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecReturnData as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
