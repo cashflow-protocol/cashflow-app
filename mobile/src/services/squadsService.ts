@@ -133,7 +133,7 @@ export async function createMultisig(
       { key: creatorPubkey, permissions: Permissions.fromPermissions([Permission.Vote]) },
     ],
     timeLock: 0,
-    rentCollector: null,
+    rentCollector: cloudPubkey,
     memo: 'Cashflow',
   });
 
@@ -353,6 +353,36 @@ export async function addMember(
 
   const signature = bs58.encode(tx2.signatures[0]);
 
+  // --- Step 3: Close config transaction + proposal accounts to reclaim rent ---
+  if (multisigAccount.rentCollector) {
+    try {
+      await sleep(2000);
+
+      const closeIx = multisig.instructions.configTransactionAccountsClose({
+        multisigPda,
+        transactionIndex,
+        rentCollector: new PublicKey(multisigAccount.rentCollector),
+      });
+
+      const { blockhash: blockhash3 } = await connection.getLatestBlockhash('confirmed');
+      const msg3 = new TransactionMessage({
+        payerKey: feePayer,
+        recentBlockhash: blockhash3,
+        instructions: [closeIx],
+      }).compileToV0Message();
+      const tx3 = new VersionedTransaction(msg3);
+
+      await signTransactionNatively(tx3, [
+        { pubkey: cloudPubkey, signFn: signWithCloud },
+      ]);
+
+      const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
+      await apiService.sendTransaction(tx3Base64, '');
+    } catch (err) {
+      console.warn('Failed to close config transaction accounts:', err);
+    }
+  }
+
   return { signature };
 }
 
@@ -493,10 +523,256 @@ export async function executeVaultTransaction(
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
   await apiService.sendTransaction(tx2Base64, '');
 
-  // Extract signature from TX2 (first 64 bytes after compact-u16 prefix)
   const signature = bs58.encode(tx2.signatures[0]);
 
+  // --- TX 3: Close vault transaction + proposal accounts to reclaim rent ---
+  if (multisigAccount.rentCollector) {
+    try {
+      await sleep(2000);
+
+      const closeIx = multisig.instructions.vaultTransactionAccountsClose({
+        multisigPda,
+        transactionIndex,
+        rentCollector: new PublicKey(multisigAccount.rentCollector),
+      });
+
+      const { blockhash: blockhash3 } = await connection.getLatestBlockhash('confirmed');
+      const msg3 = new TransactionMessage({
+        payerKey: feePayer,
+        recentBlockhash: blockhash3,
+        instructions: [closeIx],
+      }).compileToV0Message();
+      const tx3 = new VersionedTransaction(msg3);
+
+      await signTransactionNatively(tx3, [
+        { pubkey: cloudPubkey, signFn: signWithCloud },
+      ]);
+
+      const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
+      await apiService.sendTransaction(tx3Base64, '');
+    } catch (err) {
+      // Non-fatal: rent reclamation failed but the vault tx succeeded
+      console.warn('Failed to close vault transaction accounts:', err);
+    }
+  }
+
   return { signature };
+}
+
+/**
+ * Set rentCollector on an existing multisig via config transaction.
+ * Required before vault/config transaction accounts can be closed.
+ */
+async function setRentCollector(
+  multisigPda: PublicKey,
+  cloudPubkey: PublicKey,
+  devicePubkey: PublicKey,
+  currentTransactionIndex: bigint,
+): Promise<void> {
+  const transactionIndex = currentTransactionIndex + 1n;
+
+  const configTxIx = multisig.instructions.configTransactionCreate({
+    multisigPda,
+    transactionIndex,
+    creator: cloudPubkey,
+    rentPayer: cloudPubkey,
+    actions: [
+      {
+        __kind: 'SetRentCollector' as const,
+        newRentCollector: cloudPubkey,
+      },
+    ],
+  });
+
+  const proposalIx = multisig.instructions.proposalCreate({
+    multisigPda,
+    transactionIndex,
+    creator: cloudPubkey,
+    rentPayer: cloudPubkey,
+  });
+
+  const approveCloudIx = multisig.instructions.proposalApprove({
+    multisigPda,
+    transactionIndex,
+    member: cloudPubkey,
+  });
+
+  const approveDeviceIx = multisig.instructions.proposalApprove({
+    multisigPda,
+    transactionIndex,
+    member: devicePubkey,
+  });
+
+  // TX 1: create + propose + approve×2
+  const { blockhash: bh1 } = await connection.getLatestBlockhash('confirmed');
+  const msg1 = new TransactionMessage({
+    payerKey: cloudPubkey,
+    recentBlockhash: bh1,
+    instructions: [configTxIx, proposalIx, approveCloudIx, approveDeviceIx],
+  }).compileToV0Message();
+  const tx1 = new VersionedTransaction(msg1);
+
+  await signTransactionNatively(tx1, [
+    { pubkey: cloudPubkey, signFn: signWithCloud },
+    { pubkey: devicePubkey, signFn: signWithDevice },
+  ]);
+
+  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
+  await apiService.sendTransaction(tx1Base64, '');
+  await sleep(2000);
+
+  // TX 2: execute
+  const executeIx = multisig.instructions.configTransactionExecute({
+    multisigPda,
+    transactionIndex,
+    member: cloudPubkey,
+    rentPayer: cloudPubkey,
+  });
+
+  const { blockhash: bh2 } = await connection.getLatestBlockhash('confirmed');
+  const msg2 = new TransactionMessage({
+    payerKey: cloudPubkey,
+    recentBlockhash: bh2,
+    instructions: [executeIx],
+  }).compileToV0Message();
+  const tx2 = new VersionedTransaction(msg2);
+
+  await signTransactionNatively(tx2, [
+    { pubkey: cloudPubkey, signFn: signWithCloud },
+  ]);
+
+  const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
+  await apiService.sendTransaction(tx2Base64, '');
+  await sleep(2000);
+}
+
+/**
+ * Reclaim rent from all past vault/config transaction accounts.
+ * If the multisig has no rentCollector set, creates a config transaction
+ * to set it first. Then iterates through all transaction indices and
+ * closes each account.
+ *
+ * @returns Summary of closed/skipped/failed counts
+ */
+export async function reclaimRent(
+  multisigAddress: string,
+  onProgress?: (msg: string) => void,
+): Promise<{ closed: number; skipped: number; failed: number }> {
+  const multisigPda = new PublicKey(multisigAddress);
+
+  const cloudPubBase58 = await getCloudPublicKey();
+  const devicePubBase58 = await getDevicePublicKey();
+  if (!cloudPubBase58 || !devicePubBase58) {
+    throw new Error('Signing keypairs not found.');
+  }
+  const cloudPubkey = new PublicKey(cloudPubBase58);
+  const devicePubkey = new PublicKey(devicePubBase58);
+
+  let acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
+
+  // Step 1: Ensure rentCollector is set
+  if (!acct.rentCollector) {
+    onProgress?.('Setting rent collector...');
+    await setRentCollector(
+      multisigPda,
+      cloudPubkey,
+      devicePubkey,
+      BigInt(acct.transactionIndex.toString()),
+    );
+    // Re-fetch after setting
+    acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
+    if (!acct.rentCollector) {
+      throw new Error('Failed to set rent collector');
+    }
+  }
+
+  const rentCollector = new PublicKey(acct.rentCollector!);
+  const updatedTotal = Number(acct.transactionIndex.toString());
+
+  // Account discriminators (first 8 bytes) to detect transaction type
+  const VAULT_TX_DISC = [168, 250, 162, 100, 81, 14, 162, 207];
+  const CONFIG_TX_DISC = [94, 8, 4, 35, 113, 139, 139, 112];
+
+  let closed = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  // Step 2: Close all past transaction accounts
+  for (let i = 1; i <= updatedTotal; i++) {
+    const txIndex = BigInt(i);
+    const [transactionPda] = multisig.getTransactionPda({ multisigPda, index: txIndex });
+
+    const txAccountInfo = await connection.getAccountInfo(transactionPda);
+    if (!txAccountInfo) {
+      skipped++;
+      continue;
+    }
+
+    // Check proposal status — can only close Executed, Rejected, or Cancelled
+    const [proposalPda] = multisig.getProposalPda({ multisigPda, transactionIndex: txIndex });
+    try {
+      const proposal = await multisig.accounts.Proposal.fromAccountAddress(connection, proposalPda);
+      const status = proposal.status.__kind;
+      if (status !== 'Executed' && status !== 'Rejected' && status !== 'Cancelled') {
+        onProgress?.(`Skipping ${i}/${updatedTotal} (status: ${status})`);
+        skipped++;
+        continue;
+      }
+    } catch {
+      // Proposal account doesn't exist or can't be read — skip
+      skipped++;
+      continue;
+    }
+
+    // Detect account type from discriminator
+    const disc = Array.from(txAccountInfo.data.slice(0, 8));
+    const isVaultTx = disc.every((b, idx) => b === VAULT_TX_DISC[idx]);
+    const isConfigTx = disc.every((b, idx) => b === CONFIG_TX_DISC[idx]);
+
+    if (!isVaultTx && !isConfigTx) {
+      onProgress?.(`Skipping ${i}/${updatedTotal} (unknown type)`);
+      skipped++;
+      continue;
+    }
+
+    onProgress?.(`Closing ${i}/${updatedTotal} (${isVaultTx ? 'vault' : 'config'})...`);
+
+    try {
+      const closeIx = isVaultTx
+        ? multisig.instructions.vaultTransactionAccountsClose({
+            multisigPda,
+            transactionIndex: txIndex,
+            rentCollector,
+          })
+        : multisig.instructions.configTransactionAccountsClose({
+            multisigPda,
+            transactionIndex: txIndex,
+            rentCollector,
+          });
+
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      const msg = new TransactionMessage({
+        payerKey: cloudPubkey,
+        recentBlockhash: blockhash,
+        instructions: [closeIx],
+      }).compileToV0Message();
+      const tx = new VersionedTransaction(msg);
+
+      await signTransactionNatively(tx, [
+        { pubkey: cloudPubkey, signFn: signWithCloud },
+      ]);
+
+      const txBase64 = Buffer.from(tx.serialize()).toString('base64');
+      await apiService.sendTransaction(txBase64, '');
+      closed++;
+      await sleep(500);
+    } catch (err: any) {
+      console.warn(`Failed to close tx ${i}:`, err.message || err);
+      failed++;
+    }
+  }
+
+  return { closed, skipped, failed };
 }
 
 /**

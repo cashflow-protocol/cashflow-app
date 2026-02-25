@@ -15,6 +15,7 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { LifetimeEarnedIcon, Last7DIcon } from '../assets/stat-icons';
 import { getVault, clearVault, type VaultData } from '../services/vaultStorage';
 import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey, getDevicePrivateKey, deleteAllKeypairs } from '../services/keypairStorage';
+import { reclaimRent } from '../services/squadsService';
 import apiService from '../services/apiService';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -46,6 +47,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
   const [vaultBalance, setVaultBalance] = useState<number | null>(null);
   const [cloudBalance, setCloudBalance] = useState<number | null>(null);
   const [deviceBalance, setDeviceBalance] = useState<number | null>(null);
+  const [reclaimStatus, setReclaimStatus] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -109,6 +111,21 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
       ],
     );
   }, []);
+
+  const handleReclaimRent = useCallback(async () => {
+    if (!vault) return;
+    setReclaimStatus('Starting...');
+    try {
+      const result = await reclaimRent(vault.multisigAddress, (msg) => {
+        setReclaimStatus(msg);
+      });
+      setReclaimStatus(`Done! Closed: ${result.closed}, Skipped: ${result.skipped}, Failed: ${result.failed}`);
+      setTimeout(() => setReclaimStatus(null), 5000);
+    } catch (err: any) {
+      setReclaimStatus(`Error: ${err.message}`);
+      setTimeout(() => setReclaimStatus(null), 5000);
+    }
+  }, [vault]);
 
   const handleRemoveVault = useCallback(() => {
     Alert.alert(
@@ -280,6 +297,17 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
                   )}
                 </View>
               )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.reclaimButton}
+              onPress={handleReclaimRent}
+              activeOpacity={0.7}
+              disabled={reclaimStatus !== null}
+            >
+              <Text style={styles.reclaimButtonText}>
+                {reclaimStatus ?? 'Reclaim Rent'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -479,6 +507,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#F95357',
+  },
+  reclaimButton: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#19C394',
+  },
+  reclaimButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#19C394',
   },
   removeButton: {
     marginTop: 12,
