@@ -15,6 +15,9 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { LifetimeEarnedIcon, Last7DIcon } from '../assets/stat-icons';
 import { getVault, clearVault, type VaultData } from '../services/vaultStorage';
 import { getCloudPublicKey, getDevicePublicKey, deleteAllKeypairs } from '../services/keypairStorage';
+import apiService from '../services/apiService';
+
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
 const squadAvatar = require('../assets/squad-avatar.webp');
 
@@ -27,12 +30,22 @@ function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
+function formatSol(amount: number | null): string {
+  if (amount === null) return '';
+  if (amount === 0) return '0 SOL';
+  if (amount < 0.001) return '<0.001 SOL';
+  return `${amount.toFixed(4)} SOL`;
+}
+
 export default function MoreScreen({ onNavigate }: MoreScreenProps) {
   const [vault, setVault] = useState<VaultData | null>(null);
   const [cloudPubkey, setCloudPubkey] = useState<string | null>(null);
   const [devicePubkey, setDevicePubkey] = useState<string | null>(null);
   const [keysLoaded, setKeysLoaded] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [vaultBalance, setVaultBalance] = useState<number | null>(null);
+  const [cloudBalance, setCloudBalance] = useState<number | null>(null);
+  const [deviceBalance, setDeviceBalance] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -46,6 +59,23 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
       setCloudPubkey(cloudPub);
       setDevicePubkey(devicePub);
       setKeysLoaded(true);
+
+      // Fetch SOL balances for all addresses
+      const balanceAddresses = [
+        v?.vaultAddress,
+        cloudPub,
+        devicePub,
+      ];
+      const balanceResults = await Promise.all(
+        balanceAddresses.map(addr =>
+          addr
+            ? apiService.getWalletBalance(addr, SOL_MINT).then(r => r.uiAmount).catch(() => null)
+            : Promise.resolve(null),
+        ),
+      );
+      setVaultBalance(balanceResults[0]);
+      setCloudBalance(balanceResults[1]);
+      setDeviceBalance(balanceResults[2]);
     })();
   }, []);
 
@@ -151,6 +181,9 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
                       {copiedField === 'vault' ? '  Copied!' : ''}
                     </Text>
                   </TouchableOpacity>
+                  {vaultBalance !== null && (
+                    <Text style={styles.balanceText}>{formatSol(vaultBalance)}</Text>
+                  )}
                 </View>
                 <Text style={styles.menuArrow}>{'>'}</Text>
               </View>
@@ -165,10 +198,15 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
                   >
                     <Text style={styles.keypairLabel}>Cloud Key</Text>
                     {cloudPubkey ? (
-                      <Text style={styles.keypairValue}>
-                        {truncateAddress(cloudPubkey)}
-                        {copiedField === 'cloud' ? '  Copied!' : ''}
-                      </Text>
+                      <View style={styles.keypairRight}>
+                        <Text style={styles.keypairValue}>
+                          {truncateAddress(cloudPubkey)}
+                          {copiedField === 'cloud' ? '  Copied!' : ''}
+                        </Text>
+                        {cloudBalance !== null && (
+                          <Text style={styles.keypairBalance}>{formatSol(cloudBalance)}</Text>
+                        )}
+                      </View>
                     ) : (
                       <Text style={styles.keypairMissing}>Not found</Text>
                     )}
@@ -180,10 +218,15 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
                   >
                     <Text style={styles.keypairLabel}>Device Key</Text>
                     {devicePubkey ? (
-                      <Text style={styles.keypairValue}>
-                        {truncateAddress(devicePubkey)}
-                        {copiedField === 'device' ? '  Copied!' : ''}
-                      </Text>
+                      <View style={styles.keypairRight}>
+                        <Text style={styles.keypairValue}>
+                          {truncateAddress(devicePubkey)}
+                          {copiedField === 'device' ? '  Copied!' : ''}
+                        </Text>
+                        {deviceBalance !== null && (
+                          <Text style={styles.keypairBalance}>{formatSol(deviceBalance)}</Text>
+                        )}
+                      </View>
                     ) : (
                       <Text style={styles.keypairMissing}>Not found</Text>
                     )}
@@ -358,10 +401,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6B7B8D',
   },
+  keypairRight: {
+    alignItems: 'flex-end' as const,
+  },
   keypairValue: {
     fontSize: 13,
     fontWeight: '500',
     color: '#1A1A1A',
+  },
+  keypairBalance: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#6B7B8D',
+    marginTop: 2,
+  },
+  balanceText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginTop: 2,
   },
   keypairMissing: {
     fontSize: 13,
