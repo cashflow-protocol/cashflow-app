@@ -172,6 +172,11 @@ router.post('/deposit', async (req: Request, res: Response) => {
           return;
       }
 
+      console.log(`DEPOSIT returnInstructions: got ${instructions?.length ?? 'undefined'} instructions for type=${type}`);
+      if (!instructions || instructions.length === 0) {
+        console.error(`DEPOSIT returnInstructions: EMPTY instructions for type=${type}, mint=${mint}, amount=${amount}`);
+      }
+
       const record = await dbManager.createTransaction({
         action: TransactionAction.DEPOSIT,
         type,

@@ -167,27 +167,52 @@ export class JupiterManager {
   ): Promise<SerializedInstruction[]> {
     const apiSigner = templateSigner || ownerAddress;
 
+    console.log(`[JupiterManager.getDepositInstructions] asset=${mint}, signer=${apiSigner}, amount=${amount}, ownerAddress=${ownerAddress}, templateSigner=${templateSigner}`);
+
     const response = await this.api.post<InstructionsResponse>(
       '/lend/v1/earn/deposit-instructions',
       { asset: mint, signer: apiSigner, amount },
     );
 
+    console.log(`[JupiterManager.getDepositInstructions] Jupiter API returned ${response.data.instructions?.length ?? 'undefined'} instructions`);
+
     let jupiterIxs: SerializedInstruction[] = response.data.instructions;
+    let ataCreateIxs: SerializedInstruction[] = [];
 
     if (templateSigner && templateSigner !== ownerAddress) {
-      jupiterIxs = await this.replaceAuthority(jupiterIxs, templateSigner, ownerAddress);
+      const result = await this.replaceAuthority(jupiterIxs, templateSigner, ownerAddress);
+      jupiterIxs = result.instructions;
+
+      // Create ATAs for any new token accounts the vault PDA needs
+      const signer = this.createNoopSigner(ownerAddress);
+      for (const { ata, mint: ataMint } of result.newAtas) {
+        // Skip wSOL ATA — handled by buildSolWrapIxs
+        if (mint === SOL_MINT && ataMint === SOL_MINT) continue;
+        ataCreateIxs.push(this.kitIxToSerialized(
+          getCreateAssociatedTokenIdempotentInstruction({
+            payer: signer,
+            ata: address(ata),
+            owner: address(ownerAddress),
+            mint: address(ataMint),
+          }),
+        ));
+      }
     }
 
     if (mint === SOL_MINT) {
       const { preIxs, postIxs } = await this.buildSolWrapIxs(ownerAddress, BigInt(amount));
-      return [
+      const allIxs = [
+        ...ataCreateIxs,
         ...preIxs.map((ix: any) => this.kitIxToSerialized(ix)),
         ...jupiterIxs,
         ...postIxs.map((ix: any) => this.kitIxToSerialized(ix)),
       ];
+      console.log(`[JupiterManager.getDepositInstructions] Returning ${allIxs.length} total instructions (ataCreate=${ataCreateIxs.length}, preIxs=${preIxs.length}, jupiterIxs=${jupiterIxs.length}, postIxs=${postIxs.length})`);
+      return allIxs;
     }
 
-    return jupiterIxs;
+    console.log(`[JupiterManager.getDepositInstructions] Returning ${ataCreateIxs.length + jupiterIxs.length} total instructions (ataCreate=${ataCreateIxs.length}, jupiterIxs=${jupiterIxs.length})`);
+    return [...ataCreateIxs, ...jupiterIxs];
   }
 
   /**
@@ -208,20 +233,37 @@ export class JupiterManager {
     );
 
     let jupiterIxs: SerializedInstruction[] = response.data.instructions;
+    let ataCreateIxs: SerializedInstruction[] = [];
 
     if (templateSigner && templateSigner !== ownerAddress) {
-      jupiterIxs = await this.replaceAuthority(jupiterIxs, templateSigner, ownerAddress);
+      const result = await this.replaceAuthority(jupiterIxs, templateSigner, ownerAddress);
+      jupiterIxs = result.instructions;
+
+      // Create ATAs for any new token accounts the vault PDA needs
+      const signer = this.createNoopSigner(ownerAddress);
+      for (const { ata, mint: ataMint } of result.newAtas) {
+        if (mint === SOL_MINT && ataMint === SOL_MINT) continue;
+        ataCreateIxs.push(this.kitIxToSerialized(
+          getCreateAssociatedTokenIdempotentInstruction({
+            payer: signer,
+            ata: address(ata),
+            owner: address(ownerAddress),
+            mint: address(ataMint),
+          }),
+        ));
+      }
     }
 
     if (mint === SOL_MINT) {
       const { postIxs } = await this.buildSolWrapIxs(ownerAddress);
       return [
+        ...ataCreateIxs,
         ...jupiterIxs,
         ...postIxs.map((ix: any) => this.kitIxToSerialized(ix)),
       ];
     }
 
-    return jupiterIxs;
+    return [...ataCreateIxs, ...jupiterIxs];
   }
 
   /**
@@ -375,7 +417,7 @@ export class JupiterManager {
     instructions: SerializedInstruction[],
     oldAuthority: string,
     newAuthority: string,
-  ): Promise<SerializedInstruction[]> {
+  ): Promise<{ instructions: SerializedInstruction[]; newAtas: Array<{ ata: string; mint: string }> }> {
     const replacements = new Map<string, string>();
     replacements.set(oldAuthority, newAuthority);
 
@@ -390,6 +432,7 @@ export class JupiterManager {
     // For each address that could be a mint, check whether there's a
     // matching ATA derived from oldAuthority.  If so, compute the
     // replacement ATA derived from newAuthority.
+    const newAtas: Array<{ ata: string; mint: string }> = [];
     for (const potentialMint of allAddresses) {
       const [oldAta] = await findAssociatedTokenPda({
         owner: address(oldAuthority),
@@ -404,16 +447,19 @@ export class JupiterManager {
           mint: address(potentialMint),
         });
         replacements.set(oldAta as string, newAta as string);
+        newAtas.push({ ata: newAta as string, mint: potentialMint });
       }
     }
 
-    return instructions.map((ix) => ({
+    const replacedInstructions = instructions.map((ix) => ({
       ...ix,
       accounts: ix.accounts.map((acc) => {
         const replacement = replacements.get(acc.pubkey);
         return replacement ? { ...acc, pubkey: replacement } : acc;
       }),
     }));
+
+    return { instructions: replacedInstructions, newAtas };
   }
 
   private kitIxToSerialized(ix: any): SerializedInstruction {

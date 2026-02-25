@@ -37,6 +37,12 @@
   [self.impl getPublicKey:tag resolve:resolve reject:reject];
 }
 
+- (void)exportPrivateKey:(NSString *)tag
+                 resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject {
+  [self.impl exportPrivateKey:tag resolve:resolve reject:reject];
+}
+
 - (void)sign:(NSString *)tag
     messageBase64:(NSString *)messageBase64
           resolve:(RCTPromiseResolveBlock)resolve

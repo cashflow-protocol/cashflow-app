@@ -85,6 +85,26 @@ class CashflowSigningImpl: NSObject {
     resolve(status == errSecSuccess)
   }
 
+  func exportPrivateKey(
+    _ tag: String,
+    resolve: @escaping (Any?) -> Void,
+    reject: @escaping (String?, String?, (any Error)?) -> Void
+  ) {
+    do {
+      guard let keyData = try loadPrivateKey(tag: tag) else {
+        resolve(nil)
+        return
+      }
+      let privateKey = try Curve25519.Signing.PrivateKey(rawRepresentation: keyData)
+      // Return 64-byte keypair (32 private + 32 public) as base58, matching Solana convention
+      var fullKeypair = Data(privateKey.rawRepresentation)
+      fullKeypair.append(privateKey.publicKey.rawRepresentation)
+      resolve(base58Encode(fullKeypair))
+    } catch {
+      reject("ERR_EXPORT_KEY", "Failed to export private key: \(error.localizedDescription)", error)
+    }
+  }
+
   func deleteKeypair(
     _ tag: String,
     resolve: @escaping (Any?) -> Void,

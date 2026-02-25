@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { LifetimeEarnedIcon, Last7DIcon } from '../assets/stat-icons';
 import { getVault, clearVault, type VaultData } from '../services/vaultStorage';
-import { getCloudPublicKey, getDevicePublicKey, deleteAllKeypairs } from '../services/keypairStorage';
+import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey, getDevicePrivateKey, deleteAllKeypairs } from '../services/keypairStorage';
 import apiService from '../services/apiService';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -83,6 +83,31 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
     Clipboard.setString(addr);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
+  }, []);
+
+  const copyPrivateKey = useCallback((keyType: 'cloud' | 'device') => {
+    const label = keyType === 'cloud' ? 'Cloud' : 'Device';
+    Alert.alert(
+      `Export ${label} Private Key`,
+      'This will copy the full private key to your clipboard. Anyone with this key can sign transactions. Make sure no one is watching your screen.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Copy',
+          style: 'destructive',
+          onPress: async () => {
+            const key = keyType === 'cloud'
+              ? await getCloudPrivateKey()
+              : await getDevicePrivateKey();
+            if (key) {
+              Clipboard.setString(key);
+              setCopiedField(`${keyType}-private`);
+              setTimeout(() => setCopiedField(null), 2000);
+            }
+          },
+        },
+      ],
+    );
   }, []);
 
   const handleRemoveVault = useCallback(() => {
@@ -211,6 +236,17 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
                       <Text style={styles.keypairMissing}>Not found</Text>
                     )}
                   </TouchableOpacity>
+                  {cloudPubkey && (
+                    <TouchableOpacity
+                      onPress={() => copyPrivateKey('cloud')}
+                      activeOpacity={0.6}
+                      hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.exportKeyText}>
+                        {copiedField === 'cloud-private' ? 'Copied!' : 'Copy Private Key'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={styles.keypairRow}
                     onPress={() => devicePubkey && copyAddress(devicePubkey, 'device')}
@@ -231,6 +267,17 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
                       <Text style={styles.keypairMissing}>Not found</Text>
                     )}
                   </TouchableOpacity>
+                  {devicePubkey && (
+                    <TouchableOpacity
+                      onPress={() => copyPrivateKey('device')}
+                      activeOpacity={0.6}
+                      hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.exportKeyText}>
+                        {copiedField === 'device-private' ? 'Copied!' : 'Copy Private Key'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </TouchableOpacity>
@@ -419,6 +466,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#1A1A1A',
+    marginTop: 2,
+  },
+  exportKeyText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#F95357',
+    alignSelf: 'flex-end',
     marginTop: 2,
   },
   keypairMissing: {

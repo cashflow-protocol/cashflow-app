@@ -22,10 +22,9 @@ import {
   signWithDevice,
 } from './keypairStorage';
 
-const { Permission, Permissions, Period } = multisig.types;
+const { Permission, Permissions } = multisig.types;
 
-const INITIAL_CLOUD_FUNDING = 10_000_000;  // 0.01 SOL — seed during vault creation
-const TARGET_CLOUD_BALANCE = 10_000_000;   // 0.01 SOL — enough for ~1 vault tx (fees + rent)
+const TARGET_CLOUD_BALANCE = 25_000_000;   // 0.025 SOL — enough for ~1 vault tx (fees + rent)
 
 // Web3.js connection for @sqds/multisig SDK calls
 const connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
@@ -141,7 +140,7 @@ export async function createMultisig(
   const fundCloudIx = SystemProgram.transfer({
     fromPubkey: creatorPubkey,
     toPubkey: cloudPubkey,
-    lamports: INITIAL_CLOUD_FUNDING,
+    lamports: TARGET_CLOUD_BALANCE,
   });
 
   const { blockhash: blockhash1 } = await connection.getLatestBlockhash('confirmed');
@@ -161,75 +160,9 @@ export async function createMultisig(
   // Wait for TX 1 to confirm before referencing the multisig account
   await sleep(2000);
 
-  // --- TX 2: Set up SpendingLimit (config tx + proposal + approve×2 + execute) ---
-  // Uses cloud pubkey as createKey for deterministic PDA derivation
-  const [spendingLimitPda] = multisig.getSpendingLimitPda({
-    multisigPda,
-    createKey: cloudPubkey,
-  });
-
-  const spendingLimitTxIndex = 1n; // first config tx after multisig creation
-
-  const configTxIx = multisig.instructions.configTransactionCreate({
-    multisigPda,
-    transactionIndex: spendingLimitTxIndex,
-    creator: cloudPubkey,
-    rentPayer: creatorPubkey,
-    actions: [{
-      __kind: 'AddSpendingLimit' as const,
-      createKey: cloudPubkey,
-      vaultIndex: 0,
-      mint: PublicKey.default,
-      amount: 50_000_000, // 0.05 SOL per day
-      period: Period.Day,
-      members: [cloudPubkey],
-      destinations: [cloudPubkey],
-    }],
-  });
-
-  const proposalIx = multisig.instructions.proposalCreate({
-    multisigPda,
-    transactionIndex: spendingLimitTxIndex,
-    creator: cloudPubkey,
-    rentPayer: creatorPubkey,
-  });
-
-  const approveCloudIx = multisig.instructions.proposalApprove({
-    multisigPda,
-    transactionIndex: spendingLimitTxIndex,
-    member: cloudPubkey,
-  });
-
-  const approveDeviceIx = multisig.instructions.proposalApprove({
-    multisigPda,
-    transactionIndex: spendingLimitTxIndex,
-    member: devicePubkey,
-  });
-
-  const executeIx = multisig.instructions.configTransactionExecute({
-    multisigPda,
-    transactionIndex: spendingLimitTxIndex,
-    member: cloudPubkey,
-    rentPayer: creatorPubkey,
-    spendingLimits: [spendingLimitPda],
-  });
-
-  const { blockhash: blockhash2 } = await connection.getLatestBlockhash('confirmed');
-  const msg2 = new TransactionMessage({
-    payerKey: creatorPubkey,
-    recentBlockhash: blockhash2,
-    instructions: [configTxIx, proposalIx, approveCloudIx, approveDeviceIx, executeIx],
-  }).compileToV0Message();
-  const tx2 = new VersionedTransaction(msg2);
-
-  // Sign cloud + device slots natively, then dev wallet signs fee payer slot and sends
-  await signTransactionNatively(tx2, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-    { pubkey: devicePubkey, signFn: signWithDevice },
-  ]);
-
-  const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-  await signAndSendTransaction(tx2Base64, '');
+  // TODO: TX 2 for SpendingLimit setup is disabled for now.
+  // Cloud wallet will be funded manually until spending limits are tested.
+  // See plan file for the full SpendingLimit implementation when ready.
 
   // Persist vault metadata locally
   const vaultData: VaultData = {
@@ -285,36 +218,9 @@ export async function getVaultBalance(multisigAddress: string): Promise<number> 
   return balance / 1e9;
 }
 
-/**
- * Build a spendingLimitUse instruction to top up the cloud key from the vault.
- * Returns the instruction to prepend to a transaction, or null if balance is sufficient.
- * This avoids a separate transaction — the top-up rides along with the vault operation.
- */
-async function buildTopUpInstruction(
-  multisigPda: PublicKey,
-  cloudPubkey: PublicKey,
-): Promise<TransactionInstruction | null> {
-  const balance = await connection.getBalance(cloudPubkey, 'confirmed');
-  if (balance >= TARGET_CLOUD_BALANCE) return null;
-
-  const topUpAmount = TARGET_CLOUD_BALANCE - balance;
-  console.log(`Cloud key balance low (${balance} lamports), will top up ${topUpAmount} lamports`);
-
-  const [spendingLimitPda] = multisig.getSpendingLimitPda({
-    multisigPda,
-    createKey: cloudPubkey,
-  });
-
-  return multisig.instructions.spendingLimitUse({
-    multisigPda,
-    member: cloudPubkey,
-    spendingLimit: spendingLimitPda,
-    vaultIndex: 0,
-    amount: topUpAmount,
-    decimals: 9,
-    destination: cloudPubkey,
-  });
-}
+// TODO: buildTopUpInstruction disabled — cloud wallet funded manually for now.
+// Re-enable when SpendingLimit is set up during vault creation.
+// async function buildTopUpInstruction(...) { ... }
 
 /**
  * Add a new member to the multisig via the config transaction proposal flow.
@@ -368,9 +274,6 @@ export async function addMember(
   );
   const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
-  // Build top-up instruction (prepended to refill cloud key for next tx)
-  const topUpIx = await buildTopUpInstruction(multisigPda, cloudPubkey);
-
   // --- Step 1: Create config tx + proposal + approve(cloud) + approve(device) ---
   const configTxIx = multisig.instructions.configTransactionCreate({
     multisigPda,
@@ -404,16 +307,11 @@ export async function addMember(
     member: devicePubkey,
   });
 
-  const tx1Instructions = [
-    ...(topUpIx ? [topUpIx] : []),
-    configTxIx, proposalIx, approveCloudIx, approveDeviceIx,
-  ];
-
   const { blockhash: blockhash1 } = await connection.getLatestBlockhash('confirmed');
   const msg1 = new TransactionMessage({
     payerKey: feePayer,
     recentBlockhash: blockhash1,
-    instructions: tx1Instructions,
+    instructions: [configTxIx, proposalIx, approveCloudIx, approveDeviceIx],
   }).compileToV0Message();
   const tx1 = new VersionedTransaction(msg1);
 
@@ -492,8 +390,10 @@ export async function executeVaultTransaction(
   );
   const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
-  // Build top-up instruction (prepended to refill cloud key for next tx)
-  const topUpIx = await buildTopUpInstruction(multisigPda, cloudPubkey);
+  // Guard: never create an empty vault transaction
+  if (!instructions || instructions.length === 0) {
+    throw new Error('No instructions provided for vault transaction');
+  }
 
   // Convert serialized instructions → TransactionInstruction[]
   const txInstructions = instructions.map(
@@ -547,16 +447,11 @@ export async function executeVaultTransaction(
     member: devicePubkey,
   });
 
-  const tx1Instructions = [
-    ...(topUpIx ? [topUpIx] : []),
-    createVaultTxIx, proposalIx, approveCloudIx, approveDeviceIx,
-  ];
-
   const { blockhash: blockhash1 } = await connection.getLatestBlockhash('confirmed');
   const msg1 = new TransactionMessage({
     payerKey: feePayer,
     recentBlockhash: blockhash1,
-    instructions: tx1Instructions,
+    instructions: [createVaultTxIx, proposalIx, approveCloudIx, approveDeviceIx],
   }).compileToV0Message();
   const tx1 = new VersionedTransaction(msg1);
 

@@ -12,16 +12,26 @@ export interface EarnTokenWithPosition extends EarnToken {
 let cachedTokens: EarnTokenWithPosition[] | null = null;
 
 function mergeTokensAndPositions(earnTokens: EarnToken[], positions: EarnPosition[]): EarnTokenWithPosition[] {
-  const positionMap = new Map<string, EarnPosition>();
+  // Index positions by exact key (type:mint:vaultAddress) and fallback key (type:mint)
+  const exactMap = new Map<string, EarnPosition>();
+  const fallbackMap = new Map<string, EarnPosition>();
   positions.forEach((p) => {
-    const key = [p.type, p.mint, p.vaultAddress].filter(Boolean).join(':');
-    positionMap.set(key, p);
+    const fallbackKey = `${p.type}:${p.mint}`;
+    if (p.vaultAddress) {
+      exactMap.set(`${fallbackKey}:${p.vaultAddress}`, p);
+    } else {
+      fallbackMap.set(fallbackKey, p);
+    }
   });
 
-  return earnTokens.map((token) => ({
-    ...token,
-    position: positionMap.get([token.type, token.mint, token.vaultAddress].filter(Boolean).join(':')),
-  }));
+  return earnTokens.map((token) => {
+    const exactKey = `${token.type}:${token.mint}:${token.vaultAddress}`;
+    const fallbackKey = `${token.type}:${token.mint}`;
+    return {
+      ...token,
+      position: exactMap.get(exactKey) ?? fallbackMap.get(fallbackKey),
+    };
+  });
 }
 
 export function useEarnTokens() {

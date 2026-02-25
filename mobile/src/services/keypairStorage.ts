@@ -53,6 +53,24 @@ export async function getDevicePublicKey(): Promise<string | null> {
 }
 
 /**
+ * Export the cloud keypair as base58 (64-byte: 32 private + 32 public).
+ * Returns null if not generated.
+ */
+export async function getCloudPrivateKey(): Promise<string | null> {
+  if (!NativeCashflowSigning) return null;
+  return NativeCashflowSigning.exportPrivateKey('cloud');
+}
+
+/**
+ * Export the device keypair as base58 (64-byte: 32 private + 32 public).
+ * Returns null if not generated.
+ */
+export async function getDevicePrivateKey(): Promise<string | null> {
+  if (!NativeCashflowSigning) return null;
+  return NativeCashflowSigning.exportPrivateKey('device');
+}
+
+/**
  * Sign a message with the cloud keypair. Message and signature are base64.
  */
 export async function signWithCloud(messageBase64: string): Promise<string> {
