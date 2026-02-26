@@ -283,9 +283,6 @@ export async function getVaultBalance(multisigAddress: string): Promise<number> 
   return balance / 1e9;
 }
 
-// TODO: buildTopUpInstruction disabled — cloud wallet funded manually for now.
-// Re-enable when SpendingLimit is set up during vault creation.
-// async function buildTopUpInstruction(...) { ... }
 
 /**
  * Add a new member to the multisig via the config transaction proposal flow.
@@ -492,7 +489,7 @@ export async function executeVaultTransaction(
   }
 
   // Convert serialized instructions → TransactionInstruction[]
-  const txInstructions = instructions.map(
+  const txInstructions: TransactionInstruction[] = instructions.map(
     (ix) =>
       new TransactionInstruction({
         programId: new PublicKey(ix.programId),
@@ -504,6 +501,19 @@ export async function executeVaultTransaction(
         data: Buffer.from(ix.data, 'base64'),
       }),
   );
+
+  // Top up cloud key from vault if balance is low (vault CPI-signs the transfer)
+  const cloudBalance = await connection.getBalance(cloudPubkey, 'confirmed');
+  if (cloudBalance < TARGET_CLOUD_BALANCE) {
+    const refundAmount = TARGET_CLOUD_BALANCE - cloudBalance;
+    txInstructions.unshift(
+      SystemProgram.transfer({
+        fromPubkey: vaultPda,
+        toPubkey: cloudPubkey,
+        lamports: refundAmount,
+      }),
+    );
+  }
 
   // Build inner message (vault PDA as payer for the inner instructions)
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
