@@ -26,6 +26,19 @@ const { Permission, Permissions } = multisig.types;
 
 const TARGET_CLOUD_BALANCE = 25_000_000;   // 0.025 SOL — enough for ~1 vault tx (fees + rent)
 
+// 8 Jito tip accounts — pick one at random per bundle
+const JITO_TIP_ACCOUNTS = [
+  '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5',
+  'HFqU5x63VTqvQss8hp11i4bVqkfRtQ7NmXwkiNPLNiNj',
+  'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
+  'ADaUMid9yfUytqMBgopwjb2DTLSLoPGAq8W6S4p4nYxr',
+  'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
+  'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
+  'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL6d33',
+  '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT',
+];
+const JITO_TIP_LAMPORTS = 100_000; // 0.0001 SOL
+
 // Web3.js connection for @sqds/multisig SDK calls
 const connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
 
@@ -48,6 +61,58 @@ export interface CreateMultisigResult {
   multisigAddress: string;
   vaultAddress: string;
   signature: string;
+}
+
+/**
+ * Build vaultTransactionExecute instruction WITHOUT an RPC read.
+ * We already have the inner TransactionMessage, so we can derive the
+ * remaining accounts from its compiled V0 form — same ordering the
+ * on-chain program will see.
+ */
+function buildVaultExecuteIx(
+  multisigPda: PublicKey,
+  transactionIndex: bigint,
+  member: PublicKey,
+  vaultPda: PublicKey,
+  innerMessage: TransactionMessage,
+): TransactionInstruction {
+  const [proposalPda] = multisig.getProposalPda({ multisigPda, transactionIndex });
+  const [transactionPda] = multisig.getTransactionPda({ multisigPda, index: transactionIndex });
+
+  const compiled = innerMessage.compileToV0Message();
+  const keys = compiled.staticAccountKeys;
+  const { numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts } = compiled.header;
+
+  const numSigners = numRequiredSignatures;
+  const numWritableSigners = numRequiredSignatures - numReadonlySignedAccounts;
+  const numWritableNonSigners = keys.length - numRequiredSignatures - numReadonlyUnsignedAccounts;
+
+  const accountMetas = keys.map((pubkey, i) => ({
+    pubkey,
+    isWritable: i < numWritableSigners ||
+      (i >= numSigners && (i - numSigners) < numWritableNonSigners),
+    isSigner: i < numSigners && !pubkey.equals(vaultPda),
+  }));
+
+  return multisig.generated.createVaultTransactionExecuteInstruction(
+    {
+      multisig: multisigPda,
+      member,
+      proposal: proposalPda,
+      transaction: transactionPda,
+      anchorRemainingAccounts: accountMetas,
+    },
+  );
+}
+
+/** Build a Jito tip instruction for the fee payer → random tip account. */
+function jitoTipIx(feePayer: PublicKey): TransactionInstruction {
+  const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
+  return SystemProgram.transfer({
+    fromPubkey: feePayer,
+    toPubkey: new PublicKey(tipAccount),
+    lamports: JITO_TIP_LAMPORTS,
+  });
 }
 
 /**
@@ -307,27 +372,22 @@ export async function addMember(
     member: devicePubkey,
   });
 
-  const { blockhash: blockhash1 } = await connection.getLatestBlockhash('confirmed');
+  // --- Build all transactions with one blockhash (Jito bundle) ---
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+
+  // TX1: create + propose + approve×2
   const msg1 = new TransactionMessage({
     payerKey: feePayer,
-    recentBlockhash: blockhash1,
+    recentBlockhash: blockhash,
     instructions: [configTxIx, proposalIx, approveCloudIx, approveDeviceIx],
   }).compileToV0Message();
   const tx1 = new VersionedTransaction(msg1);
-
-  // Sign with cloud (fee payer + creator) + device via native module
   await signTransactionNatively(tx1, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
     { pubkey: devicePubkey, signFn: signWithDevice },
   ]);
 
-  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  await apiService.sendTransaction(tx1Base64, '');
-
-  // Wait for confirmation before executing
-  await sleep(2000);
-
-  // --- Step 2: Execute the config transaction ---
+  // TX2: execute
   const executeIx = multisig.instructions.configTransactionExecute({
     multisigPda,
     transactionIndex,
@@ -335,54 +395,60 @@ export async function addMember(
     rentPayer: feePayer,
   });
 
-  const { blockhash: blockhash2 } = await connection.getLatestBlockhash('confirmed');
+  // TX3 instructions: close (if rentCollector set) + Jito tip
+  const tx3Instructions: TransactionInstruction[] = [];
+  if (multisigAccount.rentCollector) {
+    tx3Instructions.push(
+      multisig.instructions.configTransactionAccountsClose({
+        multisigPda,
+        transactionIndex,
+        rentCollector: new PublicKey(multisigAccount.rentCollector),
+      }),
+    );
+  }
+  tx3Instructions.push(jitoTipIx(feePayer));
+
   const msg2 = new TransactionMessage({
     payerKey: feePayer,
-    recentBlockhash: blockhash2,
+    recentBlockhash: blockhash,
     instructions: [executeIx],
   }).compileToV0Message();
   const tx2 = new VersionedTransaction(msg2);
-
-  // Only cloud signs (fee payer + executor)
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
   ]);
 
+  const msg3 = new TransactionMessage({
+    payerKey: feePayer,
+    recentBlockhash: blockhash,
+    instructions: tx3Instructions,
+  }).compileToV0Message();
+  const tx3 = new VersionedTransaction(msg3);
+  await signTransactionNatively(tx3, [
+    { pubkey: cloudPubkey, signFn: signWithCloud },
+  ]);
+
+  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-  await apiService.sendTransaction(tx2Base64, '');
+  const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
 
-  const signature = bs58.encode(tx2.signatures[0]);
-
-  // --- Step 3: Close config transaction + proposal accounts to reclaim rent ---
-  if (multisigAccount.rentCollector) {
+  try {
+    await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64]);
+  } catch (err) {
+    // Fallback: send sequentially if Jito fails
+    console.warn('Jito bundle failed, falling back to sequential:', err);
+    await apiService.sendTransaction(tx1Base64, '');
+    await sleep(2000);
+    await apiService.sendTransaction(tx2Base64, '');
+    await sleep(2000);
     try {
-      await sleep(2000);
-
-      const closeIx = multisig.instructions.configTransactionAccountsClose({
-        multisigPda,
-        transactionIndex,
-        rentCollector: new PublicKey(multisigAccount.rentCollector),
-      });
-
-      const { blockhash: blockhash3 } = await connection.getLatestBlockhash('confirmed');
-      const msg3 = new TransactionMessage({
-        payerKey: feePayer,
-        recentBlockhash: blockhash3,
-        instructions: [closeIx],
-      }).compileToV0Message();
-      const tx3 = new VersionedTransaction(msg3);
-
-      await signTransactionNatively(tx3, [
-        { pubkey: cloudPubkey, signFn: signWithCloud },
-      ]);
-
-      const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
       await apiService.sendTransaction(tx3Base64, '');
-    } catch (err) {
-      console.warn('Failed to close config transaction accounts:', err);
+    } catch (closeErr) {
+      console.warn('Failed to close config transaction accounts:', closeErr);
     }
   }
 
+  const signature = bs58.encode(tx2.signatures[0]);
   return { signature };
 }
 
@@ -440,10 +506,10 @@ export async function executeVaultTransaction(
   );
 
   // Build inner message (vault PDA as payer for the inner instructions)
-  const { blockhash: innerBlockhash } = await connection.getLatestBlockhash('confirmed');
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
   const innerMessage = new TransactionMessage({
     payerKey: vaultPda,
-    recentBlockhash: innerBlockhash,
+    recentBlockhash: blockhash,
     instructions: txInstructions,
   });
 
@@ -477,85 +543,81 @@ export async function executeVaultTransaction(
     member: devicePubkey,
   });
 
-  const { blockhash: blockhash1 } = await connection.getLatestBlockhash('confirmed');
+  // --- TX 2: Execute (built locally, no RPC read needed) ---
+  const executeIx = buildVaultExecuteIx(
+    multisigPda,
+    transactionIndex,
+    cloudPubkey,
+    vaultPda,
+    innerMessage,
+  );
+
+  // --- TX 3: Close + Jito tip ---
+  const tx3Instructions: TransactionInstruction[] = [];
+  if (multisigAccount.rentCollector) {
+    tx3Instructions.push(
+      multisig.instructions.vaultTransactionAccountsClose({
+        multisigPda,
+        transactionIndex,
+        rentCollector: new PublicKey(multisigAccount.rentCollector),
+      }),
+    );
+  }
+  tx3Instructions.push(jitoTipIx(feePayer));
+
+  // --- Build all transactions with one blockhash (Jito bundle) ---
   const msg1 = new TransactionMessage({
     payerKey: feePayer,
-    recentBlockhash: blockhash1,
+    recentBlockhash: blockhash,
     instructions: [createVaultTxIx, proposalIx, approveCloudIx, approveDeviceIx],
   }).compileToV0Message();
   const tx1 = new VersionedTransaction(msg1);
-
-  // Sign with cloud (fee payer + creator) + device via native module
   await signTransactionNatively(tx1, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
     { pubkey: devicePubkey, signFn: signWithDevice },
   ]);
 
-  // Send fully-signed transaction directly (no dev wallet needed)
-  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  await apiService.sendTransaction(tx1Base64, '');
-
-  // Wait for confirmation before executing
-  await sleep(2000);
-
-  // --- TX 2: Execute the vault transaction ---
-  const { instruction: executeIx, lookupTableAccounts } =
-    await multisig.instructions.vaultTransactionExecute({
-      connection,
-      multisigPda,
-      transactionIndex,
-      member: cloudPubkey,
-    });
-
-  const { blockhash: blockhash2 } = await connection.getLatestBlockhash('confirmed');
   const msg2 = new TransactionMessage({
     payerKey: feePayer,
-    recentBlockhash: blockhash2,
+    recentBlockhash: blockhash,
     instructions: [executeIx],
-  }).compileToV0Message(lookupTableAccounts);
+  }).compileToV0Message();
   const tx2 = new VersionedTransaction(msg2);
-
-  // Only cloud signs the execute step (it's also the fee payer)
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
   ]);
 
+  const msg3 = new TransactionMessage({
+    payerKey: feePayer,
+    recentBlockhash: blockhash,
+    instructions: tx3Instructions,
+  }).compileToV0Message();
+  const tx3 = new VersionedTransaction(msg3);
+  await signTransactionNatively(tx3, [
+    { pubkey: cloudPubkey, signFn: signWithCloud },
+  ]);
+
+  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-  await apiService.sendTransaction(tx2Base64, '');
+  const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
 
-  const signature = bs58.encode(tx2.signatures[0]);
-
-  // --- TX 3: Close vault transaction + proposal accounts to reclaim rent ---
-  if (multisigAccount.rentCollector) {
+  try {
+    await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64]);
+  } catch (err) {
+    // Fallback: send sequentially if Jito fails
+    console.warn('Jito bundle failed, falling back to sequential:', err);
+    await apiService.sendTransaction(tx1Base64, '');
+    await sleep(2000);
+    await apiService.sendTransaction(tx2Base64, '');
+    await sleep(2000);
     try {
-      await sleep(2000);
-
-      const closeIx = multisig.instructions.vaultTransactionAccountsClose({
-        multisigPda,
-        transactionIndex,
-        rentCollector: new PublicKey(multisigAccount.rentCollector),
-      });
-
-      const { blockhash: blockhash3 } = await connection.getLatestBlockhash('confirmed');
-      const msg3 = new TransactionMessage({
-        payerKey: feePayer,
-        recentBlockhash: blockhash3,
-        instructions: [closeIx],
-      }).compileToV0Message();
-      const tx3 = new VersionedTransaction(msg3);
-
-      await signTransactionNatively(tx3, [
-        { pubkey: cloudPubkey, signFn: signWithCloud },
-      ]);
-
-      const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
       await apiService.sendTransaction(tx3Base64, '');
-    } catch (err) {
-      // Non-fatal: rent reclamation failed but the vault tx succeeded
-      console.warn('Failed to close vault transaction accounts:', err);
+    } catch (closeErr) {
+      console.warn('Failed to close vault transaction accounts:', closeErr);
     }
   }
 
+  const signature = bs58.encode(tx2.signatures[0]);
   return { signature };
 }
 
@@ -603,25 +665,6 @@ async function setRentCollector(
     member: devicePubkey,
   });
 
-  // TX 1: create + propose + approve×2
-  const { blockhash: bh1 } = await connection.getLatestBlockhash('confirmed');
-  const msg1 = new TransactionMessage({
-    payerKey: cloudPubkey,
-    recentBlockhash: bh1,
-    instructions: [configTxIx, proposalIx, approveCloudIx, approveDeviceIx],
-  }).compileToV0Message();
-  const tx1 = new VersionedTransaction(msg1);
-
-  await signTransactionNatively(tx1, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-    { pubkey: devicePubkey, signFn: signWithDevice },
-  ]);
-
-  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  await apiService.sendTransaction(tx1Base64, '');
-  await sleep(2000);
-
-  // TX 2: execute
   const executeIx = multisig.instructions.configTransactionExecute({
     multisigPda,
     transactionIndex,
@@ -629,21 +672,43 @@ async function setRentCollector(
     rentPayer: cloudPubkey,
   });
 
-  const { blockhash: bh2 } = await connection.getLatestBlockhash('confirmed');
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+
+  // TX 1: create + propose + approve×2
+  const msg1 = new TransactionMessage({
+    payerKey: cloudPubkey,
+    recentBlockhash: blockhash,
+    instructions: [configTxIx, proposalIx, approveCloudIx, approveDeviceIx],
+  }).compileToV0Message();
+  const tx1 = new VersionedTransaction(msg1);
+  await signTransactionNatively(tx1, [
+    { pubkey: cloudPubkey, signFn: signWithCloud },
+    { pubkey: devicePubkey, signFn: signWithDevice },
+  ]);
+
+  // TX 2: execute + Jito tip
   const msg2 = new TransactionMessage({
     payerKey: cloudPubkey,
-    recentBlockhash: bh2,
-    instructions: [executeIx],
+    recentBlockhash: blockhash,
+    instructions: [executeIx, jitoTipIx(cloudPubkey)],
   }).compileToV0Message();
   const tx2 = new VersionedTransaction(msg2);
-
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
   ]);
 
+  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-  await apiService.sendTransaction(tx2Base64, '');
-  await sleep(2000);
+
+  try {
+    await apiService.sendBundle([tx1Base64, tx2Base64]);
+  } catch (err) {
+    console.warn('Jito bundle failed, falling back to sequential:', err);
+    await apiService.sendTransaction(tx1Base64, '');
+    await sleep(2000);
+    await apiService.sendTransaction(tx2Base64, '');
+    await sleep(2000);
+  }
 }
 
 /**
@@ -697,7 +762,13 @@ export async function reclaimRent(
   let skipped = 0;
   let failed = 0;
 
-  // Step 2: Close all past transaction accounts
+  // Step 2: Collect all closeable accounts
+  interface CloseableAccount {
+    txIndex: bigint;
+    isVaultTx: boolean;
+  }
+  const closeable: CloseableAccount[] = [];
+
   for (let i = 1; i <= updatedTotal; i++) {
     const txIndex = BigInt(i);
     const [transactionPda] = multisig.getTransactionPda({ multisigPda, index: txIndex });
@@ -719,7 +790,6 @@ export async function reclaimRent(
         continue;
       }
     } catch {
-      // Proposal account doesn't exist or can't be read — skip
       skipped++;
       continue;
     }
@@ -735,40 +805,72 @@ export async function reclaimRent(
       continue;
     }
 
-    onProgress?.(`Closing ${i}/${updatedTotal} (${isVaultTx ? 'vault' : 'config'})...`);
+    closeable.push({ txIndex, isVaultTx });
+  }
+
+  // Step 3: Batch close in groups of up to 5 via Jito bundles
+  const BATCH_SIZE = 1;
+  for (let b = 0; b < closeable.length; b += BATCH_SIZE) {
+    const batch = closeable.slice(b, b + BATCH_SIZE);
+    onProgress?.(`Closing batch ${Math.floor(b / BATCH_SIZE) + 1} (${batch.length} accounts)...`);
 
     try {
-      const closeIx = isVaultTx
-        ? multisig.instructions.vaultTransactionAccountsClose({
-            multisigPda,
-            transactionIndex: txIndex,
-            rentCollector,
-          })
-        : multisig.instructions.configTransactionAccountsClose({
-            multisigPda,
-            transactionIndex: txIndex,
-            rentCollector,
-          });
-
       const { blockhash } = await connection.getLatestBlockhash('confirmed');
-      const msg = new TransactionMessage({
-        payerKey: cloudPubkey,
-        recentBlockhash: blockhash,
-        instructions: [closeIx],
-      }).compileToV0Message();
-      const tx = new VersionedTransaction(msg);
+      const serializedTxs: string[] = [];
 
-      await signTransactionNatively(tx, [
-        { pubkey: cloudPubkey, signFn: signWithCloud },
-      ]);
+      for (let t = 0; t < batch.length; t++) {
+        const { txIndex, isVaultTx } = batch[t];
+        const closeIx = isVaultTx
+          ? multisig.instructions.vaultTransactionAccountsClose({
+              multisigPda,
+              transactionIndex: txIndex,
+              rentCollector,
+            })
+          : multisig.instructions.configTransactionAccountsClose({
+              multisigPda,
+              transactionIndex: txIndex,
+              rentCollector,
+            });
 
-      const txBase64 = Buffer.from(tx.serialize()).toString('base64');
-      await apiService.sendTransaction(txBase64, '');
-      closed++;
-      await sleep(500);
+        // Add Jito tip to last tx in batch
+        const ixs = t === batch.length - 1
+          ? [closeIx, jitoTipIx(cloudPubkey)]
+          : [closeIx];
+
+        const msg = new TransactionMessage({
+          payerKey: cloudPubkey,
+          recentBlockhash: blockhash,
+          instructions: ixs,
+        }).compileToV0Message();
+        const tx = new VersionedTransaction(msg);
+
+        await signTransactionNatively(tx, [
+          { pubkey: cloudPubkey, signFn: signWithCloud },
+        ]);
+
+        serializedTxs.push(Buffer.from(tx.serialize()).toString('base64'));
+      }
+
+      try {
+        await apiService.sendBundle(serializedTxs);
+        closed += batch.length;
+      } catch (bundleErr) {
+        // Fallback: send individually
+        console.warn('Jito bundle failed, falling back to sequential:', bundleErr);
+        for (const txBase64 of serializedTxs) {
+          try {
+            await apiService.sendTransaction(txBase64, '');
+            closed++;
+            await sleep(500);
+          } catch (err: any) {
+            console.warn('Failed to close tx:', err.message || err);
+            failed++;
+          }
+        }
+      }
     } catch (err: any) {
-      console.warn(`Failed to close tx ${i}:`, err.message || err);
-      failed++;
+      console.warn(`Failed to build batch:`, err.message || err);
+      failed += batch.length;
     }
   }
 

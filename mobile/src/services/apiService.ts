@@ -124,6 +124,15 @@ class ApiService {
     }>('/solana/v1/send', { transaction, transactionId });
     return { signature: res.signature };
   }
+
+  async sendBundle(transactions: string[]): Promise<{ bundleId: string; status: string }> {
+    const res = await this.post<{
+      success: boolean;
+      bundleId: string;
+      status: string;
+    }>('/solana/v1/send-bundle', { transactions });
+    return { bundleId: res.bundleId, status: res.status };
+  }
 }
 
 export default new ApiService();
