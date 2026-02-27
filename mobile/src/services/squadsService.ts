@@ -21,6 +21,8 @@ import {
   signWithCloud,
   signWithDevice,
 } from './keypairStorage';
+import { createWithdrawInstruction } from '@heymike/send';
+import { address as kitAddress } from '@solana/kit';
 
 const { Permission, Permissions } = multisig.types;
 
@@ -103,6 +105,19 @@ function buildVaultExecuteIx(
       anchorRemainingAccounts: accountMetas,
     },
   );
+}
+
+/** Convert a @solana/kit Instruction to a web3.js TransactionInstruction. */
+function kitIxToWeb3(ix: ReturnType<typeof createWithdrawInstruction>): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: new PublicKey(ix.programAddress as string),
+    keys: (ix.accounts ?? []).map((acc: any) => ({
+      pubkey: new PublicKey(acc.address as string),
+      isSigner: acc.role >= 2,    // READONLY_SIGNER=2, WRITABLE_SIGNER=3
+      isWritable: acc.role % 2 === 1, // WRITABLE=1, WRITABLE_SIGNER=3
+    })),
+    data: Buffer.from(ix.data ?? new Uint8Array()),
+  });
 }
 
 /** Build a Jito tip instruction for the fee payer → random tip account. */
@@ -417,15 +432,7 @@ export async function addMember(
   const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
 
-  try {
-    await apiService.sendBundle([tx1Base64, tx2Base64]);
-  } catch (err) {
-    // Fallback: send sequentially if Jito fails
-    console.warn('Jito bundle failed, falling back to sequential:', err);
-    await apiService.sendTransaction(tx1Base64, '');
-    await sleep(2000);
-    await apiService.sendTransaction(tx2Base64, '');
-  }
+  await apiService.sendBundle([tx1Base64, tx2Base64]);
 
   const signature = bs58.encode(tx2.signatures[0]);
   return { signature };
@@ -544,7 +551,7 @@ export async function executeVaultTransaction(
     innerMessage,
   );
 
-  // --- TX 3: Close (if rentCollector set) + Jito tip (always last tx) ---
+  // --- TX 3: Close (if rentCollector set) + withdraw cloud SOL back to vault + Jito tip ---
   const tx3Instructions: TransactionInstruction[] = [];
   if (multisigAccount.rentCollector) {
     tx3Instructions.push(
@@ -556,6 +563,12 @@ export async function executeVaultTransaction(
     );
   }
   tx3Instructions.push(jitoTipIx(feePayer));
+  tx3Instructions.push(
+    kitIxToWeb3(createWithdrawInstruction(
+      kitAddress(cloudPubkey.toBase58()),
+      kitAddress(vaultPda.toBase58()),
+    )),
+  );
 
   // --- Build all transactions with one blockhash (Jito bundle) ---
   const msg1 = new TransactionMessage({
@@ -593,21 +606,7 @@ export async function executeVaultTransaction(
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
   const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
 
-  try {
-    await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64]);
-  } catch (err) {
-    // Fallback: send sequentially if Jito fails
-    console.warn('Jito bundle failed, falling back to sequential:', err);
-    await apiService.sendTransaction(tx1Base64, '');
-    await sleep(2000);
-    await apiService.sendTransaction(tx2Base64, '');
-    await sleep(2000);
-    try {
-      await apiService.sendTransaction(tx3Base64, '');
-    } catch (closeErr) {
-      console.warn('Close failed (will be cleaned up by reclaimRent):', closeErr);
-    }
-  }
+  await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64]);
 
   const signature = bs58.encode(tx2.signatures[0]);
   return { signature };
@@ -692,15 +691,7 @@ async function setRentCollector(
   const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
 
-  try {
-    await apiService.sendBundle([tx1Base64, tx2Base64]);
-  } catch (err) {
-    console.warn('Jito bundle failed, falling back to sequential:', err);
-    await apiService.sendTransaction(tx1Base64, '');
-    await sleep(2000);
-    await apiService.sendTransaction(tx2Base64, '');
-    await sleep(2000);
-  }
+  await apiService.sendBundle([tx1Base64, tx2Base64]);
 }
 
 /**
@@ -843,23 +834,8 @@ export async function reclaimRent(
         serializedTxs.push(Buffer.from(tx.serialize()).toString('base64'));
       }
 
-      try {
-        await apiService.sendBundle(serializedTxs);
-        closed += batch.length;
-      } catch (bundleErr) {
-        // Fallback: send individually
-        console.warn('Jito bundle failed, falling back to sequential:', bundleErr);
-        for (const txBase64 of serializedTxs) {
-          try {
-            await apiService.sendTransaction(txBase64, '');
-            closed++;
-            await sleep(500);
-          } catch (err: any) {
-            console.warn('Failed to close tx:', err.message || err);
-            failed++;
-          }
-        }
-      }
+      await apiService.sendBundle(serializedTxs);
+      closed += batch.length;
     } catch (err: any) {
       console.warn(`Failed to build batch:`, err.message || err);
       failed += batch.length;

@@ -7,6 +7,7 @@ import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 const router = Router();
 const dbManager = new DBManager();
 const jitoManager = new JitoManager();
+const kShouldSimulate = true;
 
 const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
@@ -25,28 +26,31 @@ router.post('/send', async (req: Request, res: Response) => {
       return;
     }
 
-    // Simulate first to get detailed error info (including `err` field)
-    const simResult = await rpc
-      .simulateTransaction(transaction as Base64EncodedWireTransaction, {
-        encoding: 'base64',
-        commitment: 'confirmed',
-        sigVerify: false,
-      })
-      .send();
+    console.log('Should simulate:', kShouldSimulate);
+    if (kShouldSimulate){
+      // Simulate first to get detailed error info (including `err` field)
+      const simResult = await rpc
+        .simulateTransaction(transaction as Base64EncodedWireTransaction, {
+          encoding: 'base64',
+          commitment: 'confirmed',
+          sigVerify: false,
+        })
+        .send();
 
-    if (simResult.value.err) {
-      const errJson = JSON.stringify(simResult.value.err, bigIntReplacer);
-      console.error('Simulation error:', errJson);
-      console.error('Simulation logs:', simResult.value.logs);
-      res.status(400).json({
-        success: false,
-        error: 'Transaction simulation failed',
-        simulationError: JSON.parse(errJson),
-        logs: simResult.value.logs,
-        unitsConsumed: Number(simResult.value.unitsConsumed ?? 0),
-        timestamp: new Date().toISOString(),
-      });
-      return;
+      if (simResult.value.err) {
+        const errJson = JSON.stringify(simResult.value.err, bigIntReplacer);
+        console.error('Simulation error:', errJson);
+        console.error('Simulation logs:', simResult.value.logs);
+        res.status(400).json({
+          success: false,
+          error: 'Transaction simulation failed',
+          simulationError: JSON.parse(errJson),
+          logs: simResult.value.logs,
+          unitsConsumed: Number(simResult.value.unitsConsumed ?? 0),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
     }
 
     const signature = await rpc
@@ -91,28 +95,57 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
       return;
     }
 
-    // Simulate only the first transaction (subsequent txs depend on prior state changes)
-    const simResult = await rpc
-      .simulateTransaction(transactions[0] as Base64EncodedWireTransaction, {
-        encoding: 'base64',
-        commitment: 'confirmed',
-        sigVerify: false,
-      })
-      .send();
-
-    if (simResult.value.err) {
-      const errJson = JSON.stringify(simResult.value.err, bigIntReplacer);
-      console.error('Bundle simulation error (tx[0]):', errJson);
-      console.error('Simulation logs:', simResult.value.logs);
-      res.status(400).json({
-        success: false,
-        error: 'First transaction simulation failed',
-        simulationError: JSON.parse(errJson),
-        logs: simResult.value.logs,
-        timestamp: new Date().toISOString(),
+    console.log('Should simulate:', kShouldSimulate);
+    if (kShouldSimulate){
+      // Simulate the full bundle via Helius (all txs together, respecting state changes)
+      const simResponse = await fetch(`${rpcUrl}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'simulateBundle',
+          params: [
+            { encodedTransactions: transactions },
+            { simulationBank: 'tip', skipSigVerify: true, replaceRecentBlockhash: true },
+          ],
+        }),
       });
-      return;
+      const simData: any = await simResponse.json();
+
+      if (simData.error) {
+        console.error('Bundle simulation RPC error:', JSON.stringify(simData.error));
+        res.status(400).json({
+          success: false,
+          error: `Bundle simulation RPC error: ${simData.error.message || JSON.stringify(simData.error)}`,
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      const simValue = simData.result?.value;
+      console.log(`Bundle simulation summary: ${simValue?.summary} result:`, simValue);
+
+      if (simValue?.summary !== 'succeeded') {
+        // Find the first failing transaction for detailed logs
+        const failedTxIndex = simValue?.transactionResults?.findIndex((r: any) => r.err !== null) ?? -1;
+        const failedResult = failedTxIndex >= 0 ? simValue.transactionResults[failedTxIndex] : null;
+        console.error(`Bundle simulation failed at tx[${failedTxIndex}]:`, JSON.stringify(simValue?.summary));
+        if (failedResult) {
+          console.error('Simulation logs:', failedResult.logs);
+        }
+        res.status(400).json({
+          success: false,
+          error: `Bundle simulation failed at transaction ${failedTxIndex}`,
+          simulationError: typeof simValue?.summary === 'object' ? simValue.summary : { summary: simValue?.summary },
+          logs: failedResult?.logs ?? [],
+          failedTransactionIndex: failedTxIndex,
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
     }
+
 
     // Send bundle via Jito
     const bundleId = await jitoManager.sendBundle(transactions);
@@ -147,7 +180,7 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error sending bundle:', error?.message);
+    console.error('Error sending bundle:', error);
     res.status(500).json({
       success: false,
       error: error?.message || 'Failed to send bundle',
