@@ -174,7 +174,7 @@ export class KaminoManager {
       );
       return response.data;
     } catch (error) {
-      console.error(`Error fetching Kamino metrics for vault ${vaultAddress}:`, error);
+      console.error(`Error fetching Kamino metrics for vault ${vaultAddress}`);
       return null;
     }
   }

@@ -126,7 +126,7 @@ export class JupiterManager {
   async getEarnTokens(): Promise<JupiterEarnTokenResponse[]> {
     try {
       const response = await this.api.get<JupiterEarnTokenResponse[]>('/lend/v1/earn/tokens');
-      console.log('Jupiter Lend Earn Tokens:', JSON.stringify(response.data, null, 2));
+      // console.log('Jupiter Lend Earn Tokens:', JSON.stringify(response.data, null, 2));
 
       // Save tokens to MongoDB
       await this.saveTokensToDatabase(response.data);

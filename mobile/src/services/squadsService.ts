@@ -384,7 +384,7 @@ export async function addMember(
     { pubkey: devicePubkey, signFn: signWithDevice },
   ]);
 
-  // TX2: execute
+  // TX2: execute + close + Jito tip (all in one tx for atomicity)
   const executeIx = multisig.instructions.configTransactionExecute({
     multisigPda,
     transactionIndex,
@@ -392,10 +392,9 @@ export async function addMember(
     rentPayer: feePayer,
   });
 
-  // TX3 instructions: close (if rentCollector set) + Jito tip
-  const tx3Instructions: TransactionInstruction[] = [];
+  const tx2Instructions: TransactionInstruction[] = [executeIx];
   if (multisigAccount.rentCollector) {
-    tx3Instructions.push(
+    tx2Instructions.push(
       multisig.instructions.configTransactionAccountsClose({
         multisigPda,
         transactionIndex,
@@ -403,46 +402,29 @@ export async function addMember(
       }),
     );
   }
-  tx3Instructions.push(jitoTipIx(feePayer));
+  tx2Instructions.push(jitoTipIx(feePayer));
 
   const msg2 = new TransactionMessage({
     payerKey: feePayer,
     recentBlockhash: blockhash,
-    instructions: [executeIx],
+    instructions: tx2Instructions,
   }).compileToV0Message();
   const tx2 = new VersionedTransaction(msg2);
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
   ]);
 
-  const msg3 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: tx3Instructions,
-  }).compileToV0Message();
-  const tx3 = new VersionedTransaction(msg3);
-  await signTransactionNatively(tx3, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-  ]);
-
   const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-  const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
 
   try {
-    await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64]);
+    await apiService.sendBundle([tx1Base64, tx2Base64]);
   } catch (err) {
     // Fallback: send sequentially if Jito fails
     console.warn('Jito bundle failed, falling back to sequential:', err);
     await apiService.sendTransaction(tx1Base64, '');
     await sleep(2000);
     await apiService.sendTransaction(tx2Base64, '');
-    await sleep(2000);
-    try {
-      await apiService.sendTransaction(tx3Base64, '');
-    } catch (closeErr) {
-      console.warn('Failed to close config transaction accounts:', closeErr);
-    }
   }
 
   const signature = bs58.encode(tx2.signatures[0]);
@@ -553,7 +535,7 @@ export async function executeVaultTransaction(
     member: devicePubkey,
   });
 
-  // --- TX 2: Execute (built locally, no RPC read needed) ---
+  // --- TX 2: Execute ---
   const executeIx = buildVaultExecuteIx(
     multisigPda,
     transactionIndex,
@@ -562,7 +544,7 @@ export async function executeVaultTransaction(
     innerMessage,
   );
 
-  // --- TX 3: Close + Jito tip ---
+  // --- TX 3: Close (if rentCollector set) + Jito tip (always last tx) ---
   const tx3Instructions: TransactionInstruction[] = [];
   if (multisigAccount.rentCollector) {
     tx3Instructions.push(
@@ -623,7 +605,7 @@ export async function executeVaultTransaction(
     try {
       await apiService.sendTransaction(tx3Base64, '');
     } catch (closeErr) {
-      console.warn('Failed to close vault transaction accounts:', closeErr);
+      console.warn('Close failed (will be cleaned up by reclaimRent):', closeErr);
     }
   }
 
