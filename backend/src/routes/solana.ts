@@ -107,7 +107,13 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
           method: 'simulateBundle',
           params: [
             { encodedTransactions: transactions },
-            { simulationBank: 'tip', skipSigVerify: true, replaceRecentBlockhash: true },
+            {
+              preExecutionAccountsConfigs: transactions.map(() => null),
+              postExecutionAccountsConfigs: transactions.map(() => null),
+              simulationBank: 'tip',
+              skipSigVerify: true,
+              replaceRecentBlockhash: true,
+            },
           ],
         }),
       });

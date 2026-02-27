@@ -21,18 +21,23 @@ export class JitoManager {
       throw new Error(`Bundle must contain 1-5 transactions, got ${transactions.length}`);
     }
 
-    const { data } = await axios.post(JITO_BLOCK_ENGINE, {
+    const response = await axios.post(JITO_BLOCK_ENGINE, {
       jsonrpc: '2.0',
       id: 1,
       method: 'sendBundle',
       params: [transactions],
-    });
+    }, { validateStatus: () => true });
 
-    if (data.error) {
-      throw new Error(`Jito bundle error: ${JSON.stringify(data.error)}`);
+    if (response.status !== 200) {
+      const body = typeof response.data === 'object' ? JSON.stringify(response.data) : response.data;
+      throw new Error(`Jito HTTP ${response.status}: ${body}`);
     }
 
-    return data.result; // bundle ID
+    if (response.data.error) {
+      throw new Error(`Jito bundle error: ${JSON.stringify(response.data.error)}`);
+    }
+
+    return response.data.result; // bundle ID
   }
 
   /**
