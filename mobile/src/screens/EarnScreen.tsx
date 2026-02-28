@@ -110,7 +110,7 @@ export default function EarnScreen() {
                 </View>
                 <View>
                   <Text style={styles.statLabel}>Lifetime earned</Text>
-                  <Text style={styles.statValue}>$0.00</Text>
+                  <Text style={styles.statValue}>--</Text>
                 </View>
               </View>
             </View>
@@ -121,7 +121,7 @@ export default function EarnScreen() {
                 </View>
                 <View>
                   <Text style={styles.statLabel}>Last 7D</Text>
-                  <Text style={styles.statValue}>$0.00</Text>
+                  <Text style={styles.statValue}>--</Text>
                 </View>
               </View>
             </View>

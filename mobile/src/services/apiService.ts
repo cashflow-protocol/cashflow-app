@@ -1,5 +1,5 @@
 import { API_CONFIG } from '../config/api';
-import type { EarnToken, EarnPosition } from '../types/earn';
+import type { EarnToken, EarnPosition, WalletAsset } from '../types/earn';
 
 export interface SerializedInstruction {
   programId: string;
@@ -33,6 +33,14 @@ class ApiService {
       { walletAddress, mint },
     );
     return { amount: res.data.amount, uiAmount: res.data.uiAmount };
+  }
+
+  async getAssets(walletAddress: string): Promise<{ totalUsdValue: number; assets: WalletAsset[] }> {
+    const res = await this.get<{
+      success: boolean;
+      data: { totalUsdValue: number; assets: WalletAsset[] };
+    }>('/solana/v1/assets', { walletAddress });
+    return res.data;
   }
 
   async getPositions(walletAddress: string): Promise<EarnPosition[]> {

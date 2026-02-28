@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { createSolanaRpc, address } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from '@solana/kit';
-import { DBManager, JitoManager } from '../managers';
+import { TOKEN_PROGRAM_ADDRESS } from '@solana-program/token';
+import { DBManager, JitoManager, PriceManager } from '../managers';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
 const router = Router();
@@ -241,6 +242,103 @@ router.get('/wallet-balance', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch wallet balance',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /solana/v1/assets - Get all wallet assets (SOL + SPL tokens)
+const priceManager = new PriceManager();
+
+router.get('/assets', async (req: Request, res: Response) => {
+  try {
+    const { walletAddress } = req.query;
+    if (!walletAddress || typeof walletAddress !== 'string') {
+      res.status(400).json({ success: false, error: 'walletAddress query param is required' });
+      return;
+    }
+
+    const ownerAddress = address(walletAddress);
+
+    // Fetch SOL balance and all SPL token accounts in parallel
+    const [solBalance, tokenAccounts] = await Promise.all([
+      rpc.getBalance(ownerAddress).send(),
+      rpc.getTokenAccountsByOwner(
+        ownerAddress,
+        { programId: TOKEN_PROGRAM_ADDRESS },
+        { encoding: 'jsonParsed' },
+      ).send(),
+    ]);
+
+    const assets: {
+      mint: string;
+      symbol: string;
+      name: string;
+      decimals: number;
+      logoUrl: string;
+      amount: string;
+      uiAmount: number;
+      usdValue: number;
+    }[] = [];
+
+    // Add native SOL (distinct from wSOL SPL token accounts)
+    const solToken = SUPPORTED_TOKENS_BY_MINT[SOL_MINT];
+    const solUiAmount = Number(solBalance.value) / 1e9;
+    if (solUiAmount > 0) {
+      assets.push({
+        mint: 'native',
+        symbol: 'SOL',
+        name: 'Solana',
+        decimals: 9,
+        logoUrl: solToken.logoUrl,
+        amount: solBalance.value.toString(),
+        uiAmount: solUiAmount,
+        usdValue: priceManager.getUsdValue('SOL', solUiAmount),
+      });
+    }
+
+    // Add SPL tokens (including wSOL if held) that are in our supported list
+    for (const account of tokenAccounts.value) {
+      const parsed = account.account.data as any;
+      const info = parsed.parsed.info;
+      const mint: string = info.mint;
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+      if (!tokenInfo) continue;
+
+      const uiAmount: number = info.tokenAmount.uiAmount ?? 0;
+      if (uiAmount === 0) continue;
+
+      assets.push({
+        mint,
+        symbol: mint === SOL_MINT ? 'wSOL' : tokenInfo.symbol,
+        name: mint === SOL_MINT ? 'Wrapped SOL' : tokenInfo.name,
+        decimals: tokenInfo.decimals,
+        logoUrl: tokenInfo.logoUrl,
+        amount: info.tokenAmount.amount,
+        uiAmount,
+        usdValue: priceManager.getUsdValue(tokenInfo.symbol, uiAmount),
+      });
+    }
+
+    // Sort: native SOL first, then by USD value descending
+    assets.sort((a, b) => {
+      if (a.mint === 'native') return -1;
+      if (b.mint === 'native') return 1;
+      return b.usdValue - a.usdValue;
+    });
+
+    const totalUsdValue = assets.reduce((sum, a) => sum + a.usdValue, 0);
+
+    res.json({
+      success: true,
+      data: { totalUsdValue, assets },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error fetching wallet assets:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch wallet assets',
       timestamp: new Date().toISOString(),
     });
   }

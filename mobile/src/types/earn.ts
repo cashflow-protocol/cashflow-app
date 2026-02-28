@@ -13,6 +13,17 @@ export interface EarnToken {
   logoUrl: string;
 }
 
+export interface WalletAsset {
+  mint: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  logoUrl: string;
+  amount: string;
+  uiAmount: number;
+  usdValue: number;
+}
+
 export interface EarnPosition {
   type: EarnTokenType;
   mint: string;

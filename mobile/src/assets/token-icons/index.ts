@@ -1,7 +1,10 @@
 import { ImageSourcePropType } from 'react-native';
 
+const SOL_ICON = require('./So11111111111111111111111111111111111111112.png');
+
 const TOKEN_ICONS: Record<string, ImageSourcePropType> = {
-  'So11111111111111111111111111111111111111112': require('./So11111111111111111111111111111111111111112.png'),
+  'native': SOL_ICON,
+  'So11111111111111111111111111111111111111112': SOL_ICON,
   'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': require('./EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v.png'),
   'JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD': require('./JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD.png'),
   'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB': require('./Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB.png'),
