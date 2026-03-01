@@ -1,13 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { createSolanaRpc, address } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from '@solana/kit';
-import { DBManager, JitoManager } from '../managers';
+import { DBManager, JitoManager, TokenManager } from '../managers';
 import { EarnTokenModel } from '../models';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
 const router = Router();
 const dbManager = new DBManager();
 const jitoManager = new JitoManager();
+const tokenManager = new TokenManager();
 const kShouldSimulate = true;
 
 const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
@@ -317,6 +318,22 @@ router.get('/assets', async (req: Request, res: Response) => {
       });
     }
 
+    // Collect unknown mints to fetch from Jupiter via TokenManager
+    const unknownMints: string[] = [];
+    for (const item of items) {
+      if (item.interface !== 'FungibleToken' && item.interface !== 'FungibleAsset') continue;
+      if (vaultAddressSet.has(item.id)) continue;
+      if (!item.token_info?.balance || item.token_info.balance === 0) continue;
+      if ((item.token_info.decimals ?? 0) === 0) continue;
+      if (!SUPPORTED_TOKENS_BY_MINT[item.id]) {
+        unknownMints.push(item.id);
+      }
+    }
+
+    const jupiterTokens = unknownMints.length > 0
+      ? await tokenManager.getTokensByMints(unknownMints)
+      : new Map();
+
     // Add fungible SPL tokens
     for (const item of items) {
       if (item.interface !== 'FungibleToken' && item.interface !== 'FungibleAsset') continue;
@@ -331,19 +348,20 @@ router.get('/assets', async (req: Request, res: Response) => {
       if (decimals == 0) continue;
       const balance: number = tokenInfo.balance;
       const uiAmount = balance / 10 ** decimals;
-      const pricePerToken: number = tokenInfo.price_info?.price_per_token ?? 0;
-      const usdValue = uiAmount * pricePerToken;
-
       const mint: string = item.id;
       const metadata = item.content?.metadata;
       const known = SUPPORTED_TOKENS_BY_MINT[mint];
+      const cached = jupiterTokens.get(mint);
+
+      const pricePerToken: number = tokenInfo.price_info?.price_per_token ?? cached?.usdPrice ?? 0;
+      const usdValue = uiAmount * pricePerToken;
 
       assets.push({
         mint,
-        symbol: mint === SOL_MINT ? 'WSOL' : (known?.symbol ?? tokenInfo.symbol ?? metadata?.symbol ?? mint.slice(0, 6)),
-        name: mint === SOL_MINT ? 'Wrapped SOL' : (known?.name ?? metadata?.name ?? 'Unknown Token'),
+        symbol: mint === SOL_MINT ? 'WSOL' : (known?.symbol ?? cached?.symbol ?? tokenInfo.symbol ?? metadata?.symbol ?? mint.slice(0, 6)),
+        name: mint === SOL_MINT ? 'Wrapped SOL' : (known?.name ?? cached?.name ?? metadata?.name ?? 'Unknown Token'),
         decimals,
-        logoUrl: known?.logoUrl ?? item.content?.links?.image ?? '',
+        logoUrl: known?.logoUrl ?? cached?.logoUrl ?? item.content?.links?.image ?? '',
         amount: String(balance),
         uiAmount,
         usdValue,

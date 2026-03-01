@@ -82,6 +82,53 @@ export interface JupiterPosition {
   allowance: string;
 }
 
+export interface JupiterTokenStats {
+  priceChange: number;
+  liquidityChange: number;
+  volumeChange: number;
+  buyVolume: number;
+  sellVolume: number;
+  buyOrganicVolume: number;
+  sellOrganicVolume: number;
+  numBuys: number;
+  numSells: number;
+  numTraders: number;
+  numOrganicBuyers: number;
+  numNetBuyers: number;
+}
+
+export interface JupiterTokenInfo {
+  id: string;
+  name: string;
+  symbol: string;
+  icon: string;
+  decimals: number;
+  circSupply: number;
+  totalSupply: number;
+  tokenProgram: string;
+  firstPool: { id: string; createdAt: string } | null;
+  holderCount: number;
+  audit: {
+    mintAuthorityDisabled: boolean;
+    freezeAuthorityDisabled: boolean;
+    topHoldersPercentage: number;
+  };
+  organicScore: number;
+  organicScoreLabel: string;
+  isVerified: boolean;
+  tags: string[];
+  fdv: number;
+  mcap: number;
+  usdPrice: number;
+  priceBlockId: number;
+  liquidity: number;
+  stats5m: JupiterTokenStats;
+  stats1h: JupiterTokenStats;
+  stats6h: JupiterTokenStats;
+  stats24h: JupiterTokenStats;
+  updatedAt: string;
+}
+
 interface InstructionResponse {
   programId: string;
   accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[];
@@ -311,6 +358,28 @@ export class JupiterManager {
       console.error('Error creating Jupiter withdraw transaction:', error);
       throw error;
     }
+  }
+
+  /**
+   * Fetch token information from Jupiter Tokens V2 API by mint addresses.
+   * Batches into chunks of 100 (Jupiter API limit) with parallel requests.
+   */
+  async getTokensByMints(mints: string[]): Promise<JupiterTokenInfo[]> {
+    const BATCH_SIZE = 100;
+    const chunks: string[][] = [];
+    for (let i = 0; i < mints.length; i += BATCH_SIZE) {
+      chunks.push(mints.slice(i, i + BATCH_SIZE));
+    }
+
+    const results = await Promise.all(
+      chunks.map((chunk) =>
+        this.api.get<JupiterTokenInfo[]>('/tokens/v2/search', {
+          params: { query: chunk.join(',') },
+        }),
+      ),
+    );
+
+    return results.flatMap((r) => r.data);
   }
 
   /**

@@ -1,13 +1,14 @@
 import cron from 'node-cron';
 import { createSolanaRpc } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
-import { JupiterManager, KaminoManager, DriftManager, DBManager, PriceManager } from '../managers';
+import { JupiterManager, KaminoManager, DriftManager, DBManager, PriceManager, TokenManager } from '../managers';
 import { TransactionStatus } from '../models';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
 const dbManager = new DBManager();
 const priceManager = new PriceManager();
+const tokenManager = new TokenManager();
 
 const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
@@ -153,6 +154,11 @@ export async function initializeScheduler() {
     timezone: 'UTC',
   });
 
+  // Clean up stale cached tokens every 5 minutes
+  cron.schedule('*/5 * * * *', () => tokenManager.cleanupStaleCache(), {
+    timezone: 'UTC',
+  });
+
   console.log('✅ Cron scheduler initialized');
   console.log('📋 Scheduled tasks:');
   console.log('  - Token prices: Every minute');
@@ -162,6 +168,7 @@ export async function initializeScheduler() {
     console.log('  - Drift Earn tokens: Every minute');
   }
   console.log('  - Confirm transactions: Every 30 seconds');
+  console.log('  - Cached token cleanup: Every 5 minutes');
 
   // Run immediately on startup
   updatePrices();
