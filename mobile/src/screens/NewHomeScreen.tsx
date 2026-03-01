@@ -25,7 +25,7 @@ export default function NewHomeScreen() {
   // Mock data - replace with real data from your backend/blockchain
   const assets = [
     { name: 'SOL', subtitle: 'Solana', amount: '1,000.69', iconColor: '#14F195' },
-    { name: 'USDC', subtitle: 'Circle USD', amount: '100', iconColor: '#2775CA' },
+    { name: 'USDC', subtitle: 'Circle USD', amount: '100', iconColor: '#3985D8' },
     { name: 'LUMEN', subtitle: 'Lumenless', amount: '100,000,000', iconColor: '#9C42FF' },
   ];
 

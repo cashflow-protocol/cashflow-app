@@ -35,7 +35,7 @@ function AssetRow({ item }: { item: WalletAsset }) {
         <Image
           source={localIcon ?? { uri: item.logoUrl }}
           style={styles.tokenIcon}
-          resizeMode="contain"
+          resizeMode="cover"
         />
         <View>
           <Text style={styles.assetSymbol}>{item.symbol}</Text>
@@ -58,7 +58,7 @@ export default function AssetsScreen() {
       <StatusBar barStyle="light-content" />
 
       <LinearGradient
-        colors={['#1E8260', '#19C394']}
+        colors={['#104982', '#3985D8']}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -101,7 +101,7 @@ export default function AssetsScreen() {
 
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#19C394" />
+          <ActivityIndicator size="large" color="#3985D8" />
         </View>
       ) : assets.length === 0 ? (
         <View style={styles.centered}>
@@ -114,7 +114,7 @@ export default function AssetsScreen() {
           renderItem={({ item }) => <AssetRow item={item} />}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#19C394" />
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#3985D8" />
           }
         />
       )}
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#19C394',
+    backgroundColor: '#3985D8',
     justifyContent: 'center',
     alignItems: 'center',
   },

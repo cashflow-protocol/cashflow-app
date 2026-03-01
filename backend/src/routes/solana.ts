@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { createSolanaRpc, address } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from '@solana/kit';
-import { TOKEN_PROGRAM_ADDRESS } from '@solana-program/token';
-import { DBManager, JitoManager, PriceManager } from '../managers';
+import { DBManager, JitoManager } from '../managers';
+import { EarnTokenModel } from '../models';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
 const router = Router();
@@ -247,9 +247,7 @@ router.get('/wallet-balance', async (req: Request, res: Response) => {
   }
 });
 
-// GET /solana/v1/assets - Get all wallet assets (SOL + SPL tokens)
-const priceManager = new PriceManager();
-
+// GET /solana/v1/assets - Get all wallet assets via Helius DAS API
 router.get('/assets', async (req: Request, res: Response) => {
   try {
     const { walletAddress } = req.query;
@@ -258,17 +256,39 @@ router.get('/assets', async (req: Request, res: Response) => {
       return;
     }
 
-    const ownerAddress = address(walletAddress);
+    // Call Helius DAS getAssetsByOwner (works on the same RPC URL)
+    const dasResponse = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'get-assets',
+        method: 'getAssetsByOwner',
+        params: {
+          ownerAddress: walletAddress,
+          page: 1,
+          limit: 1000,
+          displayOptions: {
+            showFungible: true,
+            showNativeBalance: true,
+          },
+        },
+      }),
+    });
+    const dasData: any = await dasResponse.json();
 
-    // Fetch SOL balance and all SPL token accounts in parallel
-    const [solBalance, tokenAccounts] = await Promise.all([
-      rpc.getBalance(ownerAddress).send(),
-      rpc.getTokenAccountsByOwner(
-        ownerAddress,
-        { programId: TOKEN_PROGRAM_ADDRESS },
-        { encoding: 'jsonParsed' },
-      ).send(),
-    ]);
+    console.log('[assets] Helius DAS response:', JSON.stringify(dasData, null, 2));
+
+    if (dasData.error) {
+      throw new Error(dasData.error.message || 'DAS API error');
+    }
+
+    const items: any[] = dasData.result?.items ?? [];
+    const nativeBalance = dasData.result?.nativeBalance;
+
+    // Get all vault addresses from earn tokens to filter out LP/receipt tokens
+    const vaultAddresses = await EarnTokenModel.distinct('vaultAddress');
+    const vaultAddressSet = new Set<string>(vaultAddresses);
 
     const assets: {
       mint: string;
@@ -281,42 +301,51 @@ router.get('/assets', async (req: Request, res: Response) => {
       usdValue: number;
     }[] = [];
 
-    // Add native SOL (distinct from wSOL SPL token accounts)
-    const solToken = SUPPORTED_TOKENS_BY_MINT[SOL_MINT];
-    const solUiAmount = Number(solBalance.value) / 1e9;
-    if (solUiAmount > 0) {
+    // Add native SOL from nativeBalance
+    if (nativeBalance && nativeBalance.lamports > 0) {
+      const solUiAmount = nativeBalance.lamports / 1e9;
+      const solPrice = nativeBalance.price_per_sol ?? 0;
       assets.push({
         mint: 'native',
         symbol: 'SOL',
         name: 'Solana',
         decimals: 9,
-        logoUrl: solToken.logoUrl,
-        amount: solBalance.value.toString(),
+        logoUrl: SUPPORTED_TOKENS_BY_MINT[SOL_MINT]?.logoUrl ?? '',
+        amount: String(nativeBalance.lamports),
         uiAmount: solUiAmount,
-        usdValue: priceManager.getUsdValue('SOL', solUiAmount),
+        usdValue: nativeBalance.total_price ?? solUiAmount * solPrice,
       });
     }
 
-    // Add SPL tokens (including wSOL if held) that are in our supported list
-    for (const account of tokenAccounts.value) {
-      const parsed = account.account.data as any;
-      const info = parsed.parsed.info;
-      const mint: string = info.mint;
-      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
-      if (!tokenInfo) continue;
+    // Add fungible SPL tokens
+    for (const item of items) {
+      if (item.interface !== 'FungibleToken' && item.interface !== 'FungibleAsset') continue;
 
-      const uiAmount: number = info.tokenAmount.uiAmount ?? 0;
-      if (uiAmount === 0) continue;
+      // Skip LP/receipt tokens from Jupiter Lend, Kamino, Drift
+      if (vaultAddressSet.has(item.id)) continue;
+
+      const tokenInfo = item.token_info;
+      if (!tokenInfo || !tokenInfo.balance || tokenInfo.balance === 0) continue;
+
+      const decimals: number = tokenInfo.decimals ?? 0;
+      const balance: number = tokenInfo.balance;
+      const uiAmount = balance / 10 ** decimals;
+      const pricePerToken: number = tokenInfo.price_info?.price_per_token ?? 0;
+      const usdValue = uiAmount * pricePerToken;
+
+      const mint: string = item.id;
+      const metadata = item.content?.metadata;
+      const known = SUPPORTED_TOKENS_BY_MINT[mint];
 
       assets.push({
         mint,
-        symbol: mint === SOL_MINT ? 'wSOL' : tokenInfo.symbol,
-        name: mint === SOL_MINT ? 'Wrapped SOL' : tokenInfo.name,
-        decimals: tokenInfo.decimals,
-        logoUrl: tokenInfo.logoUrl,
-        amount: info.tokenAmount.amount,
+        symbol: mint === SOL_MINT ? 'wSOL' : (known?.symbol ?? tokenInfo.symbol ?? metadata?.symbol ?? mint.slice(0, 6)),
+        name: mint === SOL_MINT ? 'Wrapped SOL' : (known?.name ?? metadata?.name ?? 'Unknown Token'),
+        decimals,
+        logoUrl: known?.logoUrl ?? item.content?.links?.image ?? '',
+        amount: String(balance),
         uiAmount,
-        usdValue: priceManager.getUsdValue(tokenInfo.symbol, uiAmount),
+        usdValue,
       });
     }
 

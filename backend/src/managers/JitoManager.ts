@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const JITO_BLOCK_ENGINE = 'https://mainnet.block-engine.jito.wtf/api/v1/bundles';
+const JITO_UUID = process.env.JITO_AUTH_UUID;
+const JITO_BLOCK_ENGINE = 'https://mainnet.block-engine.jito.wtf';
+const JITO_AUTH_HEADERS = JITO_UUID ? { 'x-jito-auth': JITO_UUID } : {};
 
 export interface BundleStatus {
   bundle_id: string;
@@ -21,12 +23,17 @@ export class JitoManager {
       throw new Error(`Bundle must contain 1-5 transactions, got ${transactions.length}`);
     }
 
-    const response = await axios.post(JITO_BLOCK_ENGINE, {
+    const url = JITO_UUID ? `${JITO_BLOCK_ENGINE}/api/v1/bundles?uuid=${JITO_UUID}` : `${JITO_BLOCK_ENGINE}/api/v1/bundles`;
+    console.log('url:', url);
+    const response = await axios.post(url, {
       jsonrpc: '2.0',
       id: 1,
       method: 'sendBundle',
-      params: [transactions],
-    }, { validateStatus: () => true });
+      params: [
+        transactions, 
+        { "encoding": "base64" }
+      ],
+    }, { headers: JITO_AUTH_HEADERS, validateStatus: () => true });
 
     if (response.status !== 200) {
       const body = typeof response.data === 'object' ? JSON.stringify(response.data) : response.data;
@@ -45,12 +52,13 @@ export class JitoManager {
    * Status is available for ~5 minutes after submission.
    */
   async getBundleStatus(bundleId: string): Promise<BundleStatus | null> {
-    const { data } = await axios.post(JITO_BLOCK_ENGINE, {
+    const url = JITO_UUID ? `${JITO_BLOCK_ENGINE}/api/v1/bundles?uuid=${JITO_UUID}` : `${JITO_BLOCK_ENGINE}/api/v1/bundles`;
+    const { data } = await axios.post(url, {
       jsonrpc: '2.0',
       id: 1,
       method: 'getBundleStatuses',
       params: [[bundleId]],
-    });
+    }, { headers: JITO_AUTH_HEADERS });
 
     return data.result?.value?.[0] ?? null;
   }
