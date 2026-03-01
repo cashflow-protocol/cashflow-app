@@ -223,10 +223,10 @@ export async function createMultisig(
     lamports: TARGET_CLOUD_BALANCE,
   });
 
-  const { blockhash: blockhash1 } = await connection.getLatestBlockhash('confirmed');
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
   const msg1 = new TransactionMessage({
     payerKey: creatorPubkey,
-    recentBlockhash: blockhash1,
+    recentBlockhash: blockhash,
     instructions: [createMultisigIx, fundCloudIx],
   }).compileToV0Message();
   const tx1 = new VersionedTransaction(msg1);
