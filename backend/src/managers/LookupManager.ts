@@ -1,144 +1,169 @@
-import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
-import { AddressLookupTableAccount, AddressLookupTableProgram, ComputeBudgetProgram, Connection, Keypair, PublicKey, SYSVAR_INSTRUCTIONS_PUBKEY, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
-import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+    address,
+    pipe,
+    createSolanaRpc,
+    createTransactionMessage,
+    setTransactionMessageFeePayer,
+    setTransactionMessageLifetimeUsingBlockhash,
+    appendTransactionMessageInstruction,
+    getBase64EncodedWireTransaction,
+    createKeyPairSignerFromBytes,
+    getBase58Encoder,
+    signTransactionMessageWithSigners,
+} from '@solana/kit';
+import type { Address, Rpc, SolanaRpcApi, KeyPairSigner } from '@solana/kit';
+import {
+    fetchAddressLookupTable,
+    getCreateLookupTableInstructionAsync,
+    getExtendLookupTableInstruction,
+    getDeactivateLookupTableInstruction,
+    getCloseLookupTableInstruction,
+} from '@solana-program/address-lookup-table';
+import type { AddressLookupTable } from '@solana-program/address-lookup-table';
+import { getSetComputeUnitPriceInstruction } from '@solana-program/compute-budget';
+import { TOKEN_PROGRAM_ADDRESS, ASSOCIATED_TOKEN_PROGRAM_ADDRESS } from '@solana-program/token';
+import { TOKEN_2022_PROGRAM_ADDRESS } from '@solana-program/token-2022';
+
+export async function initialiseLookupManager() {
+    try {
+        const lookupManager = LookupManager.getInstance();
+        await lookupManager.init();
+        console.log('MigrationManager', 'migrate', '✅ LookupManager initialized');
+        await lookupManager.tryToUpdateLookupTable();
+        // await lookupManager.createLookupTable();
+        console.log('MigrationManager', 'migrate', '✅ LookupManager updated');
+    }
+    catch (err){
+        console.error('❌ initialiseLookupManager error:', err);
+    }
+}
 
 export class LookupManager {
     //TODO: if needed I can create a custom LookupTable for every user's Squad. and add his vault address, cloudKey, deviceKey, hardware wallets, etc
-    private connection: Connection;
-    private owner: Keypair;
-    private lookupTableAddress = new PublicKey('F5LgntbBxG6n4cSkxd9bpDi8qMm8TWVL8mxe7722gpi');
-    private accounts = [
+    private rpc: Rpc<SolanaRpcApi>;
+    private owner!: KeyPairSigner;
+    private lookupTableAddress: Address = address('7zhwX89SJs1ctA4e57Y6EpSvMuYXVoig2YiLKWFfnzwM');
+    private accounts: Address[] = [
         //TODO: add all programs: Kamino, Jup Lend, Drift
         //TODO: add all stablecoin mints
         //TODO: add our fee wallet
         //TODO: add @heymike/send fee wallet
 
-        TOKEN_PROGRAM_ID,
-        TOKEN_2022_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID,
+        TOKEN_PROGRAM_ADDRESS,
+        TOKEN_2022_PROGRAM_ADDRESS,
+        ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
     ];
-    public static lookupTable: AddressLookupTableAccount | undefined = undefined;
-    public static lookupTables: AddressLookupTableAccount[] = [];
+    public static lookupTable: AddressLookupTable | undefined = undefined;
+    public static lookupTableAddress: Address | undefined = undefined;
 
     constructor() {
-        this.connection = new Connection(process.env.SOLANA_RPC!, 'processed');
-        this.owner = Keypair.fromSecretKey(bs58.decode(process.env.ADMIN_PRIVATE_KEY!));
+        console.log('process.env.SOLANA_RPC_URL:', process.env.SOLANA_RPC_URL);
+        this.rpc = createSolanaRpc(process.env.SOLANA_RPC_URL!);
     }
 
-    async init(){
-        this.accounts.push(this.owner.publicKey);
+    async init() {
+        this.owner = await createKeyPairSignerFromBytes(
+            getBase58Encoder().encode(process.env.ADMIN_PRIVATE_KEY!),
+        );
+        this.accounts.push(this.owner.address);
 
         console.log('[LookupManager] Accounts:', this.accounts);
     }
 
+    private async buildAndSendTx(instructions: any[]): Promise<string> {
+        const { value: latestBlockhash } = await this.rpc.getLatestBlockhash().send();
+
+        const transactionMessage = pipe(
+            createTransactionMessage({ version: 0 }),
+            (tx) => setTransactionMessageFeePayer(this.owner.address, tx),
+            (tx) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, tx),
+            (tx) => instructions.reduce(
+                (msg: any, ix: any) => appendTransactionMessageInstruction(ix, msg),
+                tx,
+            ),
+        );
+
+        const signed = await signTransactionMessageWithSigners(transactionMessage);
+        const wireTransaction = getBase64EncodedWireTransaction(signed);
+
+        const signature = await this.rpc
+            .sendTransaction(wireTransaction, {
+                encoding: 'base64',
+                skipPreflight: true,
+                preflightCommitment: 'confirmed',
+            })
+            .send();
+
+        return signature;
+    }
+
     async createLookupTable() {
-        const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
-        const slot = await this.connection.getSlot();
-      
-        const [lookupTableIx, lookupTableAddress] = AddressLookupTableProgram.createLookupTable({
-            authority: this.owner.publicKey,
-            payer: this.owner.publicKey,
+        const slot = await this.rpc.getSlot().send();
+
+        const createIx = await getCreateLookupTableInstructionAsync({
+            authority: this.owner,
             recentSlot: slot,
         });
-      
-        console.log('ALT address:', lookupTableAddress.toBase58());
 
-        const tx = new VersionedTransaction(
-            new TransactionMessage({
-                payerKey: this.owner.publicKey,
-                recentBlockhash: blockhash,
-                instructions: [
-                    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100000 }),
-                    lookupTableIx
-                ],
-            }).compileToV0Message()
-        );
-        tx.sign([this.owner]);
-        const { signature } = await SendManager.sendTransaction(tx);
+        const lookupTableAddress = createIx.accounts[0].address;
+        console.log('ALT address:', lookupTableAddress);
+
+        const signature = await this.buildAndSendTx([
+            getSetComputeUnitPriceInstruction({ microLamports: 100_000 }),
+            createIx,
+        ]);
         console.log('[LookupManager] ALT created:', signature);
-      
+
         return lookupTableAddress;
     }
 
     async tryToUpdateLookupTable() {
-        const lookupTable = await this.connection.getAddressLookupTable(this.lookupTableAddress);
-        LookupManager.lookupTable = lookupTable?.value || undefined;
-        console.log('[LookupManager] Lookup table:', LookupManager.lookupTable);
-        if (!LookupManager.lookupTable){
-            throw new Error('[LookupManager] Failed to get lookup table');
-        }
-        LookupManager.lookupTables.push(LookupManager.lookupTable);
-        console.log('[LookupManager] Lookup tables:', LookupManager.lookupTables);
+        const lookupTableAccount = await fetchAddressLookupTable(this.rpc, this.lookupTableAddress);
+        const lookupTable = lookupTableAccount.data;
+        LookupManager.lookupTable = lookupTable;
+        LookupManager.lookupTableAddress = this.lookupTableAddress;
+        console.log('[LookupManager] Lookup table:', lookupTable);
 
-        const currentAddresses = LookupManager.lookupTable.state.addresses || [];
+        const currentAddresses = lookupTable.addresses || [];
         const newAddresses = this.accounts.filter(
-            (acc) => !currentAddresses.some((cur) => cur.equals(acc))
+            (acc) => !currentAddresses.includes(acc),
         );
         console.log('[LookupManager] New addresses:', newAddresses);
 
-
-        if (newAddresses.length == 0) {
+        if (newAddresses.length === 0) {
             console.log('[LookupManager] No new addresses to add');
             return;
         }
 
-        const extendLookupTableIx = AddressLookupTableProgram.extendLookupTable({
-            lookupTable: this.lookupTableAddress,
-            authority: this.owner.publicKey,
-            payer: this.owner.publicKey,
+        const extendIx = getExtendLookupTableInstruction({
+            address: this.lookupTableAddress,
+            authority: this.owner,
+            payer: this.owner,
             addresses: newAddresses,
-        }); 
+        });
 
-        const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
-
-        const tx = new VersionedTransaction(
-            new TransactionMessage({
-                payerKey: this.owner.publicKey,
-                recentBlockhash: blockhash,
-                instructions: [extendLookupTableIx],
-            }).compileToV0Message()
-        );
-        tx.sign([this.owner]);
-        const { signature } = await SendManager.sendTransaction(tx);
+        const signature = await this.buildAndSendTx([extendIx]);
         console.log('[LookupManager] Lookup table extended:', signature);
     }
 
-    async deactivateLookupTable(lookupTableAddress: PublicKey) {
-        const deactivateLookupTableIx = AddressLookupTableProgram.deactivateLookupTable({
-            lookupTable: lookupTableAddress,
-            authority: this.owner.publicKey,
+    async deactivateLookupTable(lookupTable: Address) {
+        const deactivateIx = getDeactivateLookupTableInstruction({
+            address: lookupTable,
+            authority: this.owner,
         });
-        const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
 
-        const tx = new VersionedTransaction(
-            new TransactionMessage({
-                payerKey: this.owner.publicKey,
-                recentBlockhash: blockhash,
-                instructions: [deactivateLookupTableIx],
-            }).compileToV0Message()
-        );
-        tx.sign([this.owner]);
-        const { signature } = await SendManager.sendTransaction(tx);
+        const signature = await this.buildAndSendTx([deactivateIx]);
         console.log('[LookupManager] Lookup table deactivated:', signature);
     }
 
-    async closeLookupTable(lookupTableAddress: PublicKey) {
-        const closeLookupTableIx = AddressLookupTableProgram.closeLookupTable({
-            lookupTable: lookupTableAddress,
-            authority: this.owner.publicKey,
-            recipient: this.owner.publicKey,
+    async closeLookupTable(lookupTable: Address) {
+        const closeIx = getCloseLookupTableInstruction({
+            address: lookupTable,
+            authority: this.owner,
+            recipient: this.owner.address,
         });
-        const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
 
-        const tx = new VersionedTransaction(
-            new TransactionMessage({
-                payerKey: this.owner.publicKey,
-                recentBlockhash: blockhash,
-                instructions: [closeLookupTableIx],
-            }).compileToV0Message()
-        );
-        tx.sign([this.owner]);
-        const { signature } = await SendManager.sendTransaction(tx);
+        const signature = await this.buildAndSendTx([closeIx]);
         console.log('[LookupManager] Lookup table closed:', signature);
     }
 

@@ -5,10 +5,11 @@ import earnRouter from './routes/earn';
 import solanaRouter from './routes/solana';
 import { initializeScheduler } from './services';
 import { DBManager } from './managers';
+import { initialiseLookupManager } from './managers/LookupManager';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/cashflow';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 // Middleware
 app.use(express.json());
@@ -24,6 +25,9 @@ app.get('/health', (req, res) => {
 });
 
 // Database connection
+if (!MONGODB_URI){
+  throw new Error('MONGODB_URI is required');
+}
 mongoose
   .connect(MONGODB_URI)
   .then(async () => {
@@ -39,6 +43,7 @@ mongoose
 
     // Initialize cron scheduler after server starts
     await initializeScheduler();
+    await initialiseLookupManager();
   })
   .catch((error) => {
     console.error('❌ MongoDB connection error:', error);
