@@ -277,7 +277,7 @@ router.get('/assets', async (req: Request, res: Response) => {
     });
     const dasData: any = await dasResponse.json();
 
-    console.log('[assets] Helius DAS response:', JSON.stringify(dasData, null, 2));
+    console.log('[assets] Helius DAS response:', JSON.stringify(dasData));
 
     if (dasData.error) {
       throw new Error(dasData.error.message || 'DAS API error');
@@ -328,6 +328,7 @@ router.get('/assets', async (req: Request, res: Response) => {
       if (!tokenInfo || !tokenInfo.balance || tokenInfo.balance === 0) continue;
 
       const decimals: number = tokenInfo.decimals ?? 0;
+      if (decimals == 0) continue;
       const balance: number = tokenInfo.balance;
       const uiAmount = balance / 10 ** decimals;
       const pricePerToken: number = tokenInfo.price_info?.price_per_token ?? 0;
@@ -339,7 +340,7 @@ router.get('/assets', async (req: Request, res: Response) => {
 
       assets.push({
         mint,
-        symbol: mint === SOL_MINT ? 'wSOL' : (known?.symbol ?? tokenInfo.symbol ?? metadata?.symbol ?? mint.slice(0, 6)),
+        symbol: mint === SOL_MINT ? 'WSOL' : (known?.symbol ?? tokenInfo.symbol ?? metadata?.symbol ?? mint.slice(0, 6)),
         name: mint === SOL_MINT ? 'Wrapped SOL' : (known?.name ?? metadata?.name ?? 'Unknown Token'),
         decimals,
         logoUrl: known?.logoUrl ?? item.content?.links?.image ?? '',
