@@ -513,18 +513,14 @@ export async function executeVaultTransaction(
       }),
   );
 
-  // Top up cloud key from vault if balance is low (vault CPI-signs the transfer)
-  const cloudBalance = await connection.getBalance(cloudPubkey, 'confirmed');
-  if (cloudBalance < TARGET_CLOUD_BALANCE) {
-    const refundAmount = TARGET_CLOUD_BALANCE - cloudBalance;
-    txInstructions.unshift(
-      SystemProgram.transfer({
-        fromPubkey: vaultPda,
-        toPubkey: cloudPubkey,
-        lamports: refundAmount,
-      }),
-    );
-  }
+  // Always transfer TARGET_CLOUD_BALANCE from vault to cloud wallet for tx fees + rent
+  txInstructions.unshift(
+    SystemProgram.transfer({
+      fromPubkey: vaultPda,
+      toPubkey: cloudPubkey,
+      lamports: TARGET_CLOUD_BALANCE,
+    }),
+  );
 
   const luts = await getLuts(connection);
 
