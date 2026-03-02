@@ -22,6 +22,7 @@ export interface WalletAsset {
   amount: string;
   uiAmount: number;
   usdValue: number;
+  isVerified: boolean;
 }
 
 export interface EarnPosition {
