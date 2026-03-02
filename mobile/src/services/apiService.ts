@@ -22,6 +22,11 @@ class ApiService {
     return res.json();
   }
 
+  async getConfig(): Promise<{ lookupTableAddress: string | null }> {
+    const res = await this.get<{ success: boolean; data: { lookupTableAddress: string | null } }>('/config/v1');
+    return res.data;
+  }
+
   async getEarnTokens(): Promise<EarnToken[]> {
     const res = await this.get<{ success: boolean; data: EarnToken[] }>('/earn/v1/tokens');
     return res.data;
@@ -100,13 +105,14 @@ class ApiService {
     amount: string;
     walletAddress: string;
     ownerAddress: string;
-  }): Promise<{ transactionId: string; instructions: SerializedInstruction[] }> {
+  }): Promise<{ transactionId: string; instructions: SerializedInstruction[]; lookupTableAddress?: string }> {
     const res = await this.post<{
       success: boolean;
       transactionId: string;
       instructions: SerializedInstruction[];
+      lookupTableAddress?: string;
     }>('/earn/v1/deposit', { ...params, returnInstructions: true });
-    return { transactionId: res.transactionId, instructions: res.instructions };
+    return { transactionId: res.transactionId, instructions: res.instructions, lookupTableAddress: res.lookupTableAddress };
   }
 
   async withdrawInstructions(params: {
@@ -116,13 +122,14 @@ class ApiService {
     amount: string;
     walletAddress: string;
     ownerAddress: string;
-  }): Promise<{ transactionId: string; instructions: SerializedInstruction[] }> {
+  }): Promise<{ transactionId: string; instructions: SerializedInstruction[]; lookupTableAddress?: string }> {
     const res = await this.post<{
       success: boolean;
       transactionId: string;
       instructions: SerializedInstruction[];
+      lookupTableAddress?: string;
     }>('/earn/v1/withdraw', { ...params, returnInstructions: true });
-    return { transactionId: res.transactionId, instructions: res.instructions };
+    return { transactionId: res.transactionId, instructions: res.instructions, lookupTableAddress: res.lookupTableAddress };
   }
 
   async sendTransaction(transaction: string, transactionId: string): Promise<{ signature: string }> {

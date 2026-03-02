@@ -44,10 +44,28 @@ export class LookupManager {
     private owner!: KeyPairSigner;
     private lookupTableAddress: Address = address('7zhwX89SJs1ctA4e57Y6EpSvMuYXVoig2YiLKWFfnzwM');
     private accounts: Address[] = [
-        //TODO: add all programs: Kamino, Jup Lend, Drift
-        //TODO: add all stablecoin mints
-        //TODO: add our fee wallet
-        //TODO: add @heymike/send fee wallet
+        //TODO: add Cashflow fee wallet
+        //TODO: can add LP tokens, if need to reduce tx even more
+
+        // programs
+        address('W1AA3tfuCifNKeV9WKVwyasPwXu9o1H44NZCKZcSEND'), // SEND
+        address('FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr'), // Kamino Farm
+        address('KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd'), // Kvault program
+        address('AyY6VCkHfTWdFs7SqBbu6AnCqLUhgzVHBzW3WcJu5Jc8'), // Kamino Finance Base Vault Authority
+        address('jup3YeL8QhtSx1e253b2FDvsMNC87fDrgQZivbrndc9'), // Jupiter Lend Earn
+        address('dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH'), // Drift Protocol
+        address('JCNCMFXo5M5qwUPg2Utu1u6YWp3MbygxqBsBeXXJfrw'), // Drift Vaults
+
+        // stablecoins
+        address('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'), // USDC
+        address('JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD'), // JupUSD
+        address('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'), // USDT
+        address('HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr'), // EURC
+        address('2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH'), // USDG
+        address('USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA'), // USDS
+        address('2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo'), // PYUSD
+
+        address('yyvY1cHtcQHbsPk4UYdHhjtoYQjYCX41RqF8U3dSEND'), // SEND fees
 
         TOKEN_PROGRAM_ADDRESS,
         TOKEN_2022_PROGRAM_ADDRESS,

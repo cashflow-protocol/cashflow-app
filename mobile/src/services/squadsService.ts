@@ -1,4 +1,5 @@
 import {
+  AddressLookupTableAccount,
   Connection,
   Keypair,
   PublicKey,
@@ -40,6 +41,25 @@ const JITO_TIP_ACCOUNTS = [
   '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT',
 ];
 const JITO_TIP_LAMPORTS = 100_000; // 0.0001 SOL
+
+// Address Lookup Table for transaction compression (fetched from backend config)
+let cachedLuts: AddressLookupTableAccount[] | null = null;
+
+async function getLuts(conn: Connection): Promise<AddressLookupTableAccount[]> {
+  if (cachedLuts) return cachedLuts;
+  try {
+    const config = await apiService.getConfig();
+    if (config.lookupTableAddress) {
+      const res = await conn.getAddressLookupTable(new PublicKey(config.lookupTableAddress));
+      cachedLuts = res.value ? [res.value] : [];
+    } else {
+      cachedLuts = [];
+    }
+  } catch {
+    cachedLuts = [];
+  }
+  return cachedLuts;
+}
 
 // Web3.js connection for @sqds/multisig SDK calls
 const connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
@@ -223,12 +243,13 @@ export async function createMultisig(
     lamports: TARGET_CLOUD_BALANCE,
   });
 
+  const luts = await getLuts(connection);
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
   const msg1 = new TransactionMessage({
     payerKey: creatorPubkey,
     recentBlockhash: blockhash,
     instructions: [createMultisigIx, fundCloudIx],
-  }).compileToV0Message();
+  }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
 
   // Partially sign with the ephemeral createKey (single-use, safe in JS)
@@ -385,6 +406,7 @@ export async function addMember(
   });
 
   // --- Build all transactions with one blockhash (Jito bundle) ---
+  const luts = await getLuts(connection);
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
   // TX1: create + propose + approve×2
@@ -392,7 +414,7 @@ export async function addMember(
     payerKey: feePayer,
     recentBlockhash: blockhash,
     instructions: [configTxIx, proposalIx, approveCloudIx, approveDeviceIx],
-  }).compileToV0Message();
+  }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
   await signTransactionNatively(tx1, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
@@ -423,7 +445,7 @@ export async function addMember(
     payerKey: feePayer,
     recentBlockhash: blockhash,
     instructions: tx2Instructions,
-  }).compileToV0Message();
+  }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
@@ -504,6 +526,8 @@ export async function executeVaultTransaction(
     );
   }
 
+  const luts = await getLuts(connection);
+
   // Build inner message (vault PDA as payer for the inner instructions)
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
   const innerMessage = new TransactionMessage({
@@ -575,7 +599,7 @@ export async function executeVaultTransaction(
     payerKey: feePayer,
     recentBlockhash: blockhash,
     instructions: [createVaultTxIx, proposalIx, approveCloudIx, approveDeviceIx],
-  }).compileToV0Message();
+  }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
   await signTransactionNatively(tx1, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
@@ -586,7 +610,7 @@ export async function executeVaultTransaction(
     payerKey: feePayer,
     recentBlockhash: blockhash,
     instructions: [executeIx],
-  }).compileToV0Message();
+  }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
@@ -596,7 +620,7 @@ export async function executeVaultTransaction(
     payerKey: feePayer,
     recentBlockhash: blockhash,
     instructions: tx3Instructions,
-  }).compileToV0Message();
+  }).compileToV0Message(luts);
   const tx3 = new VersionedTransaction(msg3);
   await signTransactionNatively(tx3, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
@@ -663,6 +687,7 @@ async function setRentCollector(
     rentPayer: cloudPubkey,
   });
 
+  const luts = await getLuts(connection);
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
   // TX 1: create + propose + approve×2
@@ -670,7 +695,7 @@ async function setRentCollector(
     payerKey: cloudPubkey,
     recentBlockhash: blockhash,
     instructions: [configTxIx, proposalIx, approveCloudIx, approveDeviceIx],
-  }).compileToV0Message();
+  }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
   await signTransactionNatively(tx1, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
@@ -682,7 +707,7 @@ async function setRentCollector(
     payerKey: cloudPubkey,
     recentBlockhash: blockhash,
     instructions: [executeIx, jitoTipIx(cloudPubkey)],
-  }).compileToV0Message();
+  }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
@@ -792,6 +817,7 @@ export async function reclaimRent(
   }
 
   // Step 3: Batch close in groups of up to 5 via Jito bundles
+  const luts = await getLuts(connection);
   const BATCH_SIZE = 1;
   for (let b = 0; b < closeable.length; b += BATCH_SIZE) {
     const batch = closeable.slice(b, b + BATCH_SIZE);
@@ -824,7 +850,7 @@ export async function reclaimRent(
           payerKey: cloudPubkey,
           recentBlockhash: blockhash,
           instructions: ixs,
-        }).compileToV0Message();
+        }).compileToV0Message(luts);
         const tx = new VersionedTransaction(msg);
 
         await signTransactionNatively(tx, [

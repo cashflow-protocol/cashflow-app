@@ -165,10 +165,11 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
       await new Promise((r) => setTimeout(r, 2000));
       status = await jitoManager.getBundleStatus(bundleId);
       if (status?.confirmation_status === 'confirmed' || status?.confirmation_status === 'finalized') break;
-      if (status?.err) break;
+      // Jito returns {"Ok": null} on success — only break on actual errors
+      if (status?.err && !('Ok' in status.err)) break;
     }
 
-    if (status?.err) {
+    if (status?.err && !('Ok' in status.err)) {
       console.error('Jito bundle failed:', JSON.stringify(status.err));
       res.status(400).json({
         success: false,
@@ -300,6 +301,7 @@ router.get('/assets', async (req: Request, res: Response) => {
       amount: string;
       uiAmount: number;
       usdValue: number;
+      isVerified: boolean;
     }[] = [];
 
     // Add native SOL from nativeBalance
@@ -315,6 +317,7 @@ router.get('/assets', async (req: Request, res: Response) => {
         amount: String(nativeBalance.lamports),
         uiAmount: solUiAmount,
         usdValue: nativeBalance.total_price ?? solUiAmount * solPrice,
+        isVerified: true,
       });
     }
 
@@ -365,6 +368,7 @@ router.get('/assets', async (req: Request, res: Response) => {
         amount: String(balance),
         uiAmount,
         usdValue,
+        isVerified: !!known || cached?.isVerified || false,
       });
     }
 

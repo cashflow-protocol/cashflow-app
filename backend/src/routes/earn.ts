@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { DBManager, JupiterManager, KaminoManager, DriftManager, PriceManager } from '../managers';
+import { LookupManager } from '../managers/LookupManager';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { TransactionAction } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
@@ -190,6 +191,7 @@ router.post('/deposit', async (req: Request, res: Response) => {
         success: true,
         transactionId: record._id,
         instructions,
+        lookupTableAddress: LookupManager.lookupTableAddress,
         timestamp: new Date().toISOString(),
       });
       return;
@@ -295,6 +297,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         success: true,
         transactionId: record._id,
         instructions,
+        lookupTableAddress: LookupManager.lookupTableAddress,
         timestamp: new Date().toISOString(),
       });
       return;

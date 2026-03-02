@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express, { Application } from 'express';
 import mongoose from 'mongoose';
+import configRouter from './routes/config';
 import earnRouter from './routes/earn';
 import solanaRouter from './routes/solana';
 import { initializeScheduler } from './services';
@@ -16,6 +17,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
+app.use('/config/v1', configRouter);
 app.use('/earn/v1', earnRouter);
 app.use('/solana/v1', solanaRouter);
 
