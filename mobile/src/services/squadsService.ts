@@ -469,6 +469,7 @@ export async function addMember(
 export async function executeVaultTransaction(
   multisigAddress: string,
   instructions: Array<{ programId: string; accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; data: string }>,
+  extraLookupTables?: string[],
 ): Promise<{ signature: string }> {
   const multisigPda = new PublicKey(multisigAddress);
 
@@ -522,7 +523,21 @@ export async function executeVaultTransaction(
     }),
   );
 
-  const luts = await getLuts(connection);
+  const baseLuts = await getLuts(connection);
+
+  // Fetch extra LUTs (e.g. Kamino vault-specific lookup table)
+  const extraLutAccounts: AddressLookupTableAccount[] = [];
+  if (extraLookupTables?.length) {
+    const results = await Promise.all(
+      extraLookupTables.map((addr) =>
+        connection.getAddressLookupTable(new PublicKey(addr)),
+      ),
+    );
+    for (const r of results) {
+      if (r.value) extraLutAccounts.push(r.value);
+    }
+  }
+  const luts = [...baseLuts, ...extraLutAccounts];
 
   // Build inner message (vault PDA as payer for the inner instructions)
   const { blockhash } = await connection.getLatestBlockhash('confirmed');

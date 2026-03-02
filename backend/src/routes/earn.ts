@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { DBManager, JupiterManager, KaminoManager, DriftManager, PriceManager } from '../managers';
 import { LookupManager } from '../managers/LookupManager';
+import { EarnTokenModel } from '../models/EarnToken';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { TransactionAction } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
@@ -178,6 +179,14 @@ router.post('/deposit', async (req: Request, res: Response) => {
         console.error(`DEPOSIT returnInstructions: EMPTY instructions for type=${type}, mint=${mint}, amount=${amount}`);
       }
 
+      // Collect extra LUTs (e.g. Kamino vault-specific lookup table)
+      const extraLookupTables: string[] = [];
+      if (type === EarnTokenType.KAMINO && vaultAddress) {
+        const vaultDoc = await EarnTokenModel.findOne({ type, vaultAddress }).lean();
+        const vaultLut = vaultDoc?.kaminoToken?.state?.vaultLookupTable;
+        if (vaultLut) extraLookupTables.push(vaultLut);
+      }
+
       const record = await dbManager.createTransaction({
         action: TransactionAction.DEPOSIT,
         type,
@@ -192,6 +201,7 @@ router.post('/deposit', async (req: Request, res: Response) => {
         transactionId: record._id,
         instructions,
         lookupTableAddress: LookupManager.lookupTableAddress,
+        extraLookupTables,
         timestamp: new Date().toISOString(),
       });
       return;
@@ -284,6 +294,14 @@ router.post('/withdraw', async (req: Request, res: Response) => {
           return;
       }
 
+      // Collect extra LUTs (e.g. Kamino vault-specific lookup table)
+      const extraLookupTables: string[] = [];
+      if (type === EarnTokenType.KAMINO && vaultAddress) {
+        const vaultDoc = await EarnTokenModel.findOne({ type, vaultAddress }).lean();
+        const vaultLut = vaultDoc?.kaminoToken?.state?.vaultLookupTable;
+        if (vaultLut) extraLookupTables.push(vaultLut);
+      }
+
       const record = await dbManager.createTransaction({
         action: TransactionAction.WITHDRAW,
         type,
@@ -298,6 +316,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         transactionId: record._id,
         instructions,
         lookupTableAddress: LookupManager.lookupTableAddress,
+        extraLookupTables,
         timestamp: new Date().toISOString(),
       });
       return;

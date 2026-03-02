@@ -105,14 +105,15 @@ class ApiService {
     amount: string;
     walletAddress: string;
     ownerAddress: string;
-  }): Promise<{ transactionId: string; instructions: SerializedInstruction[]; lookupTableAddress?: string }> {
+  }): Promise<{ transactionId: string; instructions: SerializedInstruction[]; lookupTableAddress?: string; extraLookupTables?: string[] }> {
     const res = await this.post<{
       success: boolean;
       transactionId: string;
       instructions: SerializedInstruction[];
       lookupTableAddress?: string;
+      extraLookupTables?: string[];
     }>('/earn/v1/deposit', { ...params, returnInstructions: true });
-    return { transactionId: res.transactionId, instructions: res.instructions, lookupTableAddress: res.lookupTableAddress };
+    return { transactionId: res.transactionId, instructions: res.instructions, lookupTableAddress: res.lookupTableAddress, extraLookupTables: res.extraLookupTables };
   }
 
   async withdrawInstructions(params: {
@@ -122,14 +123,15 @@ class ApiService {
     amount: string;
     walletAddress: string;
     ownerAddress: string;
-  }): Promise<{ transactionId: string; instructions: SerializedInstruction[]; lookupTableAddress?: string }> {
+  }): Promise<{ transactionId: string; instructions: SerializedInstruction[]; lookupTableAddress?: string; extraLookupTables?: string[] }> {
     const res = await this.post<{
       success: boolean;
       transactionId: string;
       instructions: SerializedInstruction[];
       lookupTableAddress?: string;
+      extraLookupTables?: string[];
     }>('/earn/v1/withdraw', { ...params, returnInstructions: true });
-    return { transactionId: res.transactionId, instructions: res.instructions, lookupTableAddress: res.lookupTableAddress };
+    return { transactionId: res.transactionId, instructions: res.instructions, lookupTableAddress: res.lookupTableAddress, extraLookupTables: res.extraLookupTables };
   }
 
   async sendTransaction(transaction: string, transactionId: string): Promise<{ signature: string }> {

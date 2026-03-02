@@ -168,6 +168,7 @@ export default function VaultModal({
         const result = await executeVaultTransaction(
           vaultData.multisigAddress,
           res.instructions,
+          res.extraLookupTables,
         );
         signature = result.signature;
       } else {
