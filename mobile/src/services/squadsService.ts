@@ -10,6 +10,7 @@ import {
 } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import bs58 from 'bs58';
+import { sha256 } from '@noble/hashes/sha2';
 import { SOLANA_CONFIG } from '../config/solana';
 import { signAndSendTransaction } from './signingService';
 import { saveVault, type VaultData } from './vaultStorage';
@@ -64,6 +65,22 @@ async function getLuts(conn: Connection): Promise<AddressLookupTableAccount[]> {
 // Web3.js connection for @sqds/multisig SDK calls
 const connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
 
+const SQUADS_PROGRAM_ID = new PublicKey('SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf');
+
+/** Derive the transaction buffer PDA. Seeds: ["multisig", multisig, "transaction_buffer", creator, bufferIndex] */
+function getTransactionBufferPda(multisigPda: PublicKey, creator: PublicKey, bufferIndex: number) {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from('multisig'),
+      multisigPda.toBuffer(),
+      Buffer.from('transaction_buffer'),
+      creator.toBuffer(),
+      Buffer.from([bufferIndex]),
+    ],
+    SQUADS_PROGRAM_ID,
+  );
+}
+
 export interface MultisigInfo {
   address: string;
   vaultAddress: string;
@@ -87,34 +104,75 @@ export interface CreateMultisigResult {
 
 /**
  * Build vaultTransactionExecute instruction WITHOUT an RPC read.
- * We already have the inner TransactionMessage, so we can derive the
- * remaining accounts from its compiled V0 form — same ordering the
- * on-chain program will see.
+ *
+ * Takes the deserialized Squads-format compiled message (from transactionMessageBeet)
+ * to ensure the remaining accounts match exactly what the on-chain program stored.
+ * This is critical because the SDK uses `compileToWrappedMessageV0` which allows
+ * program IDs in LUTs — standard `compileToV0Message` does NOT, so account
+ * orderings would differ.
  */
 function buildVaultExecuteIx(
   multisigPda: PublicKey,
   transactionIndex: bigint,
   member: PublicKey,
   vaultPda: PublicKey,
-  innerMessage: TransactionMessage,
+  compiledMessage: {
+    numSigners: number;
+    numWritableSigners: number;
+    numWritableNonSigners: number;
+    accountKeys: PublicKey[];
+    addressTableLookups: { accountKey: PublicKey; writableIndexes: number[]; readonlyIndexes: number[] }[];
+  },
+  luts?: AddressLookupTableAccount[],
 ): TransactionInstruction {
   const [proposalPda] = multisig.getProposalPda({ multisigPda, transactionIndex });
   const [transactionPda] = multisig.getTransactionPda({ multisigPda, index: transactionIndex });
 
-  const compiled = innerMessage.compileToV0Message();
-  const keys = compiled.staticAccountKeys;
-  const { numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts } = compiled.header;
+  const { numSigners, numWritableSigners, numWritableNonSigners, accountKeys, addressTableLookups } = compiledMessage;
 
-  const numSigners = numRequiredSignatures;
-  const numWritableSigners = numRequiredSignatures - numReadonlySignedAccounts;
-  const numWritableNonSigners = keys.length - numRequiredSignatures - numReadonlyUnsignedAccounts;
+  const accountMetas: { pubkey: PublicKey; isWritable: boolean; isSigner: boolean }[] = [];
 
-  const accountMetas = keys.map((pubkey, i) => ({
-    pubkey,
-    isWritable: i < numWritableSigners ||
-      (i >= numSigners && (i - numSigners) < numWritableNonSigners),
-    isSigner: i < numSigners && !pubkey.equals(vaultPda),
-  }));
+  // 1. LUT account keys (needed for on-chain validation)
+  for (const lookup of addressTableLookups) {
+    accountMetas.push({
+      pubkey: lookup.accountKey,
+      isWritable: false,
+      isSigner: false,
+    });
+  }
+
+  // 2. Static account keys from the compiled message
+  for (let i = 0; i < accountKeys.length; i++) {
+    accountMetas.push({
+      pubkey: accountKeys[i],
+      isWritable: i < numWritableSigners ||
+        (i >= numSigners && (i - numSigners) < numWritableNonSigners),
+      isSigner: i < numSigners && !accountKeys[i].equals(vaultPda),
+    });
+  }
+
+  // 3. Addresses resolved from lookup tables
+  if (luts) {
+    const lutMap = new Map(luts.map(l => [l.key.toBase58(), l]));
+    for (const lookup of addressTableLookups) {
+      const lutAccount = lutMap.get(lookup.accountKey.toBase58());
+      if (!lutAccount) continue;
+      for (const idx of lookup.writableIndexes) {
+        accountMetas.push({
+          pubkey: lutAccount.state.addresses[idx],
+          isWritable: true,
+          isSigner: false,
+        });
+      }
+      for (const idx of lookup.readonlyIndexes) {
+        accountMetas.push({
+          pubkey: lutAccount.state.addresses[idx],
+          isWritable: false,
+          isSigner: false,
+        });
+      }
+    }
+  }
 
   return multisig.generated.createVaultTransactionExecuteInstruction(
     {
@@ -464,11 +522,16 @@ export async function addMember(
  * Execute a vault transaction through the Squads proposal flow.
  * Wraps raw instructions in: vaultTransactionCreate → proposalCreate → approve×2 → execute
  *
+ * If the inner message is too large for a single vaultTransactionCreate instruction,
+ * automatically falls back to the transaction buffer approach:
+ * bufferCreate → bufferExtend(s) → createFromBuffer+propose+approve → execute → close
+ *
  * Cloud keypair is the fee payer + rent payer. Cloud + device sign natively.
  */
 export async function executeVaultTransaction(
   multisigAddress: string,
   instructions: Array<{ programId: string; accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; data: string }>,
+  extraLutAddress?: string,
 ): Promise<{ signature: string }> {
   const multisigPda = new PublicKey(multisigAddress);
 
@@ -481,20 +544,15 @@ export async function executeVaultTransaction(
   const cloudPubkey = new PublicKey(cloudPubBase58);
   const devicePubkey = new PublicKey(devicePubBase58);
 
-  // Cloud keypair pays for tx fees and rent
   const feePayer = cloudPubkey;
-
-  // Derive vault PDA
   const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
 
-  // Get current transaction index
   const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(
     connection,
     multisigPda,
   );
   const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
-  // Guard: never create an empty vault transaction
   if (!instructions || instructions.length === 0) {
     throw new Error('No instructions provided for vault transaction');
   }
@@ -522,27 +580,62 @@ export async function executeVaultTransaction(
     }),
   );
 
-  const luts = await getLuts(connection);
+  // Fetch LUTs: global + extra (e.g. Kamino vault's own LUT for protocol-specific accounts)
+  const globalLuts = await getLuts(connection);
+  let luts = globalLuts;
+  if (extraLutAddress) {
+    try {
+      const extraLutRes = await connection.getAddressLookupTable(new PublicKey(extraLutAddress));
+      if (extraLutRes.value) {
+        luts = [...globalLuts, extraLutRes.value];
+      }
+    } catch {
+      // Fall back to global LUTs only
+    }
+  }
+
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
   // Build inner message (vault PDA as payer for the inner instructions)
-  const { blockhash } = await connection.getLatestBlockhash('confirmed');
   const innerMessage = new TransactionMessage({
     payerKey: vaultPda,
     recentBlockhash: blockhash,
     instructions: txInstructions,
   });
 
-  // --- TX 1: Create vault tx + propose + approve(cloud) + approve(device) ---
-  const createVaultTxIx = multisig.instructions.vaultTransactionCreate({
-    multisigPda,
-    transactionIndex,
-    creator: cloudPubkey,
-    rentPayer: feePayer,
-    vaultIndex: 0,
-    ephemeralSigners: 0,
-    transactionMessage: innerMessage,
+  // Serialize inner message to Squads multisig format (needed for both paths)
+  const messageBytes = multisig.utils.transactionMessageToMultisigTransactionMessageBytes({
+    message: innerMessage,
+    addressLookupTableAccounts: luts,
+    vaultPda,
   });
+  console.log('[executeVaultTx] Inner message serialized:', messageBytes.length, 'bytes');
 
+  // Try the regular approach — if the inner message is too large, fall back to buffer
+  let useBuffer = false;
+  try {
+    const testIx = multisig.instructions.vaultTransactionCreate({
+      multisigPda,
+      transactionIndex,
+      creator: cloudPubkey,
+      rentPayer: feePayer,
+      vaultIndex: 0,
+      ephemeralSigners: 0,
+      transactionMessage: innerMessage,
+      addressLookupTableAccounts: luts,
+    });
+    const testMsg = new TransactionMessage({
+      payerKey: feePayer,
+      recentBlockhash: blockhash,
+      instructions: [testIx],
+    }).compileToV0Message(luts);
+    new VersionedTransaction(testMsg).serialize();
+  } catch {
+    console.log('[executeVaultTx] Inner message too large for regular create, using buffer approach');
+    useBuffer = true;
+  }
+
+  // --- Common instructions used by both paths ---
   const proposalIx = multisig.instructions.proposalCreate({
     multisigPda,
     transactionIndex,
@@ -562,19 +655,24 @@ export async function executeVaultTransaction(
     member: devicePubkey,
   });
 
-  // --- TX 2: Execute ---
+  // Deserialize the Squads-format compiled message to get correct account ordering
+  // (compileToWrappedMessageV0 allows program IDs in LUTs, unlike standard compileToV0Message)
+  const [compiledMsg] = multisig.types.transactionMessageBeet.deserialize(
+    Buffer.from(messageBytes),
+  );
+
   const executeIx = buildVaultExecuteIx(
     multisigPda,
     transactionIndex,
     cloudPubkey,
     vaultPda,
-    innerMessage,
+    compiledMsg,
+    luts,
   );
 
-  // --- TX 3: Close (if rentCollector set) + withdraw cloud SOL back to vault + Jito tip ---
-  const tx3Instructions: TransactionInstruction[] = [];
+  const closeTipWithdrawIxs: TransactionInstruction[] = [];
   if (multisigAccount.rentCollector) {
-    tx3Instructions.push(
+    closeTipWithdrawIxs.push(
       multisig.instructions.vaultTransactionAccountsClose({
         multisigPda,
         transactionIndex,
@@ -582,8 +680,8 @@ export async function executeVaultTransaction(
       }),
     );
   }
-  tx3Instructions.push(jitoTipIx(feePayer));
-  tx3Instructions.push(
+  closeTipWithdrawIxs.push(jitoTipIx(feePayer));
+  closeTipWithdrawIxs.push(
     kitIxToWeb3(createWithdrawInstruction(
       kitAddress(cloudPubkey.toBase58()),
       kitAddress(vaultPda.toBase58()),
@@ -591,46 +689,288 @@ export async function executeVaultTransaction(
     )),
   );
 
-  // --- Build all transactions with one blockhash (Jito bundle) ---
+  if (!useBuffer) {
+    // === Regular path: inner message fits in one vaultTransactionCreate ===
+    return buildRegularBundle({
+      multisigPda, transactionIndex, cloudPubkey, devicePubkey, feePayer,
+      innerMessage, luts, blockhash,
+      proposalIx, approveCloudIx, approveDeviceIx, executeIx, closeTipWithdrawIxs,
+    });
+  } else {
+    // === Buffer path: inner message too large, write via transaction buffer ===
+    return buildBufferBundle({
+      multisigPda, transactionIndex, cloudPubkey, devicePubkey, feePayer,
+      messageBytes, luts, blockhash,
+      proposalIx, approveCloudIx, approveDeviceIx, executeIx, closeTipWithdrawIxs,
+    });
+  }
+}
+
+/** Regular vault transaction bundle: create → propose+approve → execute → close */
+async function buildRegularBundle({
+  multisigPda, transactionIndex, cloudPubkey, devicePubkey, feePayer,
+  innerMessage, luts, blockhash,
+  proposalIx, approveCloudIx, approveDeviceIx, executeIx, closeTipWithdrawIxs,
+}: {
+  multisigPda: PublicKey; transactionIndex: bigint;
+  cloudPubkey: PublicKey; devicePubkey: PublicKey; feePayer: PublicKey;
+  innerMessage: TransactionMessage; luts: AddressLookupTableAccount[]; blockhash: string;
+  proposalIx: TransactionInstruction; approveCloudIx: TransactionInstruction;
+  approveDeviceIx: TransactionInstruction; executeIx: TransactionInstruction;
+  closeTipWithdrawIxs: TransactionInstruction[];
+}): Promise<{ signature: string }> {
+  const createVaultTxIx = multisig.instructions.vaultTransactionCreate({
+    multisigPda,
+    transactionIndex,
+    creator: cloudPubkey,
+    rentPayer: feePayer,
+    vaultIndex: 0,
+    ephemeralSigners: 0,
+    transactionMessage: innerMessage,
+    addressLookupTableAccounts: luts,
+  });
+
+  // TX1: create vault tx
   const msg1 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: [createVaultTxIx, proposalIx, approveCloudIx, approveDeviceIx],
+    payerKey: feePayer, recentBlockhash: blockhash,
+    instructions: [createVaultTxIx],
   }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
-  await signTransactionNatively(tx1, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-    { pubkey: devicePubkey, signFn: signWithDevice },
-  ]);
+  await signTransactionNatively(tx1, [{ pubkey: cloudPubkey, signFn: signWithCloud }]);
 
+  // TX2: propose + approve×2
   const msg2 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: [executeIx],
+    payerKey: feePayer, recentBlockhash: blockhash,
+    instructions: [proposalIx, approveCloudIx, approveDeviceIx],
   }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
+    { pubkey: devicePubkey, signFn: signWithDevice },
   ]);
 
+  // TX3: execute
   const msg3 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: tx3Instructions,
+    payerKey: feePayer, recentBlockhash: blockhash,
+    instructions: [executeIx],
   }).compileToV0Message(luts);
   const tx3 = new VersionedTransaction(msg3);
-  await signTransactionNatively(tx3, [
+  await signTransactionNatively(tx3, [{ pubkey: cloudPubkey, signFn: signWithCloud }]);
+
+  // TX4: close + tip + withdraw
+  const msg4 = new TransactionMessage({
+    payerKey: feePayer, recentBlockhash: blockhash,
+    instructions: closeTipWithdrawIxs,
+  }).compileToV0Message(luts);
+  const tx4 = new VersionedTransaction(msg4);
+  await signTransactionNatively(tx4, [{ pubkey: cloudPubkey, signFn: signWithCloud }]);
+
+  const bundle = [tx1, tx2, tx3, tx4].map(t => Buffer.from(t.serialize()).toString('base64'));
+  await apiService.sendBundle(bundle);
+  return { signature: bs58.encode(tx3.signatures[0]) };
+}
+
+/**
+ * Buffer-based vault transaction bundle for large inner messages.
+ * Splits the serialized message across transactionBufferCreate + transactionBufferExtend,
+ * then finalizes with vaultTransactionCreateFromBuffer.
+ *
+ * Bundle layout (up to 5 TXs):
+ *   TX1: bufferCreate (first ~750 bytes)
+ *   TX2: bufferExtend (next ~850 bytes, if needed)
+ *   TX3: createFromBuffer + propose + approve×2
+ *   TX4: execute
+ *   TX5: close + tip + withdraw
+ */
+async function buildBufferBundle({
+  multisigPda, transactionIndex, cloudPubkey, devicePubkey, feePayer,
+  messageBytes, luts, blockhash,
+  proposalIx, approveCloudIx, approveDeviceIx, executeIx, closeTipWithdrawIxs,
+}: {
+  multisigPda: PublicKey; transactionIndex: bigint;
+  cloudPubkey: PublicKey; devicePubkey: PublicKey; feePayer: PublicKey;
+  messageBytes: Uint8Array; luts: AddressLookupTableAccount[]; blockhash: string;
+  proposalIx: TransactionInstruction; approveCloudIx: TransactionInstruction;
+  approveDeviceIx: TransactionInstruction; executeIx: TransactionInstruction;
+  closeTipWithdrawIxs: TransactionInstruction[];
+}): Promise<{ signature: string }> {
+  const MAX_TX_SIZE = 1232;
+
+  const finalBufferHash = Array.from(sha256(messageBytes));
+  const [bufferPda] = getTransactionBufferPda(multisigPda, cloudPubkey, 0);
+  const [transactionPda] = multisig.getTransactionPda({ multisigPda, index: transactionIndex });
+
+  // Dynamically calculate max chunk sizes by measuring TX overhead with empty buffer
+  const emptyCreateIx = multisig.generated.createTransactionBufferCreateInstruction(
+    {
+      multisig: multisigPda,
+      transactionBuffer: bufferPda,
+      creator: cloudPubkey,
+      rentPayer: feePayer,
+      systemProgram: SystemProgram.programId,
+    },
+    {
+      args: {
+        bufferIndex: 0,
+        vaultIndex: 0,
+        finalBufferHash,
+        finalBufferSize: messageBytes.length,
+        buffer: new Uint8Array(0),
+      },
+    },
+  );
+  const emptyCreateTx = new VersionedTransaction(
+    new TransactionMessage({
+      payerKey: feePayer, recentBlockhash: blockhash,
+      instructions: [emptyCreateIx],
+    }).compileToV0Message(luts),
+  );
+  const createOverhead = emptyCreateTx.serialize().length;
+  // -2 safety margin for compact-u16 length encoding growth when data is added
+  const firstChunkSize = MAX_TX_SIZE - createOverhead - 2;
+
+  const emptyExtendIx = multisig.generated.createTransactionBufferExtendInstruction(
+    {
+      multisig: multisigPda,
+      transactionBuffer: bufferPda,
+      creator: cloudPubkey,
+    },
+    { args: { buffer: new Uint8Array(0) } },
+  );
+  const emptyExtendTx = new VersionedTransaction(
+    new TransactionMessage({
+      payerKey: feePayer, recentBlockhash: blockhash,
+      instructions: [emptyExtendIx],
+    }).compileToV0Message(luts),
+  );
+  const extendOverhead = emptyExtendTx.serialize().length;
+  const extendChunkSize = MAX_TX_SIZE - extendOverhead - 2;
+
+  console.log('[executeVaultTx] Buffer chunk sizes: create =', firstChunkSize, 'extend =', extendChunkSize);
+
+  // Split message bytes into chunks
+  const firstChunk = messageBytes.slice(0, firstChunkSize);
+  const extendChunks: Uint8Array[] = [];
+  for (let offset = firstChunkSize; offset < messageBytes.length; offset += extendChunkSize) {
+    extendChunks.push(messageBytes.slice(offset, offset + extendChunkSize));
+  }
+
+  const bundleTxs: VersionedTransaction[] = [];
+
+  // TX1: Create buffer with first chunk
+  const bufferCreateIx = multisig.generated.createTransactionBufferCreateInstruction(
+    {
+      multisig: multisigPda,
+      transactionBuffer: bufferPda,
+      creator: cloudPubkey,
+      rentPayer: feePayer,
+      systemProgram: SystemProgram.programId,
+    },
+    {
+      args: {
+        bufferIndex: 0,
+        vaultIndex: 0,
+        finalBufferHash,
+        finalBufferSize: messageBytes.length,
+        buffer: firstChunk,
+      },
+    },
+  );
+  const msg1 = new TransactionMessage({
+    payerKey: feePayer, recentBlockhash: blockhash,
+    instructions: [bufferCreateIx],
+  }).compileToV0Message(luts);
+  const tx1 = new VersionedTransaction(msg1);
+  await signTransactionNatively(tx1, [{ pubkey: cloudPubkey, signFn: signWithCloud }]);
+  bundleTxs.push(tx1);
+
+  // TX2+ (if needed): Extend buffer with remaining chunks
+  for (const chunk of extendChunks) {
+    const extendIx = multisig.generated.createTransactionBufferExtendInstruction(
+      {
+        multisig: multisigPda,
+        transactionBuffer: bufferPda,
+        creator: cloudPubkey,
+      },
+      { args: { buffer: chunk } },
+    );
+    const extMsg = new TransactionMessage({
+      payerKey: feePayer, recentBlockhash: blockhash,
+      instructions: [extendIx],
+    }).compileToV0Message(luts);
+    const extTx = new VersionedTransaction(extMsg);
+    await signTransactionNatively(extTx, [{ pubkey: cloudPubkey, signFn: signWithCloud }]);
+    bundleTxs.push(extTx);
+  }
+
+  // TX(next): createFromBuffer + propose + approve×2
+  const createFromBufferIx = multisig.generated.createVaultTransactionCreateFromBufferInstruction(
+    {
+      vaultTransactionCreateItemMultisig: multisigPda,
+      vaultTransactionCreateItemTransaction: transactionPda,
+      vaultTransactionCreateItemCreator: cloudPubkey,
+      vaultTransactionCreateItemRentPayer: feePayer,
+      vaultTransactionCreateItemSystemProgram: SystemProgram.programId,
+      transactionBuffer: bufferPda,
+      creator: cloudPubkey,
+    },
+    {
+      args: {
+        vaultIndex: 0,
+        ephemeralSigners: 0,
+        transactionMessage: new Uint8Array([0, 0, 0, 0, 0, 0]),
+        memo: null,
+      },
+    },
+  );
+  const createProposeMsg = new TransactionMessage({
+    payerKey: feePayer, recentBlockhash: blockhash,
+    instructions: [createFromBufferIx, proposalIx, approveCloudIx, approveDeviceIx],
+  }).compileToV0Message(luts);
+  const createProposeTx = new VersionedTransaction(createProposeMsg);
+  await signTransactionNatively(createProposeTx, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
+    { pubkey: devicePubkey, signFn: signWithDevice },
   ]);
+  bundleTxs.push(createProposeTx);
 
-  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-  const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
+  // TX(next): execute
+  const execMsg = new TransactionMessage({
+    payerKey: feePayer, recentBlockhash: blockhash,
+    instructions: [executeIx],
+  }).compileToV0Message(luts);
+  const execTx = new VersionedTransaction(execMsg);
+  await signTransactionNatively(execTx, [{ pubkey: cloudPubkey, signFn: signWithCloud }]);
+  bundleTxs.push(execTx);
 
-  await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64]);
+  // TX(last): close + tip + withdraw
+  const closeMsg = new TransactionMessage({
+    payerKey: feePayer, recentBlockhash: blockhash,
+    instructions: closeTipWithdrawIxs,
+  }).compileToV0Message(luts);
+  const closeTx = new VersionedTransaction(closeMsg);
+  await signTransactionNatively(closeTx, [{ pubkey: cloudPubkey, signFn: signWithCloud }]);
+  bundleTxs.push(closeTx);
 
-  const signature = bs58.encode(tx2.signatures[0]);
-  return { signature };
+  if (bundleTxs.length > 5) {
+    throw new Error(
+      `Transaction message too large (${messageBytes.length} bytes): needs ${bundleTxs.length} TXs but Jito max is 5`,
+    );
+  }
+
+  const txLabels = ['bufferCreate', ...extendChunks.map((_, i) => `bufferExtend${i}`), 'createFromBuffer+propose', 'execute', 'close+tip'];
+  const bundle: string[] = [];
+  for (let i = 0; i < bundleTxs.length; i++) {
+    const raw = bundleTxs[i].serialize();
+    console.log(`[executeVaultTx] Bundle TX${i} (${txLabels[i]}): ${raw.length} bytes`);
+    if (raw.length > MAX_TX_SIZE) {
+      throw new Error(`TX${i} (${txLabels[i]}) is ${raw.length} bytes, exceeds ${MAX_TX_SIZE} limit`);
+    }
+    bundle.push(Buffer.from(raw).toString('base64'));
+  }
+  console.log('[executeVaultTx] Buffer bundle:', bundleTxs.length, 'transactions');
+  await apiService.sendBundle(bundle);
+  return { signature: bs58.encode(execTx.signatures[0]) };
 }
 
 /**
