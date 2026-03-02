@@ -591,6 +591,7 @@ export async function executeVaultTransaction(
     kitIxToWeb3(createWithdrawInstruction(
       kitAddress(cloudPubkey.toBase58()),
       kitAddress(vaultPda.toBase58()),
+      TARGET_CLOUD_BALANCE,
     )),
   );
 
