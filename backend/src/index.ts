@@ -26,6 +26,15 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Debug log relay — mobile client POSTs logs here so they appear in the server console
+app.post('/debug/log', (req, res) => {
+  const { tag, lines } = req.body;
+  for (const line of lines ?? []) {
+    console.log(`[mobile:${tag}]`, line);
+  }
+  res.json({ ok: true });
+});
+
 // Database connection
 if (!MONGODB_URI){
   throw new Error('MONGODB_URI is required');

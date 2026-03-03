@@ -69,6 +69,10 @@ class ApiService {
     return res.json();
   }
 
+  async debugLog(tag: string, lines: string[]): Promise<void> {
+    await this.post('/debug/log', { tag, lines });
+  }
+
   async deposit(params: {
     type: string;
     mint: string;
