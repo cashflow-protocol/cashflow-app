@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,13 +15,13 @@ import { useAssets } from '../hooks/useAssets';
 import { useEarnTokens } from '../hooks/useEarnTokens';
 import { useSolPrice } from '../hooks/useSolPrice';
 import ActionButton from '../components/ActionButton';
-import AssetItem from '../components/AssetItem';
 import AssetRow from '../components/AssetRow';
 import EarnTokenItem from '../components/EarnTokenItem';
 import SectionCard from '../components/SectionCard';
 import StatBox from '../components/StatBox';
 import type { TabName } from '../components/TabBar';
-import { ReceiveIcon, SendIcon, ConvertIcon, RewardsIcon } from '../assets/home-icons';
+import { ReceiveIcon, SendIcon, ConvertIcon, RewardsIcon, ProfileIcon } from '../assets/home-icons';
+import ComingSoonModal from '../components/ComingSoonModal';
 
 // Bottom padding to account for floating tab bar
 const TAB_BAR_PADDING = 120;
@@ -39,6 +39,8 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
   const { assets, totalUsdValue: assetsTotalUsd, loading: assetsLoading } = useAssets();
   const { tokens, loading: earnLoading } = useEarnTokens();
   const { price: solPrice, loading: solPriceLoading } = useSolPrice();
+  const [rewardsModalVisible, setRewardsModalVisible] = useState(false);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
 
   // Top 3 assets sorted by USD value descending
   const topAssets = useMemo(() => {
@@ -85,12 +87,6 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
   const totalBalance = assetsTotalUsd + earnStats.totalDeposited;
   const isLoading = assetsLoading || earnLoading;
 
-  // Mock operations data (untouched)
-  const operations = [
-    { name: 'Deposit', subtitle: 'Jupiter Lend', amount: '1000.69 JupUSD', isPositive: true },
-    { name: 'Deposit', subtitle: 'Kamino', amount: '69.00 USDC', isPositive: true },
-    { name: 'Deposit', subtitle: 'Kamino', amount: '-69.00 USDC', isPositive: false },
-  ];
 
   return (
     <View style={styles.container}>
@@ -112,10 +108,15 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
         {/* Status Bar Area */}
         <SafeAreaView edges={['top']} style={styles.statusBar}>
           <View style={styles.statusBarContent}>
-            <TouchableOpacity style={styles.profileIcon}>
-              <View style={styles.profileIconPlaceholder} />
+            <TouchableOpacity
+              onPress={() => setProfileModalVisible(true)}
+            >
+              <ProfileIcon size={44} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.rewardsIcon}>
+            <TouchableOpacity
+              style={styles.rewardsIcon}
+              onPress={() => setRewardsModalVisible(true)}
+            >
               <RewardsIcon size={36} />
             </TouchableOpacity>
           </View>
@@ -212,22 +213,6 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
           )}
         </SectionCard>
 
-        {/* Operations Section */}
-        <SectionCard
-          title="Operations"
-          onMorePress={() => console.log('More operations')}
-        >
-          {operations.map((op, index) => (
-            <AssetItem
-              key={index}
-              name={op.name}
-              subtitle={op.subtitle}
-              amount={op.amount}
-              iconColor="#14F195"
-              isPositive={op.isPositive}
-            />
-          ))}
-        </SectionCard>
 
         {/* Notification */}
         <View style={styles.notification}>
@@ -270,6 +255,21 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
       </ScrollView>
 
       {/* Tab bar is rendered by App.tsx */}
+
+      <ComingSoonModal
+        visible={rewardsModalVisible}
+        onClose={() => setRewardsModalVisible(false)}
+        icon={<RewardsIcon size={48} color="#175DA3" />}
+        title="Rewards"
+        subtitle="Rewards are under development. You'll be able to get rewards for current Cashflow usage, so check it out and earn some yield."
+      />
+      <ComingSoonModal
+        visible={profileModalVisible}
+        onClose={() => setProfileModalVisible(false)}
+        icon={<ProfileIcon size={48} />}
+        title="Profile"
+        subtitle="Custom NFT profile pictures, social interactions, and much more. Coming soon."
+      />
     </View>
   );
 }
@@ -295,18 +295,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 8,
   },
-  profileIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#fff',
-  },
-  profileIconPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F95357',
-  },
   rewardsIcon: {
     width: 44,
     height: 44,
@@ -318,7 +306,7 @@ const styles = StyleSheet.create({
     height: 160,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 0
   },
   balanceAmount: {
     fontSize: 48,
@@ -330,7 +318,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-evenly',
     paddingHorizontal: 20,
-    marginTop: -20,
+    marginTop: 0,
     marginBottom: 20,
   },
   scrollView: {

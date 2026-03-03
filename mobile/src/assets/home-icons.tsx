@@ -1,5 +1,5 @@
 import React from 'react';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 
 interface IconProps {
   size?: number;
@@ -42,6 +42,30 @@ export function ConvertIcon({ size = 32, color = '#D5E4FF' }: IconProps) {
       <Path
         d="M20.2318 14.6402C20.5853 15.0645 21.2159 15.1218 21.6402 14.7682L27.6402 9.76823C27.8682 9.57823 28 9.29679 28 9.00001C28 8.70323 27.8682 8.42178 27.6402 8.23178L21.6402 3.23178C21.2159 2.87822 20.5853 2.93554 20.2318 3.35982C19.8782 3.7841 19.9355 4.41466 20.3598 4.76823L24.238 8.00001H5C4.44772 8.00001 4 8.44772 4 9.00001C4 9.55229 4.44772 10 5 10H24.2379L20.3598 13.2318C19.9355 13.5853 19.8782 14.2159 20.2318 14.6402Z"
         fill={color}
+      />
+    </Svg>
+  );
+}
+
+export function ProfileIcon({ size = 32 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <Defs>
+        <LinearGradient id="profileGrad" x1="0" y1="16" x2="32" y2="16" gradientUnits="userSpaceOnUse">
+          <Stop stopColor="#2B95C9" />
+          <Stop offset="1" stopColor="#5DC2E8" />
+        </LinearGradient>
+      </Defs>
+      <Circle cx="16" cy="16" r="16" fill="url(#profileGrad)" />
+      <Path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M20.7728 12.0227C20.7728 14.6586 18.636 16.7955 16.0001 16.7955C13.3642 16.7955 11.2274 14.6586 11.2274 12.0227C11.2274 9.38682 13.3642 7.25 16.0001 7.25C18.636 7.25 20.7728 9.38682 20.7728 12.0227ZM19.5228 12.0227C19.5228 13.9683 17.9456 15.5455 16.0001 15.5455C14.0545 15.5455 12.4774 13.9683 12.4774 12.0227C12.4774 10.0772 14.0545 8.5 16.0001 8.5C17.9456 8.5 19.5228 10.0772 19.5228 12.0227Z"
+        fill="white"
+      />
+      <Path
+        d="M9.75 22.25C9.75 21.5596 10.3096 21 11 21H16H21C21.6904 21 22.25 21.5596 22.25 22.25V24.125C22.25 24.4702 22.5298 24.75 22.875 24.75C23.2202 24.75 23.5 24.4702 23.5 24.125V22.25C23.5 20.8693 22.3807 19.75 21 19.75H11C9.61929 19.75 8.5 20.8693 8.5 22.25V24.125C8.5 24.4702 8.77982 24.75 9.125 24.75C9.47018 24.75 9.75 24.4702 9.75 24.125V22.25Z"
+        fill="white"
       />
     </Svg>
   );
