@@ -22,6 +22,7 @@ import StatBox from '../components/StatBox';
 import type { TabName } from '../components/TabBar';
 import { ReceiveIcon, SendIcon, ConvertIcon, RewardsIcon, ProfileIcon } from '../assets/home-icons';
 import ComingSoonModal from '../components/ComingSoonModal';
+import ReceiveModal from '../components/ReceiveModal';
 
 // Bottom padding to account for floating tab bar
 const TAB_BAR_PADDING = 120;
@@ -41,6 +42,8 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
   const { price: solPrice, loading: solPriceLoading } = useSolPrice();
   const [rewardsModalVisible, setRewardsModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [convertModalVisible, setConvertModalVisible] = useState(false);
+  const [receiveModalVisible, setReceiveModalVisible] = useState(false);
 
   // Top 3 assets sorted by USD value descending
   const topAssets = useMemo(() => {
@@ -134,7 +137,7 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
           <ActionButton
             icon={<ReceiveIcon size={32} />}
             label="Receive"
-            onPress={() => console.log('Receive')}
+            onPress={() => setReceiveModalVisible(true)}
             backgroundColor="#171D26"
           />
           <ActionButton
@@ -146,7 +149,7 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
           <ActionButton
             icon={<ConvertIcon size={32} />}
             label="Convert"
-            onPress={() => console.log('Convert')}
+            onPress={() => setConvertModalVisible(true)}
             backgroundColor="#171D26"
           />
         </View>
@@ -269,6 +272,17 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
         icon={<ProfileIcon size={48} />}
         title="Profile"
         subtitle="Custom NFT profile pictures, social interactions, and much more. Coming soon."
+      />
+      <ReceiveModal
+        visible={receiveModalVisible}
+        onClose={() => setReceiveModalVisible(false)}
+      />
+      <ComingSoonModal
+        visible={convertModalVisible}
+        onClose={() => setConvertModalVisible(false)}
+        icon={<ConvertIcon size={48} color="#175DA3" />}
+        title="Convert"
+        subtitle="Token swaps powered by Jupiter. Coming soon."
       />
     </View>
   );
