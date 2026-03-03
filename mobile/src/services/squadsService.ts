@@ -7,6 +7,7 @@ import {
   TransactionMessage,
   TransactionInstruction,
   SystemProgram,
+  ComputeBudgetProgram,
 } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import bs58 from 'bs58';
@@ -40,7 +41,7 @@ const JITO_TIP_ACCOUNTS = [
   'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL6d33',
   '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT',
 ];
-const JITO_TIP_LAMPORTS = 100_000; // 0.0001 SOL
+const JITO_TIP_LAMPORTS = 500_000; // 0.0005 SOL
 
 // Address Lookup Table for transaction compression (fetched from backend config)
 let cachedLuts: AddressLookupTableAccount[] | null = null;
@@ -87,9 +88,12 @@ export interface CreateMultisigResult {
 
 /**
  * Build vaultTransactionExecute instruction WITHOUT an RPC read.
- * We already have the inner TransactionMessage, so we can derive the
- * remaining accounts from its compiled V0 form — same ordering the
- * on-chain program will see.
+ *
+ * Uses the SDK's own serialisation to produce the exact same inner-message
+ * byte layout that vaultTransactionCreate stores on-chain (which allows
+ * program IDs to live in LUTs via `compileToWrappedMessageV0`).
+ * Standard web3.js `compileToV0Message` keeps program IDs in static keys,
+ * so using it here would produce a mismatched account list.
  */
 function buildVaultExecuteIx(
   multisigPda: PublicKey,
@@ -97,24 +101,64 @@ function buildVaultExecuteIx(
   member: PublicKey,
   vaultPda: PublicKey,
   innerMessage: TransactionMessage,
+  luts: AddressLookupTableAccount[],
 ): TransactionInstruction {
   const [proposalPda] = multisig.getProposalPda({ multisigPda, transactionIndex });
   const [transactionPda] = multisig.getTransactionPda({ multisigPda, index: transactionIndex });
 
-  const compiled = innerMessage.compileToV0Message();
-  const keys = compiled.staticAccountKeys;
-  const { numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts } = compiled.header;
+  // Serialize with SDK's custom compilation (program IDs can go into LUTs),
+  // then deserialize to get the exact account layout stored on-chain.
+  const messageBytes = multisig.utils.transactionMessageToMultisigTransactionMessageBytes({
+    message: innerMessage,
+    addressLookupTableAccounts: luts.length > 0 ? luts : undefined,
+    vaultPda,
+  });
+  const [msg] = (multisig.types as any).transactionMessageBeet.deserialize(
+    Buffer.from(messageBytes),
+  );
 
-  const numSigners = numRequiredSignatures;
-  const numWritableSigners = numRequiredSignatures - numReadonlySignedAccounts;
-  const numWritableNonSigners = keys.length - numRequiredSignatures - numReadonlyUnsignedAccounts;
+  const accountMetas: { pubkey: PublicKey; isWritable: boolean; isSigner: boolean }[] = [];
 
-  const accountMetas = keys.map((pubkey, i) => ({
-    pubkey,
-    isWritable: i < numWritableSigners ||
-      (i >= numSigners && (i - numSigners) < numWritableNonSigners),
-    isSigner: i < numSigners && !pubkey.equals(vaultPda),
-  }));
+  // 1. LUT account keys — needed for on-chain validation
+  for (const lookup of msg.addressTableLookups) {
+    accountMetas.push({
+      pubkey: lookup.accountKey,
+      isWritable: false,
+      isSigner: false,
+    });
+  }
+
+  // 2. Static account keys with proper writable/signer flags
+  for (let i = 0; i < msg.accountKeys.length; i++) {
+    const pubkey = msg.accountKeys[i];
+    const isWritable = i < msg.numWritableSigners ||
+      (i >= msg.numSigners && (i - msg.numSigners) < msg.numWritableNonSigners);
+    accountMetas.push({
+      pubkey,
+      isWritable,
+      isSigner: i < msg.numSigners && !pubkey.equals(vaultPda),
+    });
+  }
+
+  // 3. LUT-resolved addresses (writable first, then readonly — per LUT)
+  const lutMap = new Map(luts.map((l) => [l.key.toBase58(), l]));
+  for (const lookup of msg.addressTableLookups) {
+    const lutAccount = lutMap.get(lookup.accountKey.toBase58());
+    if (!lutAccount) continue;
+
+    for (const idx of lookup.writableIndexes) {
+      const pubkey = lutAccount.state.addresses[idx];
+      if (pubkey) {
+        accountMetas.push({ pubkey, isWritable: true, isSigner: false });
+      }
+    }
+    for (const idx of lookup.readonlyIndexes) {
+      const pubkey = lutAccount.state.addresses[idx];
+      if (pubkey) {
+        accountMetas.push({ pubkey, isWritable: false, isSigner: false });
+      }
+    }
+  }
 
   return multisig.generated.createVaultTransactionExecuteInstruction(
     {
@@ -126,6 +170,7 @@ function buildVaultExecuteIx(
     },
   );
 }
+
 
 /** Convert a @solana/kit Instruction to a web3.js TransactionInstruction. */
 function kitIxToWeb3(ix: ReturnType<typeof createWithdrawInstruction>): TransactionInstruction {
@@ -556,6 +601,7 @@ export async function executeVaultTransaction(
     vaultIndex: 0,
     ephemeralSigners: 0,
     transactionMessage: innerMessage,
+    addressLookupTableAccounts: luts.length > 0 ? luts : undefined,
   });
 
   const proposalIx = multisig.instructions.proposalCreate({
@@ -584,6 +630,7 @@ export async function executeVaultTransaction(
     cloudPubkey,
     vaultPda,
     innerMessage,
+    luts,
   );
 
   // --- TX 3: Close (if rentCollector set) + withdraw cloud SOL back to vault + Jito tip ---
@@ -607,45 +654,104 @@ export async function executeVaultTransaction(
   );
 
   // --- Build all transactions with one blockhash (Jito bundle) ---
-  const msg1 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: [createVaultTxIx, proposalIx, approveCloudIx, approveDeviceIx],
-  }).compileToV0Message(luts);
-  const tx1 = new VersionedTransaction(msg1);
-  await signTransactionNatively(tx1, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-    { pubkey: devicePubkey, signFn: signWithDevice },
-  ]);
+  const debugLines: string[] = [];
+  debugLines.push(`LUTs: ${luts.length} total (base: ${baseLuts.length}, extra: ${extraLutAccounts.length})`);
+  if (extraLookupTables?.length) debugLines.push(`Extra LUT addresses: ${extraLookupTables.join(', ')}`);
+  debugLines.push(`Inner instructions: ${txInstructions.length}`);
 
-  const msg2 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: [executeIx],
-  }).compileToV0Message(luts);
-  const tx2 = new VersionedTransaction(msg2);
-  await signTransactionNatively(tx2, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-  ]);
+  // Log account counts per instruction in the inner message
+  for (let i = 0; i < txInstructions.length; i++) {
+    const ix = txInstructions[i];
+    debugLines.push(`  ix[${i}] program=${ix.programId.toBase58()} accounts=${ix.keys.length} data=${ix.data.length}b`);
+  }
 
-  const msg3 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: tx3Instructions,
-  }).compileToV0Message(luts);
-  const tx3 = new VersionedTransaction(msg3);
-  await signTransactionNatively(tx3, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-  ]);
+  const collectTxAccounts = (label: string, msg: ReturnType<TransactionMessage['compileToV0Message']>) => {
+    const keys = msg.staticAccountKeys.map((k) => k.toBase58());
+    const lutEntries = msg.addressTableLookups.map((lut) =>
+      `LUT:${lut.accountKey.toBase58()} (${lut.writableIndexes.length}w/${lut.readonlyIndexes.length}r)`,
+    );
+    debugLines.push(`${label}: ${keys.length} static keys, ${msg.addressTableLookups.length} LUTs`);
+    debugLines.push(`${label} static: ${keys.join(', ')}`);
+    if (lutEntries.length) debugLines.push(`${label} LUTs: ${lutEntries.join(', ')}`);
+  };
 
-  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-  const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
+  try {
+    // TX1: create vault transaction (heavy — embeds entire inner message as data)
+    const msg1 = new TransactionMessage({
+      payerKey: feePayer,
+      recentBlockhash: blockhash,
+      instructions: [createVaultTxIx],
+    }).compileToV0Message(luts);
+    collectTxAccounts('TX1 (create)', msg1);
+    const tx1 = new VersionedTransaction(msg1);
+    debugLines.push(`TX1 size: ${tx1.serialize().length} bytes`);
+    await signTransactionNatively(tx1, [
+      { pubkey: cloudPubkey, signFn: signWithCloud },
+    ]);
 
-  await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64]);
+    // TX2: propose + approve×2
+    const msg2 = new TransactionMessage({
+      payerKey: feePayer,
+      recentBlockhash: blockhash,
+      instructions: [proposalIx, approveCloudIx, approveDeviceIx],
+    }).compileToV0Message(luts);
+    collectTxAccounts('TX2 (propose+approve)', msg2);
+    const tx2 = new VersionedTransaction(msg2);
+    debugLines.push(`TX2 size: ${tx2.serialize().length} bytes`);
+    await signTransactionNatively(tx2, [
+      { pubkey: cloudPubkey, signFn: signWithCloud },
+      { pubkey: devicePubkey, signFn: signWithDevice },
+    ]);
 
-  const signature = bs58.encode(tx2.signatures[0]);
-  return { signature };
+    // TX3: execute (needs extra CU for complex CPI chains like Kamino)
+    const msg3 = new TransactionMessage({
+      payerKey: feePayer,
+      recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
+        executeIx,
+      ],
+    }).compileToV0Message(luts);
+    collectTxAccounts('TX3 (execute)', msg3);
+    const tx3 = new VersionedTransaction(msg3);
+    debugLines.push(`TX3 size: ${tx3.serialize().length} bytes`);
+    await signTransactionNatively(tx3, [
+      { pubkey: cloudPubkey, signFn: signWithCloud },
+    ]);
+
+    // TX4: close + tip + withdraw cloud SOL back to vault
+    const msg4 = new TransactionMessage({
+      payerKey: feePayer,
+      recentBlockhash: blockhash,
+      instructions: tx3Instructions,
+    }).compileToV0Message(luts);
+    collectTxAccounts('TX4 (close+tip+withdraw)', msg4);
+    const tx4 = new VersionedTransaction(msg4);
+    debugLines.push(`TX4 size: ${tx4.serialize().length} bytes`);
+    await signTransactionNatively(tx4, [
+      { pubkey: cloudPubkey, signFn: signWithCloud },
+    ]);
+
+    // Send debug info to backend console
+    await apiService.debugLog('VaultTx', debugLines);
+
+    // Serialize AFTER signing — unsigned txs have all-zero signatures
+    // which Jito treats as duplicates (first sig = tx ID).
+    const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
+    const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
+    const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
+    const tx4Base64 = Buffer.from(tx4.serialize()).toString('base64');
+
+    await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64]);
+
+    const signature = bs58.encode(tx3.signatures[0]);
+    return { signature };
+  } catch (err: any) {
+    debugLines.push(`ERROR: ${err.message}`);
+    // Await so the logs arrive before we re-throw
+    await apiService.debugLog('VaultTx', debugLines).catch(() => {});
+    throw err;
+  }
 }
 
 /**
