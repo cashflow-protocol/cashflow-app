@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   },
   sheet: {
     position: 'absolute',
-    bottom: 0,
+    bottom: -80,
     left: 0,
     right: 0,
   },
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 40,
+    paddingBottom: 120,
     gap: 16,
   },
   handleContainer: {
