@@ -2,10 +2,11 @@ import React from 'react';
 import {
   View,
   Text,
-  Modal,
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
+import BottomSheet from './BottomSheet';
+
 interface ComingSoonModalProps {
   visible: boolean;
   onClose: () => void;
@@ -22,75 +23,33 @@ export default function ComingSoonModal({
   subtitle = 'This feature is under development and will be available soon.',
 }: ComingSoonModalProps) {
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-          <View style={styles.modalContent}>
-            {/* Handle bar */}
-            <View style={styles.handleContainer}>
-              <View style={styles.handle} />
-            </View>
-
-            {/* Icon */}
-            {icon && (
-              <View style={styles.iconContainer}>
-                {icon}
-              </View>
-            )}
-
-            {/* Title & subtitle */}
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.subtitle}>{subtitle}</Text>
-
-            {/* Close button */}
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={onClose}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.closeButtonText}>Got it</Text>
-            </TouchableOpacity>
+    <BottomSheet visible={visible} onClose={onClose}>
+      <View style={styles.content}>
+        {icon && (
+          <View style={styles.iconContainer}>
+            {icon}
           </View>
+        )}
+
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.subtitle}>{subtitle}</Text>
+
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={onClose}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.closeButtonText}>Got it</Text>
         </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
+      </View>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 40,
+  content: {
     alignItems: 'center',
     gap: 16,
-  },
-  handleContainer: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#D0D0D0',
   },
   iconContainer: {
     width: 80,

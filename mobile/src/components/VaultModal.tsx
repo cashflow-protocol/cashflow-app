@@ -2,16 +2,14 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  Modal,
   StyleSheet,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
   Image,
   ImageSourcePropType,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
+import BottomSheet from './BottomSheet';
 import type { EarnTokenType, EarnPosition } from '../types/earn';
 import { getTokenIcon } from '../assets/token-icons';
 import apiService from '../services/apiService';
@@ -215,27 +213,7 @@ export default function VaultModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.keyboardView}
-        >
-          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-            <View style={styles.modalContent}>
-              {/* Handle bar */}
-              <View style={styles.handleContainer}>
-                <View style={styles.handle} />
-              </View>
+    <BottomSheet visible={visible} onClose={onClose} avoidKeyboard>
 
               {/* Vault header */}
               <View style={styles.vaultHeader}>
@@ -343,41 +321,11 @@ export default function VaultModal({
                   </Text>
                 )}
               </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </TouchableOpacity>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  keyboardView: {
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 40,
-    gap: 16,
-  },
-  handleContainer: {
-    alignItems: 'center',
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#D0D0D0',
-  },
   vaultHeader: {
     flexDirection: 'row',
     alignItems: 'center',
