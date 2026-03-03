@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   Image,
+  ImageSourcePropType,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -22,6 +23,11 @@ const PROTOCOL_LABELS: Record<EarnTokenType, string> = {
   jupiter: 'Jupiter',
   kamino: 'Kamino',
   drift: 'Drift',
+};
+const PROTOCOL_ICONS: Record<EarnTokenType, ImageSourcePropType> = {
+  jupiter: require('../assets/protocol-icons/jupiter.png'),
+  kamino: require('../assets/protocol-icons/kamino.png'),
+  drift: require('../assets/protocol-icons/drift.png'),
 };
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const SOL_RENT_RESERVE = BigInt(10_000_000); // 0.01 SOL in lamports
@@ -233,8 +239,13 @@ export default function VaultModal({
 
               {/* Vault header */}
               <View style={styles.vaultHeader}>
-                <View style={styles.tokenIconContainer}>
-                  <Image source={localIcon ?? { uri: logoUrl }} style={styles.tokenIcon} />
+                <View style={styles.iconStack}>
+                  <View style={styles.tokenIconContainer}>
+                    <Image source={localIcon ?? { uri: logoUrl }} style={styles.tokenIcon} />
+                  </View>
+                  <View style={styles.protocolBadge}>
+                    <Image source={PROTOCOL_ICONS[type]} style={styles.protocolIcon} />
+                  </View>
                 </View>
                 <View style={styles.vaultInfo}>
                   <Text style={styles.vaultTitle} numberOfLines={1}>{vaultTitle || `${PROTOCOL_LABELS[type]} - ${symbol}`}</Text>
@@ -372,6 +383,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  iconStack: {
+    width: 48,
+    height: 48,
+  },
   tokenIconContainer: {
     width: 44,
     height: 44,
@@ -385,6 +400,25 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+  },
+  protocolBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E8EAF1',
+    overflow: 'hidden',
+  },
+  protocolIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
   vaultInfo: {
     flex: 1,

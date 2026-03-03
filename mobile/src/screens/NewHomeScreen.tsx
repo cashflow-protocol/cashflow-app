@@ -1,40 +1,90 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { useWallet } from '../hooks/useWallet';
+import { useAssets } from '../hooks/useAssets';
+import { useEarnTokens } from '../hooks/useEarnTokens';
+import { useSolPrice } from '../hooks/useSolPrice';
 import ActionButton from '../components/ActionButton';
 import AssetItem from '../components/AssetItem';
+import AssetRow from '../components/AssetRow';
+import EarnTokenItem from '../components/EarnTokenItem';
 import SectionCard from '../components/SectionCard';
 import StatBox from '../components/StatBox';
+import type { TabName } from '../components/TabBar';
 
 // Bottom padding to account for floating tab bar
 const TAB_BAR_PADDING = 120;
 
-export default function NewHomeScreen() {
+function formatUsd(value: number): string {
+  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+interface NewHomeScreenProps {
+  onNavigateToTab?: (tab: TabName) => void;
+}
+
+export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
   const { wallet, balance, connect } = useWallet();
+  const { assets, totalUsdValue: assetsTotalUsd, loading: assetsLoading } = useAssets();
+  const { tokens, loading: earnLoading } = useEarnTokens();
+  const { price: solPrice, loading: solPriceLoading } = useSolPrice();
 
-  // Mock data - replace with real data from your backend/blockchain
-  const assets = [
-    { name: 'SOL', subtitle: 'Solana', amount: '1,000.69', iconColor: '#14F195' },
-    { name: 'USDC', subtitle: 'Circle USD', amount: '100', iconColor: '#3985D8' },
-    { name: 'LUMEN', subtitle: 'Lumenless', amount: '100,000,000', iconColor: '#9C42FF' },
-  ];
+  // Top 3 assets sorted by USD value descending
+  const topAssets = useMemo(() => {
+    return [...assets]
+      .sort((a, b) => b.usdValue - a.usdValue)
+      .slice(0, 3);
+  }, [assets]);
 
-  const earnDeposits = [
-    { name: 'Deposit', subtitle: 'Jupiter Lend', amount: '1000.69 JupUSD', isPositive: true },
-    { name: 'Deposit', subtitle: 'Kamino', amount: '69.00 USDC', isPositive: true },
-    { name: 'Deposit', subtitle: 'Kamino', amount: '-69.00 USDC', isPositive: false },
-  ];
+  // Earn calculations (same pattern as EarnScreen)
+  const earnStats = useMemo(() => {
+    const totalDeposited = tokens.reduce(
+      (sum, t) => sum + (t.position?.balance.usdValue ?? 0), 0,
+    );
 
+    const withPositions = tokens.filter(
+      (t) => t.position && t.position.balance.usdValue > 0,
+    );
+
+    let avgApy = 0;
+    if (withPositions.length > 0) {
+      const totalUsd = withPositions.reduce(
+        (sum, t) => sum + t.position!.balance.usdValue, 0,
+      );
+      const weightedSum = withPositions.reduce(
+        (sum, t) => sum + (t.rewardsRate / 100) * t.position!.balance.usdValue, 0,
+      );
+      avgApy = weightedSum / totalUsd;
+    }
+
+    const annualizedIncome = totalDeposited * avgApy / 100;
+
+    return { totalDeposited, avgApy, annualizedIncome };
+  }, [tokens]);
+
+  // Top 3 earn positions sorted by position USD value descending
+  const topEarnPositions = useMemo(() => {
+    return tokens
+      .filter((t) => t.position && t.position.balance.usdValue > 0)
+      .sort((a, b) => b.position!.balance.usdValue - a.position!.balance.usdValue)
+      .slice(0, 3);
+  }, [tokens]);
+
+  // Combined total balance
+  const totalBalance = assetsTotalUsd + earnStats.totalDeposited;
+  const isLoading = assetsLoading || earnLoading;
+
+  // Mock operations data (untouched)
   const operations = [
     { name: 'Deposit', subtitle: 'Jupiter Lend', amount: '1000.69 JupUSD', isPositive: true },
     { name: 'Deposit', subtitle: 'Kamino', amount: '69.00 USDC', isPositive: true },
@@ -67,7 +117,9 @@ export default function NewHomeScreen() {
 
       {/* Balance Display */}
       <View style={styles.balanceSection}>
-        <Text style={styles.balanceAmount}>$ {balance.toFixed(2)}</Text>
+        <Text style={styles.balanceAmount}>
+          {isLoading ? '...' : formatUsd(totalBalance)}
+        </Text>
       </View>
 
       {/* Action Buttons */}
@@ -107,39 +159,62 @@ export default function NewHomeScreen() {
         {/* Assets Section */}
         <SectionCard
           title="Assets"
-          onMorePress={() => console.log('More assets')}
+          onMorePress={() => onNavigateToTab?.('assets')}
         >
-          {assets.map((asset, index) => (
-            <AssetItem
-              key={index}
-              name={asset.name}
-              subtitle={asset.subtitle}
-              amount={asset.amount}
-              iconColor={asset.iconColor}
-            />
-          ))}
+          {assetsLoading ? (
+            <ActivityIndicator size="small" color="#175DA3" />
+          ) : topAssets.length === 0 ? (
+            <Text style={styles.emptyText}>No assets</Text>
+          ) : (
+            topAssets.map((asset) => (
+              <AssetRow key={asset.mint} item={asset} compact />
+            ))
+          )}
         </SectionCard>
 
         {/* Earn Section */}
         <SectionCard
           title="Earn"
-          onMorePress={() => console.log('More earn')}
+          onMorePress={() => onNavigateToTab?.('earn')}
         >
-          <View style={styles.statsRow}>
-            <StatBox label="Balance" value="$1,000,000" />
-            <StatBox label="APY" value="7.77%" />
-            <StatBox label="Annualized" value="$77,000" />
-          </View>
-          {earnDeposits.map((deposit, index) => (
-            <AssetItem
-              key={index}
-              name={deposit.name}
-              subtitle={deposit.subtitle}
-              amount={deposit.amount}
-              iconColor="#14F195"
-              isPositive={deposit.isPositive}
-            />
-          ))}
+          {earnLoading ? (
+            <ActivityIndicator size="small" color="#19C394" />
+          ) : (
+            <>
+              <View style={styles.statsRow}>
+                <StatBox
+                  label="Balance"
+                  value={formatUsd(earnStats.totalDeposited)}
+                />
+                <StatBox
+                  label="APY"
+                  value={earnStats.avgApy > 0 ? `${earnStats.avgApy.toFixed(2)}%` : '--'}
+                />
+                <StatBox
+                  label="Annualized"
+                  value={earnStats.annualizedIncome > 0 ? formatUsd(earnStats.annualizedIncome) : '--'}
+                />
+              </View>
+              {topEarnPositions.length === 0 ? (
+                <Text style={styles.emptyText}>No active positions</Text>
+              ) : (
+                topEarnPositions.map((token) => (
+                  <EarnTokenItem
+                    key={`${token.type}:${token.mint}:${token.vaultAddress}`}
+                    type={token.type}
+                    mint={token.mint}
+                    symbol={token.symbol}
+                    vaultTitle={token.vaultTitle}
+                    logoUrl={token.logoUrl}
+                    rewardsRate={token.rewardsRate}
+                    positionAmount={token.position?.balance.uiAmount}
+                    positionUsdValue={token.position?.balance.usdValue}
+                    compact
+                  />
+                ))
+              )}
+            </>
+          )}
         </SectionCard>
 
         {/* Operations Section */}
@@ -178,7 +253,9 @@ export default function NewHomeScreen() {
             </View>
             <View>
               <Text style={styles.solPriceLabel}>SOL</Text>
-              <Text style={styles.solPriceValue}>$125.69</Text>
+              <Text style={styles.solPriceValue}>
+                {solPriceLoading ? '...' : solPrice != null ? formatUsd(solPrice) : '--'}
+              </Text>
             </View>
           </View>
           <View style={styles.helpButtons}>
@@ -277,6 +354,12 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: 16,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#808080',
+    textAlign: 'center',
+    paddingVertical: 8,
   },
   notification: {
     backgroundColor: '#fff',

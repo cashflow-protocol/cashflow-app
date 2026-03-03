@@ -58,7 +58,7 @@ function App() {
         return <MoreScreen onNavigate={handleNavigate} />;
       case 'home':
       default:
-        return <NewHomeScreen />;
+        return <NewHomeScreen onNavigateToTab={handleTabPress} />;
     }
   };
 

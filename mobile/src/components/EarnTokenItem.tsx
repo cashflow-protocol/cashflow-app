@@ -23,7 +23,14 @@ interface EarnTokenItemProps {
   logoUrl: string;
   rewardsRate: number;
   positionAmount?: number;
+  positionUsdValue?: number;
+  /** When true, shows deposit amount instead of APY, hides position bar, removes shadow. */
+  compact?: boolean;
   onPress?: () => void;
+}
+
+function formatUsd(value: number): string {
+  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export default function EarnTokenItem({
@@ -34,6 +41,8 @@ export default function EarnTokenItem({
   logoUrl,
   rewardsRate,
   positionAmount,
+  positionUsdValue,
+  compact,
   onPress,
 }: EarnTokenItemProps) {
   const apyPercent = (rewardsRate / 100).toFixed(2);
@@ -43,7 +52,7 @@ export default function EarnTokenItem({
   const hasPosition = positionAmount != null && positionAmount > 0;
 
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.container, compact && styles.containerCompact]} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.row}>
         {/* Icon stack: stablecoin icon with protocol badge */}
         <View style={styles.iconStack}>
@@ -61,11 +70,18 @@ export default function EarnTokenItem({
           <Text style={styles.protocol}>{protocolLabel} · {symbol}</Text>
         </View>
 
-        {/* Right side: APY */}
-        <Text style={styles.apy}>{apyPercent}%</Text>
+        {/* Right side: APY or deposit value */}
+        {compact && hasPosition ? (
+          <View style={styles.depositRight}>
+            <Text style={styles.depositUsd}>{positionUsdValue != null ? formatUsd(positionUsdValue) : ''}</Text>
+            <Text style={styles.depositAmount}>{positionAmount.toFixed(2)} {symbol}</Text>
+          </View>
+        ) : (
+          <Text style={styles.apy}>{apyPercent}%</Text>
+        )}
       </View>
 
-      {hasPosition && (
+      {!compact && hasPosition && (
         <View style={styles.positionBar}>
           <Text style={styles.positionLabel}>Your deposit</Text>
           <Text style={styles.positionAmount}>{positionAmount.toFixed(2)} {symbol}</Text>
@@ -86,6 +102,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
+  },
+  containerCompact: {
+    backgroundColor: 'transparent',
+    padding: 0,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   row: {
     flexDirection: 'row',
@@ -146,6 +168,19 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#138001',
+  },
+  depositRight: {
+    alignItems: 'flex-end',
+  },
+  depositUsd: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+  },
+  depositAmount: {
+    fontSize: 13,
+    color: '#6B7B8D',
+    marginTop: 2,
   },
   positionBar: {
     flexDirection: 'row',
