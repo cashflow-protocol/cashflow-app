@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
@@ -20,7 +21,7 @@ import EarnTokenItem from '../components/EarnTokenItem';
 import SectionCard from '../components/SectionCard';
 import StatBox from '../components/StatBox';
 import type { TabName } from '../components/TabBar';
-import { ReceiveIcon, SendIcon, ConvertIcon, RewardsIcon, ProfileIcon } from '../assets/home-icons';
+import { ReceiveIcon, SendIcon, ConvertIcon, RewardsIcon, ProfileIcon, SupportIcon, QuestionsIcon } from '../assets/home-icons';
 import ComingSoonModal from '../components/ComingSoonModal';
 import ReceiveModal from '../components/ReceiveModal';
 import SendModal from '../components/SendModal';
@@ -244,12 +245,12 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
             </View>
           </View>
           <View style={styles.helpButtons}>
-            <TouchableOpacity style={styles.helpButton}>
-              <Text style={styles.helpButtonIcon}>💬</Text>
+            <TouchableOpacity style={styles.helpButton} onPress={() => Linking.openURL('https://t.me/heymike777')}>
+              <SupportIcon size={20} />
               <Text style={styles.helpButtonText}>Support</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.helpButton}>
-              <Text style={styles.helpButtonIcon}>❓</Text>
+            <TouchableOpacity style={styles.helpButton} onPress={() => Linking.openURL('https://t.me/heymike777')}>
+              <QuestionsIcon size={20} />
               <Text style={styles.helpButtonText}>Questions</Text>
             </TouchableOpacity>
           </View>
