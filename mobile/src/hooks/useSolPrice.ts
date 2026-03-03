@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-
-const SOL_MINT = 'So11111111111111111111111111111111111111112';
-const PRICE_URL = `https://api.jup.ag/price/v2?ids=${SOL_MINT}`;
+import apiService from '../services/apiService';
 
 export function useSolPrice() {
   const [price, setPrice] = useState<number | null>(null);
@@ -9,11 +7,9 @@ export function useSolPrice() {
 
   const fetchPrice = useCallback(async () => {
     try {
-      const res = await fetch(PRICE_URL);
-      const json = await res.json();
-      const raw = json?.data?.[SOL_MINT]?.price;
-      if (raw != null) {
-        setPrice(parseFloat(raw));
+      const solPrice = await apiService.getSolPrice();
+      if (solPrice > 0) {
+        setPrice(solPrice);
       }
     } catch {
       // Silent fail — price display will show "--"

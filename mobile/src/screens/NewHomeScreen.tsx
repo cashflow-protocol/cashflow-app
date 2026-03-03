@@ -8,6 +8,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Linking,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
@@ -22,6 +23,7 @@ import SectionCard from '../components/SectionCard';
 import StatBox from '../components/StatBox';
 import type { TabName } from '../components/TabBar';
 import { ReceiveIcon, SendIcon, ConvertIcon, RewardsIcon, ProfileIcon, SupportIcon, QuestionsIcon } from '../assets/home-icons';
+import { getTokenIcon } from '../assets/token-icons';
 import ComingSoonModal from '../components/ComingSoonModal';
 import ReceiveModal from '../components/ReceiveModal';
 import SendModal from '../components/SendModal';
@@ -219,23 +221,11 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
           )}
         </SectionCard>
 
-
-        {/* Notification */}
-        <View style={styles.notification}>
-          <View style={styles.notificationIcon}>
-            <Text style={styles.notificationIconText}>🔔</Text>
-          </View>
-          <View>
-            <Text style={styles.notificationTitle}>Some notification</Text>
-            <Text style={styles.notificationSubtitle}>Notification</Text>
-          </View>
-        </View>
-
         {/* Useful Section */}
         <SectionCard title="Useful">
           <View style={styles.solPrice}>
-            <View style={styles.solPriceIcon}>
-              <Text style={styles.solPriceIconText}>◎</Text>
+            <View style={styles.solPriceIconContainer}>
+              <Image source={getTokenIcon('native')!} style={styles.solPriceIcon} />
             </View>
             <View>
               <Text style={styles.solPriceLabel}>SOL</Text>
@@ -398,19 +388,20 @@ const styles = StyleSheet.create({
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 10,
   },
-  solPriceIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#14F195',
-    justifyContent: 'center',
-    alignItems: 'center',
+  solPriceIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
-  solPriceIconText: {
-    fontSize: 20,
-    color: '#fff',
+  solPriceIcon: {
+    width: 24,
+    height: 24,
   },
   solPriceLabel: {
     fontSize: 14,

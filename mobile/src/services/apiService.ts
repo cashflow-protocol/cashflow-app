@@ -154,6 +154,11 @@ class ApiService {
     return { transactionId: res.transactionId, instructions: res.instructions };
   }
 
+  async getSolPrice(): Promise<number> {
+    const res = await this.get<{ success: boolean; data: { price: number } }>('/solana/v1/sol-price');
+    return res.data.price;
+  }
+
   async sendTransaction(transaction: string, transactionId: string): Promise<{ signature: string }> {
     const res = await this.post<{
       success: boolean;

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { createSolanaRpc, address } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from '@solana/kit';
-import { DBManager, JitoManager, TokenManager, TransferManager } from '../managers';
+import { DBManager, JitoManager, PriceManager, TokenManager, TransferManager } from '../managers';
 import { TransactionAction } from '../models/Transaction';
 import { EarnTokenModel } from '../models';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
@@ -11,6 +11,7 @@ const dbManager = new DBManager();
 const jitoManager = new JitoManager();
 const tokenManager = new TokenManager();
 const transferManager = new TransferManager();
+const priceManager = new PriceManager();
 const kShouldSimulate = false; // TODO: re-enable after confirming bundle lands on-chain (Helius sim gives false rent error on Jito tip accounts)
 
 const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
@@ -454,6 +455,12 @@ router.get('/assets', async (req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   }
+});
+
+// GET /solana/v1/sol-price - Return cached SOL price
+router.get('/sol-price', (_req: Request, res: Response) => {
+  const price = priceManager.getPrice('SOL');
+  res.json({ success: true, data: { price } });
 });
 
 export default router;
