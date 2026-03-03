@@ -138,6 +138,22 @@ class ApiService {
     return { transactionId: res.transactionId, instructions: res.instructions, lookupTableAddress: res.lookupTableAddress, extraLookupTables: res.extraLookupTables };
   }
 
+  async transferInstructions(params: {
+    mint: string;
+    amount: string;
+    ownerAddress: string;
+    destinationAddress: string;
+    walletAddress: string;
+    decimals: number;
+  }): Promise<{ transactionId: string; instructions: SerializedInstruction[] }> {
+    const res = await this.post<{
+      success: boolean;
+      transactionId: string;
+      instructions: SerializedInstruction[];
+    }>('/solana/v1/transfer', params);
+    return { transactionId: res.transactionId, instructions: res.instructions };
+  }
+
   async sendTransaction(transaction: string, transactionId: string): Promise<{ signature: string }> {
     const res = await this.post<{
       success: boolean;

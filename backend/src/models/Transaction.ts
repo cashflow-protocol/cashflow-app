@@ -4,6 +4,7 @@ import { EarnTokenType } from '../types';
 export enum TransactionAction {
   DEPOSIT = 'deposit',
   WITHDRAW = 'withdraw',
+  TRANSFER = 'transfer',
 }
 
 export enum TransactionStatus {
@@ -25,8 +26,8 @@ export class Transaction {
   @prop({ required: true, enum: TransactionAction })
   public action!: TransactionAction;
 
-  @prop({ required: true, enum: EarnTokenType })
-  public type!: EarnTokenType;
+  @prop({ enum: EarnTokenType })
+  public type?: EarnTokenType;
 
   @prop({ required: true })
   public mint!: string;
@@ -42,6 +43,9 @@ export class Transaction {
 
   @prop({ required: true, enum: TransactionStatus, default: TransactionStatus.CREATED })
   public status!: TransactionStatus;
+
+  @prop()
+  public destinationAddress?: string;
 
   @prop()
   public signature?: string;

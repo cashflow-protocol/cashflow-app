@@ -37,7 +37,6 @@ const JITO_TIP_ACCOUNTS = [
   'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
   'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
   '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5',
-  'HFqU5x63VTqvQss8hp11i4bVqkfRtQ7NmXwkiNPLNiNj',
   'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
   'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL',
   '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT',

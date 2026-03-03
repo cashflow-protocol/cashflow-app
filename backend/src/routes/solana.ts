@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { createSolanaRpc, address } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from '@solana/kit';
-import { DBManager, JitoManager, TokenManager } from '../managers';
+import { DBManager, JitoManager, TokenManager, TransferManager } from '../managers';
+import { TransactionAction } from '../models/Transaction';
 import { EarnTokenModel } from '../models';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
@@ -9,6 +10,7 @@ const router = Router();
 const dbManager = new DBManager();
 const jitoManager = new JitoManager();
 const tokenManager = new TokenManager();
+const transferManager = new TransferManager();
 const kShouldSimulate = false; // TODO: re-enable after confirming bundle lands on-chain (Helius sim gives false rent error on Jito tip accounts)
 
 const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
@@ -204,6 +206,53 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error?.message || 'Failed to send bundle',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// POST /solana/v1/transfer - Get raw transfer instructions for Squads vault flow
+router.post('/transfer', async (req: Request, res: Response) => {
+  try {
+    const { mint, amount, ownerAddress, destinationAddress, walletAddress, decimals } = req.body;
+
+    if (!mint || !amount || !ownerAddress || !destinationAddress || !walletAddress || decimals == null) {
+      res.status(400).json({
+        success: false,
+        error: 'mint, amount, ownerAddress, destinationAddress, walletAddress, and decimals are required',
+      });
+      return;
+    }
+
+    console.log(`TRANSFER ownerAddress: ${ownerAddress}, dest: ${destinationAddress}, mint: ${mint}, amount: ${amount}, decimals: ${decimals}`);
+
+    const instructions = await transferManager.getTransferInstructions(
+      mint,
+      amount,
+      ownerAddress,
+      destinationAddress,
+      decimals,
+    );
+
+    const record = await dbManager.createTransaction({
+      action: TransactionAction.TRANSFER,
+      mint,
+      amount,
+      walletAddress,
+      destinationAddress,
+    });
+
+    res.json({
+      success: true,
+      transactionId: record._id,
+      instructions,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('Error creating transfer instructions:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to create transfer instructions',
       timestamp: new Date().toISOString(),
     });
   }

@@ -23,6 +23,7 @@ import type { TabName } from '../components/TabBar';
 import { ReceiveIcon, SendIcon, ConvertIcon, RewardsIcon, ProfileIcon } from '../assets/home-icons';
 import ComingSoonModal from '../components/ComingSoonModal';
 import ReceiveModal from '../components/ReceiveModal';
+import SendModal from '../components/SendModal';
 
 // Bottom padding to account for floating tab bar
 const TAB_BAR_PADDING = 120;
@@ -37,13 +38,14 @@ interface NewHomeScreenProps {
 
 export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
   const { wallet, balance, connect } = useWallet();
-  const { assets, totalUsdValue: assetsTotalUsd, loading: assetsLoading } = useAssets();
+  const { assets, totalUsdValue: assetsTotalUsd, loading: assetsLoading, refresh: refreshAssets } = useAssets();
   const { tokens, loading: earnLoading } = useEarnTokens();
   const { price: solPrice, loading: solPriceLoading } = useSolPrice();
   const [rewardsModalVisible, setRewardsModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [convertModalVisible, setConvertModalVisible] = useState(false);
   const [receiveModalVisible, setReceiveModalVisible] = useState(false);
+  const [sendModalVisible, setSendModalVisible] = useState(false);
 
   // Top 3 assets sorted by USD value descending
   const topAssets = useMemo(() => {
@@ -143,7 +145,7 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
           <ActionButton
             icon={<SendIcon size={32} />}
             label="Send"
-            onPress={() => console.log('Send')}
+            onPress={() => setSendModalVisible(true)}
             backgroundColor="#171D26"
           />
           <ActionButton
@@ -276,6 +278,11 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
       <ReceiveModal
         visible={receiveModalVisible}
         onClose={() => setReceiveModalVisible(false)}
+      />
+      <SendModal
+        visible={sendModalVisible}
+        onClose={() => setSendModalVisible(false)}
+        onSuccess={refreshAssets}
       />
       <ComingSoonModal
         visible={convertModalVisible}

@@ -86,11 +86,12 @@ export class DBManager {
    */
   async createTransaction(data: {
     action: TransactionAction;
-    type: EarnTokenType;
+    type?: EarnTokenType;
     mint: string;
-    vaultAddress: string;
+    vaultAddress?: string;
     amount: string;
     walletAddress: string;
+    destinationAddress?: string;
     unsignedTransaction?: string;
   }) {
     return TransactionModel.create(data);
