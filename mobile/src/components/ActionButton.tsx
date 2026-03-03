@@ -12,7 +12,7 @@ export default function ActionButton({
   icon,
   label,
   onPress,
-  backgroundColor = '#175DA3'
+  backgroundColor = '#171D26'
 }: ActionButtonProps) {
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
@@ -31,22 +31,24 @@ export default function ActionButton({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   iconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   icon: {
     width: 32,
     height: 32,
   },
   label: {
-    fontSize: 12,
-    color: '#000',
-    fontWeight: '400',
+    fontSize: 13,
+    color: '#171D26',
+    fontWeight: '500',
   },
 });

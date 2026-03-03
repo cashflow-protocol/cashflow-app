@@ -21,6 +21,7 @@ import EarnTokenItem from '../components/EarnTokenItem';
 import SectionCard from '../components/SectionCard';
 import StatBox from '../components/StatBox';
 import type { TabName } from '../components/TabBar';
+import { ReceiveIcon, SendIcon, ConvertIcon, RewardsIcon } from '../assets/home-icons';
 
 // Bottom padding to account for floating tab bar
 const TAB_BAR_PADDING = 120;
@@ -103,59 +104,53 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
         end={{ x: 0, y: 1 }}
       />
 
-      {/* Status Bar Area */}
-      <SafeAreaView edges={['top']} style={styles.statusBar}>
-        <View style={styles.statusBarContent}>
-          <TouchableOpacity style={styles.profileIcon}>
-            <View style={styles.profileIconPlaceholder} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingsIcon}>
-            <Text style={styles.settingsIconText}>⚙</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-
-      {/* Balance Display */}
-      <View style={styles.balanceSection}>
-        <Text style={styles.balanceAmount}>
-          {isLoading ? '...' : formatUsd(totalBalance)}
-        </Text>
-      </View>
-
-      {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        <ActionButton
-          icon={<Text style={styles.actionIcon}>↓</Text>}
-          label="Receive"
-          onPress={() => console.log('Receive')}
-          backgroundColor="#175DA3"
-        />
-        <ActionButton
-          icon={<Text style={styles.actionIcon}>↑</Text>}
-          label="Send"
-          onPress={() => console.log('Send')}
-          backgroundColor="#175DA3"
-        />
-        <ActionButton
-          icon={<Text style={styles.actionIcon}>⇄</Text>}
-          label="Convert"
-          onPress={() => console.log('Convert')}
-          backgroundColor="#175DA3"
-        />
-        <ActionButton
-          icon={<Text style={styles.actionIcon}>+</Text>}
-          label="More"
-          onPress={() => console.log('More')}
-          backgroundColor="#175DA3"
-        />
-      </View>
-
-      {/* Scrollable Content */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Status Bar Area */}
+        <SafeAreaView edges={['top']} style={styles.statusBar}>
+          <View style={styles.statusBarContent}>
+            <TouchableOpacity style={styles.profileIcon}>
+              <View style={styles.profileIconPlaceholder} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.rewardsIcon}>
+              <RewardsIcon size={36} />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+
+        {/* Balance Display */}
+        <View style={styles.balanceSection}>
+          <Text style={styles.balanceAmount}>
+            {isLoading ? '...' : formatUsd(totalBalance)}
+          </Text>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          <ActionButton
+            icon={<ReceiveIcon size={32} />}
+            label="Receive"
+            onPress={() => console.log('Receive')}
+            backgroundColor="#171D26"
+          />
+          <ActionButton
+            icon={<SendIcon size={32} />}
+            label="Send"
+            onPress={() => console.log('Send')}
+            backgroundColor="#171D26"
+          />
+          <ActionButton
+            icon={<ConvertIcon size={32} />}
+            label="Convert"
+            onPress={() => console.log('Convert')}
+            backgroundColor="#171D26"
+          />
+        </View>
+
+        <View style={styles.sections}>
         {/* Assets Section */}
         <SectionCard
           title="Assets"
@@ -271,6 +266,7 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
         </SectionCard>
 
         <View style={{ height: TAB_BAR_PADDING }} />
+        </View>
       </ScrollView>
 
       {/* Tab bar is rendered by App.tsx */}
@@ -300,27 +296,23 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   profileIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#fff',
   },
   profileIconPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#F95357',
   },
-  settingsIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  rewardsIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  settingsIconText: {
-    fontSize: 20,
-    color: '#fff',
   },
   balanceSection: {
     height: 160,
@@ -332,22 +324,22 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: '500',
     color: '#fff',
+    textAlign: 'center',
   },
   actionButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 40,
+    justifyContent: 'space-evenly',
+    paddingHorizontal: 20,
     marginTop: -20,
     marginBottom: 20,
-  },
-  actionIcon: {
-    fontSize: 24,
-    color: '#fff',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
+    // No horizontal padding here — header/balance/buttons handle their own
+  },
+  sections: {
     paddingHorizontal: 14,
     gap: 14,
   },
