@@ -17,6 +17,7 @@ import { getVault, clearVault, type VaultData } from '../services/vaultStorage';
 import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey, getDevicePrivateKey, deleteAllKeypairs } from '../services/keypairStorage';
 import { reclaimRent } from '../services/squadsService';
 import apiService from '../services/apiService';
+import { APP_VERSION, BUILD_NUMBER } from '../config/version';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
@@ -335,6 +336,8 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
             </TouchableOpacity>
           )}
         </View>
+
+        <Text style={styles.versionText}>App version: {APP_VERSION} ({BUILD_NUMBER})</Text>
       </ScrollView>
     </View>
   );
@@ -579,5 +582,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#B2B2B2',
     fontWeight: '600',
+  },
+  versionText: {
+    fontSize: 12,
+    color: '#B2B2B2',
+    textAlign: 'center',
+    marginTop: 24,
   },
 });
