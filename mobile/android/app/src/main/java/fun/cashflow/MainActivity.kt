@@ -1,4 +1,4 @@
-package fun.cashflow
+package `fun`.cashflow
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

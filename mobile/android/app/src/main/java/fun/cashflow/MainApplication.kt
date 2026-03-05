@@ -1,4 +1,4 @@
-package fun.cashflow
+package `fun`.cashflow
 
 import android.app.Application
 import com.facebook.react.PackageList
@@ -6,7 +6,7 @@ import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
-import fun.cashflow.signing.CashflowSigningPackage
+import `fun`.cashflow.signing.CashflowSigningPackage
 
 class MainApplication : Application(), ReactApplication {
 

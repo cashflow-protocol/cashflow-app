@@ -1,4 +1,4 @@
-package fun.cashflow.signing
+package `fun`.cashflow.signing
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -81,6 +81,27 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
       promise.resolve(base58Encode(pubKey))
     } catch (e: Exception) {
       promise.reject("ERR_GET_KEY", "Failed to get public key: ${e.message}", e)
+    }
+  }
+
+  @ReactMethod
+  override fun exportPrivateKey(tag: String, promise: Promise) {
+    try {
+      val prefs = getPrefs()
+      val encryptedBase64 = prefs.getString("${tag}_seed", null)
+      if (encryptedBase64 == null) {
+        promise.resolve(null)
+        return
+      }
+      val encrypted = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+      val seed = decryptWithKeystore(encrypted)
+      try {
+        promise.resolve(base58Encode(seed))
+      } finally {
+        seed.fill(0)
+      }
+    } catch (e: Exception) {
+      promise.reject("ERR_EXPORT", "Failed to export private key: ${e.message}", e)
     }
   }
 
