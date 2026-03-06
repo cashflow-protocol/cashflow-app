@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  StatusBar,
   TouchableOpacity,
   ActivityIndicator,
   Clipboard,
@@ -128,7 +127,7 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
   if (loading) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" />
+
         <LinearGradient
           colors={['#1E8260', '#19C394']}
           style={styles.headerGradient}
@@ -152,7 +151,7 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
   if (!vaultData) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" />
+
         <LinearGradient
           colors={['#1E8260', '#19C394']}
           style={styles.headerGradient}
@@ -201,7 +200,7 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+
       <LinearGradient
         colors={['#1E8260', '#19C394']}
         style={styles.headerGradient}

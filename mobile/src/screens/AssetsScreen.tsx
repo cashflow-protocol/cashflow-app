@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
-  StatusBar,
   RefreshControl,
   ScrollView,
 } from 'react-native';
@@ -24,7 +23,7 @@ export default function AssetsScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+
 
       <LinearGradient
         colors={['#104982', '#3985D8']}

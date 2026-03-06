@@ -80,6 +80,7 @@ export default function BottomSheet({
       visible={visible}
       transparent
       animationType="none"
+      statusBarTranslucent
       onRequestClose={handleClose}
     >
       <View style={styles.container}>
@@ -129,7 +130,7 @@ const styles = StyleSheet.create({
   },
   sheet: {
     position: 'absolute',
-    bottom: -80,
+    bottom: -200,
     left: 0,
     right: 0,
   },
@@ -142,7 +143,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 120,
+    paddingBottom: 240,
     gap: 16,
   },
   handleContainer: {

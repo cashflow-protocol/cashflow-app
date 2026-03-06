@@ -208,8 +208,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
+          onMomentumScrollEnd={onScroll}
           bounces={false}
         />
 

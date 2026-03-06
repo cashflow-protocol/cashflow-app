@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  StatusBar,
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
@@ -79,7 +78,7 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+
       <LinearGradient
         colors={['#1E8260', '#19C394']}
         style={styles.headerGradient}

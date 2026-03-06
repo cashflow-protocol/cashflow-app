@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  StatusBar,
   TouchableOpacity,
   Clipboard,
   Image,
@@ -139,10 +138,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
           style: 'destructive',
           onPress: async () => {
             await Promise.all([clearVault(), deleteAllKeypairs()]);
-            setVault(null);
-            setCloudPubkey(null);
-            setDevicePubkey(null);
-            setKeysLoaded(false);
+            onNavigate?.('onboarding');
           },
         },
       ],
@@ -151,7 +147,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+
 
       <LinearGradient
         colors={['#1E8260', '#19C394']}

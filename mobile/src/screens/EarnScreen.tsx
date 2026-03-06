@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   ScrollView,
-  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
@@ -64,7 +63,7 @@ export default function EarnScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+
 
       {/* Header Gradient */}
       <LinearGradient

@@ -4,11 +4,11 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StatusBar, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { WalletProvider } from './src/hooks/useWallet';
 import OnboardingScreen from './src/screens/OnboardingScreen';
-import NewHomeScreen from './src/screens/NewHomeScreen';
+import HomeScreen from './src/screens/HomeScreen';
 import EarnScreen from './src/screens/EarnScreen';
 import AssetsScreen from './src/screens/AssetsScreen';
 import MoreScreen from './src/screens/MoreScreen';
@@ -39,6 +39,12 @@ function App() {
   }, []);
 
   const handleNavigate = useCallback((screen: string) => {
+    if (screen === 'onboarding') {
+      setOnboardingDone(false);
+      setActiveTab('home');
+      setSubScreen(null);
+      return;
+    }
     setSubScreen(screen as SubScreen);
   }, []);
 
@@ -70,13 +76,14 @@ function App() {
         return <MoreScreen onNavigate={handleNavigate} />;
       case 'home':
       default:
-        return <NewHomeScreen onNavigateToTab={handleTabPress} />;
+        return <HomeScreen onNavigateToTab={handleTabPress} />;
     }
   };
 
   if (checkingVault) {
     return (
       <SafeAreaProvider>
+        <StatusBar translucent backgroundColor="transparent" />
         <View style={styles.root} />
       </SafeAreaProvider>
     );
@@ -85,6 +92,7 @@ function App() {
   if (!onboardingDone) {
     return (
       <SafeAreaProvider>
+        <StatusBar translucent backgroundColor="transparent" />
         <WalletProvider>
           <OnboardingScreen onComplete={() => setOnboardingDone(true)} />
         </WalletProvider>
@@ -94,6 +102,7 @@ function App() {
 
   return (
     <SafeAreaProvider>
+      <StatusBar translucent backgroundColor="transparent" />
       <WalletProvider>
         <View style={styles.root}>
           {renderScreen()}
