@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from 'react-native';
 
@@ -27,6 +27,7 @@ export default function BottomSheet({
 }: BottomSheetProps) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const keyboardOffset = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
@@ -46,10 +47,41 @@ export default function BottomSheet({
     } else {
       slideAnim.setValue(SCREEN_HEIGHT);
       fadeAnim.setValue(0);
+      keyboardOffset.setValue(0);
     }
-  }, [visible, slideAnim, fadeAnim]);
+  }, [visible, slideAnim, fadeAnim, keyboardOffset]);
+
+  // Listen for keyboard events to shift the sheet up
+  useEffect(() => {
+    if (!avoidKeyboard) return;
+
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      Animated.timing(keyboardOffset, {
+        toValue: -e.endCoordinates.height,
+        duration: Platform.OS === 'ios' ? e.duration : 200,
+        useNativeDriver: true,
+      }).start();
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, (e) => {
+      Animated.timing(keyboardOffset, {
+        toValue: 0,
+        duration: Platform.OS === 'ios' ? (e.duration ?? 200) : 200,
+        useNativeDriver: true,
+      }).start();
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [avoidKeyboard, keyboardOffset]);
 
   const handleClose = () => {
+    Keyboard.dismiss();
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -95,18 +127,17 @@ export default function BottomSheet({
 
         {/* Sliding sheet */}
         <Animated.View
-          style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}
+          style={[
+            styles.sheet,
+            {
+              transform: [
+                { translateY: slideAnim },
+                { translateY: keyboardOffset },
+              ],
+            },
+          ]}
         >
-          {avoidKeyboard ? (
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-              style={styles.keyboardView}
-            >
-              {sheetContent}
-            </KeyboardAvoidingView>
-          ) : (
-            sheetContent
-          )}
+          {sheetContent}
         </Animated.View>
       </View>
     </Modal>
@@ -133,9 +164,6 @@ const styles = StyleSheet.create({
     bottom: -200,
     left: 0,
     right: 0,
-  },
-  keyboardView: {
-    justifyContent: 'flex-end',
   },
   sheetContent: {
     backgroundColor: '#fff',
