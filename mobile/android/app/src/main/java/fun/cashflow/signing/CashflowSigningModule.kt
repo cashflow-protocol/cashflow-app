@@ -96,7 +96,12 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
       val encrypted = Base64.decode(encryptedBase64, Base64.NO_WRAP)
       val seed = decryptWithKeystore(encrypted)
       try {
-        promise.resolve(base58Encode(seed))
+        // Derive public key from seed and return 64-byte keypair (32 private + 32 public)
+        // matching Solana convention and iOS implementation
+        val privateKey = Ed25519PrivateKeyParameters(seed, 0)
+        val pubKey = privateKey.generatePublicKey().encoded
+        val fullKeypair = seed + pubKey
+        promise.resolve(base58Encode(fullKeypair))
       } finally {
         seed.fill(0)
       }
