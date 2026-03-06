@@ -12,7 +12,7 @@ import {
 import * as multisig from '@sqds/multisig';
 import bs58 from 'bs58';
 import { SOLANA_CONFIG } from '../config/solana';
-import { saveVault, type VaultData } from './vaultStorage';
+import { saveVault, getVault, type VaultData } from './vaultStorage';
 import apiService from './apiService';
 import walletService from './walletService';
 import {
@@ -27,6 +27,12 @@ import { createWithdrawInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
 
 const { Permission, Permissions } = multisig.types;
+
+/**
+ * When true, the multisig uses 3-of-3 threshold (cloud + device + wallet).
+ * When false, uses 2-of-2 (cloud + device only), wallet is not a member.
+ */
+export const IS_SOLANA_MOBILE = true;
 
 const TARGET_CLOUD_BALANCE = 25_000_000;   // 0.025 SOL — enough for ~1 vault tx (fees + rent)
 
@@ -227,6 +233,36 @@ async function signTransactionNatively(
 }
 
 /**
+ * Sign specific transactions via MWA wallet (sign-only, not send).
+ * Extracts the wallet's signature from the returned bytes and applies
+ * it to the original transaction objects.
+ */
+async function signTransactionsWithWallet(
+  transactions: VersionedTransaction[],
+  walletTxIndices: number[],
+  walletPubkey: PublicKey,
+): Promise<void> {
+  if (walletTxIndices.length === 0) return;
+
+  const txsToSign = walletTxIndices.map(i => transactions[i]);
+  const serialized = txsToSign.map(tx => new Uint8Array(tx.serialize()));
+  const signedBytes = await walletService.signTransactions(serialized);
+
+  for (let j = 0; j < walletTxIndices.length; j++) {
+    const originalTx = transactions[walletTxIndices[j]];
+    const signedTx = VersionedTransaction.deserialize(signedBytes[j]);
+
+    const accountKeys = originalTx.message.staticAccountKeys;
+    const walletIndex = accountKeys.findIndex((k: PublicKey) => k.equals(walletPubkey));
+    if (walletIndex === -1) {
+      throw new Error(`Wallet ${walletPubkey.toBase58()} not found in transaction`);
+    }
+
+    originalTx.signatures[walletIndex] = signedTx.signatures[walletIndex];
+  }
+}
+
+/**
  * Create a new Squads V4 multisig (2-of-3) with:
  * - cloudKeypair: all permissions, stored in iCloud Keychain (iOS) / encrypted native storage (Android)
  * - deviceKeypair: all permissions, stored device-only (no backup)
@@ -282,11 +318,13 @@ export async function createMultisig(
     creator: creatorPubkey,
     multisigPda,
     configAuthority: null,
-    threshold: 2,
+    threshold: IS_SOLANA_MOBILE ? 3 : 2,
     members: [
       { key: cloudPubkey, permissions: Permissions.all() },
       { key: devicePubkey, permissions: Permissions.all() },
-      { key: creatorPubkey, permissions: Permissions.fromPermissions([Permission.Vote]) },
+      ...(IS_SOLANA_MOBILE
+        ? [{ key: creatorPubkey, permissions: Permissions.all() }]
+        : []),
     ],
     timeLock: 0,
     rentCollector: cloudPubkey,
@@ -333,6 +371,7 @@ export async function createMultisig(
     vaultAddress: vaultPda.toBase58(),
     label: 'Cashflow',
     createdAt: new Date().toISOString(),
+    walletAddress: walletAddress,
   };
   await saveVault(vaultData);
 
@@ -409,6 +448,16 @@ export async function addMember(
   const cloudPubkey = new PublicKey(cloudPubBase58);
   const devicePubkey = new PublicKey(devicePubBase58);
 
+  // Get wallet address for MWA signing (if Solana Mobile)
+  let walletPubkey: PublicKey | null = null;
+  if (IS_SOLANA_MOBILE) {
+    const vaultData = await getVault();
+    if (!vaultData?.walletAddress) {
+      throw new Error('Wallet address not found. Please recreate your vault.');
+    }
+    walletPubkey = new PublicKey(vaultData.walletAddress);
+  }
+
   // Cloud keypair pays for tx fees and rent
   const feePayer = cloudPubkey;
 
@@ -434,7 +483,7 @@ export async function addMember(
   );
   const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
-  // --- Step 1: Create config tx + proposal + approve(cloud) + approve(device) ---
+  // --- Step 1: Create config tx + proposal + approve(cloud) + approve(device) [+ approve(wallet)] ---
   const configTxIx = multisig.instructions.configTransactionCreate({
     multisigPda,
     transactionIndex,
@@ -467,15 +516,24 @@ export async function addMember(
     member: devicePubkey,
   });
 
+  const tx1Instructions = [configTxIx, proposalIx, approveCloudIx, approveDeviceIx];
+  if (IS_SOLANA_MOBILE && walletPubkey) {
+    tx1Instructions.push(multisig.instructions.proposalApprove({
+      multisigPda,
+      transactionIndex,
+      member: walletPubkey,
+    }));
+  }
+
   // --- Build all transactions with one blockhash (Jito bundle) ---
   const luts = await getLuts(connection);
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
-  // TX1: create + propose + approve×2
+  // TX1: create + propose + approve×N
   const msg1 = new TransactionMessage({
     payerKey: feePayer,
     recentBlockhash: blockhash,
-    instructions: [configTxIx, proposalIx, approveCloudIx, approveDeviceIx],
+    instructions: tx1Instructions,
   }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
   await signTransactionNatively(tx1, [
@@ -513,6 +571,11 @@ export async function addMember(
     { pubkey: cloudPubkey, signFn: signWithCloud },
   ]);
 
+  // MWA wallet signing: wallet approves the proposal in TX1
+  if (IS_SOLANA_MOBILE && walletPubkey) {
+    await signTransactionsWithWallet([tx1, tx2], [0], walletPubkey);
+  }
+
   const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
 
@@ -543,6 +606,16 @@ export async function executeVaultTransaction(
   }
   const cloudPubkey = new PublicKey(cloudPubBase58);
   const devicePubkey = new PublicKey(devicePubBase58);
+
+  // Get wallet address for MWA signing (if Solana Mobile)
+  let walletPubkey: PublicKey | null = null;
+  if (IS_SOLANA_MOBILE) {
+    const vaultData = await getVault();
+    if (!vaultData?.walletAddress) {
+      throw new Error('Wallet address not found. Please recreate your vault.');
+    }
+    walletPubkey = new PublicKey(vaultData.walletAddress);
+  }
 
   // Cloud keypair pays for tx fees and rent
   const feePayer = cloudPubkey;
@@ -640,6 +713,15 @@ export async function executeVaultTransaction(
     member: devicePubkey,
   });
 
+  const tx2Instructions = [proposalIx, approveCloudIx, approveDeviceIx];
+  if (IS_SOLANA_MOBILE && walletPubkey) {
+    tx2Instructions.push(multisig.instructions.proposalApprove({
+      multisigPda,
+      transactionIndex,
+      member: walletPubkey,
+    }));
+  }
+
   // --- TX 2: Execute ---
   const executeIx = buildVaultExecuteIx(
     multisigPda,
@@ -706,11 +788,11 @@ export async function executeVaultTransaction(
       { pubkey: cloudPubkey, signFn: signWithCloud },
     ]);
 
-    // TX2: propose + approve×2
+    // TX2: propose + approve×N
     const msg2 = new TransactionMessage({
       payerKey: feePayer,
       recentBlockhash: blockhash,
-      instructions: [proposalIx, approveCloudIx, approveDeviceIx],
+      instructions: tx2Instructions,
     }).compileToV0Message(luts);
     collectTxAccounts('TX2 (propose+approve)', msg2);
     const tx2 = new VersionedTransaction(msg2);
@@ -749,6 +831,11 @@ export async function executeVaultTransaction(
       { pubkey: cloudPubkey, signFn: signWithCloud },
     ]);
 
+    // MWA wallet signing: wallet approves the proposal in TX2
+    if (IS_SOLANA_MOBILE && walletPubkey) {
+      await signTransactionsWithWallet([tx1, tx2, tx3, tx4], [1], walletPubkey);
+    }
+
     // Send debug info to backend console
     await apiService.debugLog('VaultTx', debugLines);
 
@@ -780,6 +867,7 @@ async function setRentCollector(
   cloudPubkey: PublicKey,
   devicePubkey: PublicKey,
   currentTransactionIndex: bigint,
+  walletPubkey: PublicKey | null,
 ): Promise<void> {
   const transactionIndex = currentTransactionIndex + 1n;
 
@@ -815,6 +903,15 @@ async function setRentCollector(
     member: devicePubkey,
   });
 
+  const tx1Instructions = [configTxIx, proposalIx, approveCloudIx, approveDeviceIx];
+  if (IS_SOLANA_MOBILE && walletPubkey) {
+    tx1Instructions.push(multisig.instructions.proposalApprove({
+      multisigPda,
+      transactionIndex,
+      member: walletPubkey,
+    }));
+  }
+
   const executeIx = multisig.instructions.configTransactionExecute({
     multisigPda,
     transactionIndex,
@@ -825,11 +922,11 @@ async function setRentCollector(
   const luts = await getLuts(connection);
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
-  // TX 1: create + propose + approve×2
+  // TX 1: create + propose + approve×N
   const msg1 = new TransactionMessage({
     payerKey: cloudPubkey,
     recentBlockhash: blockhash,
-    instructions: [configTxIx, proposalIx, approveCloudIx, approveDeviceIx],
+    instructions: tx1Instructions,
   }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
   await signTransactionNatively(tx1, [
@@ -847,6 +944,11 @@ async function setRentCollector(
   await signTransactionNatively(tx2, [
     { pubkey: cloudPubkey, signFn: signWithCloud },
   ]);
+
+  // MWA wallet signing: wallet approves the proposal in TX1
+  if (IS_SOLANA_MOBILE && walletPubkey) {
+    await signTransactionsWithWallet([tx1, tx2], [0], walletPubkey);
+  }
 
   const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
@@ -876,6 +978,15 @@ export async function reclaimRent(
   const cloudPubkey = new PublicKey(cloudPubBase58);
   const devicePubkey = new PublicKey(devicePubBase58);
 
+  // Get wallet address for MWA signing (if Solana Mobile)
+  let walletPubkey: PublicKey | null = null;
+  if (IS_SOLANA_MOBILE) {
+    const vaultData = await getVault();
+    if (vaultData?.walletAddress) {
+      walletPubkey = new PublicKey(vaultData.walletAddress);
+    }
+  }
+
   let acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
 
   // Step 1: Ensure rentCollector is set
@@ -886,6 +997,7 @@ export async function reclaimRent(
       cloudPubkey,
       devicePubkey,
       BigInt(acct.transactionIndex.toString()),
+      walletPubkey,
     );
     // Re-fetch after setting
     acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);

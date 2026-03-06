@@ -13,6 +13,7 @@ export interface VaultData {
   vaultAddress: string;
   label: string;
   createdAt: string;
+  walletAddress?: string;
 }
 
 let cachedVault: VaultData | null | undefined = undefined; // undefined = not yet loaded

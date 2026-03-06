@@ -81,12 +81,7 @@ function App() {
   };
 
   if (checkingVault) {
-    return (
-      <SafeAreaProvider>
-        <StatusBar translucent backgroundColor="transparent" />
-        <View style={styles.root} />
-      </SafeAreaProvider>
-    );
+    return null;
   }
 
   if (!onboardingDone) {

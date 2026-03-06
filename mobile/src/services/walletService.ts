@@ -89,6 +89,42 @@ class WalletService {
     });
   }
 
+  async signTransactions(transactions: Uint8Array[]): Promise<Uint8Array[]> {
+    const base64Payloads = transactions.map(tx =>
+      Buffer.from(tx).toString('base64'),
+    );
+
+    console.log('[MWA] starting transact for sign-only...');
+    return transact(async (wallet) => {
+      if (this.authToken) {
+        console.log('[MWA] reauthorizing with existing token...');
+        const auth = await wallet.reauthorize({ auth_token: this.authToken, identity: IDENTITY });
+        this.authToken = auth.auth_token;
+      } else {
+        console.log('[MWA] no token, doing full authorize...');
+        const auth = await wallet.authorize({
+          cluster: SOLANA_CONFIG.cluster,
+          identity: IDENTITY,
+        });
+        this.authToken = auth.auth_token;
+      }
+      console.log('[MWA] authorized, signing (no send)', transactions.length, 'tx(s)...');
+
+      try {
+        const result = await wallet.signTransactions({
+          payloads: base64Payloads,
+        });
+        console.log('[MWA] signTransactions done, payloads:', result.signed_payloads.length);
+        return result.signed_payloads.map((payload: string) =>
+          new Uint8Array(Buffer.from(payload, 'base64')),
+        );
+      } catch (err: any) {
+        console.error('[MWA] signTransactions FAILED:', err?.message || err);
+        throw err;
+      }
+    });
+  }
+
   async disconnect(): Promise<void> {
     try {
       await transact(async (wallet) => {

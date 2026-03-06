@@ -22,6 +22,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     reactNativeFactory = factory
 
     window = UIWindow(frame: UIScreen.main.bounds)
+    window?.backgroundColor = .black
 
     factory.startReactNative(
       withModuleName: "Cashflow",
