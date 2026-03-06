@@ -14,6 +14,9 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { createMultisig } from '../services/squadsService';
 import { useWallet } from '../hooks/useWallet';
+import walletService from '../services/walletService';
+import Toast from '../components/Toast';
+import { MIN_LAMPORTS_FOR_VAULT } from '../config/constants';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -142,6 +145,9 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
   const [currentPage, setCurrentPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastDescription, setToastDescription] = useState('');
 
   const isLastPage = currentPage === PAGES.length - 1;
 
@@ -159,6 +165,18 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
       setStatusText('Connecting wallet...');
       const account = await connectWallet();
       if (!account) return;
+
+      setStatusText('Checking balance...');
+      const balanceSol = await walletService.getBalance(account.publicKey);
+      const minSol = MIN_LAMPORTS_FOR_VAULT / 1e9;
+      if (balanceSol < minSol) {
+        setToastMessage('Insufficient SOL Balance');
+        setToastDescription(
+          `You need at least ${minSol} SOL to create a vault.\nCurrent balance: ${balanceSol.toFixed(4)} SOL.`,
+        );
+        setToastVisible(true);
+        return;
+      }
 
       setStatusText('Creating vault...');
       await createMultisig(account.publicKey as string);
@@ -197,6 +215,13 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
+      />
+      <Toast
+        visible={toastVisible}
+        message={toastMessage}
+        description={toastDescription}
+        type="warning"
+        onDismiss={() => setToastVisible(false)}
       />
 
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>

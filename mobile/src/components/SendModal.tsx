@@ -19,8 +19,10 @@ import { executeVaultTransaction } from '../services/squadsService';
 import { useAssets } from '../hooks/useAssets';
 import type { WalletAsset } from '../types/earn';
 
+import { TARGET_CLOUD_BALANCE as TARGET_CLOUD_BALANCE_NUM } from '../config/constants';
+
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
-const TARGET_CLOUD_BALANCE = BigInt(25_000_000); // 0.025 SOL — reserved for vault tx fees
+const TARGET_CLOUD_BALANCE = BigInt(TARGET_CLOUD_BALANCE_NUM);
 
 type Step = 'select' | 'amount';
 

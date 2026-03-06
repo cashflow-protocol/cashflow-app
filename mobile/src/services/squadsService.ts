@@ -25,16 +25,9 @@ import {
 } from './keypairStorage';
 import { createWithdrawInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
+import { IS_SOLANA_MOBILE, TARGET_CLOUD_BALANCE } from '../config/constants';
 
 const { Permission, Permissions } = multisig.types;
-
-/**
- * When true, the multisig uses 3-of-3 threshold (cloud + device + wallet).
- * When false, uses 2-of-2 (cloud + device only), wallet is not a member.
- */
-export const IS_SOLANA_MOBILE = true;
-
-const TARGET_CLOUD_BALANCE = 25_000_000;   // 0.025 SOL — enough for ~1 vault tx (fees + rent)
 
 // 8 Jito tip accounts — pick one at random per bundle
 const JITO_TIP_ACCOUNTS = [
