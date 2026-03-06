@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import apiService from '../services/apiService';
 import { getVault } from '../services/vaultStorage';
-import { useWallet } from './useWallet';
 import type { EarnToken, EarnPosition } from '../types/earn';
 
 export interface EarnTokenWithPosition extends EarnToken {
@@ -35,15 +34,12 @@ function mergeTokensAndPositions(earnTokens: EarnToken[], positions: EarnPositio
 }
 
 export function useEarnTokens() {
-  const { wallet } = useWallet();
-  const connectedAddress = wallet?.publicKey as string | undefined;
   const [tokens, setTokens] = useState<EarnTokenWithPosition[]>(cachedTokens ?? []);
   const [loading, setLoading] = useState(cachedTokens === null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async (isRefresh = false) => {
-    if (!connectedAddress) return;
     if (isRefresh) {
       setRefreshing(true);
     } else {
@@ -52,10 +48,10 @@ export function useEarnTokens() {
     setError(null);
     try {
       const vault = await getVault();
-      const positionsAddress = vault?.vaultAddress ?? connectedAddress;
+      if (!vault?.vaultAddress) return;
       const [earnTokens, positions] = await Promise.all([
         apiService.getEarnTokens(),
-        apiService.getPositions(positionsAddress),
+        apiService.getPositions(vault.vaultAddress),
       ]);
 
       const merged = mergeTokensAndPositions(earnTokens, positions);
@@ -67,7 +63,7 @@ export function useEarnTokens() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [connectedAddress]);
+  }, []);
 
   useEffect(() => {
     if (cachedTokens === null) {

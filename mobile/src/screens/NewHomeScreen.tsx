@@ -160,23 +160,24 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
         </View>
 
         <View style={styles.sections}>
-        {/* Assets Section */}
+        {/* Assets Section — hidden when empty */}
+        {(assetsLoading || topAssets.length > 0) && (
         <SectionCard
           title="Assets"
           onMorePress={() => onNavigateToTab?.('assets')}
         >
           {assetsLoading ? (
             <ActivityIndicator size="small" color="#175DA3" />
-          ) : topAssets.length === 0 ? (
-            <Text style={styles.emptyText}>No assets</Text>
           ) : (
             topAssets.map((asset) => (
               <AssetRow key={asset.mint} item={asset} compact />
             ))
           )}
         </SectionCard>
+        )}
 
-        {/* Earn Section */}
+        {/* Earn Section — hidden when no positions */}
+        {(earnLoading || topEarnPositions.length > 0) && (
         <SectionCard
           title="Earn"
           onMorePress={() => onNavigateToTab?.('earn')}
@@ -199,27 +200,24 @@ export default function NewHomeScreen({ onNavigateToTab }: NewHomeScreenProps) {
                   value={earnStats.annualizedIncome > 0 ? formatUsd(earnStats.annualizedIncome) : '--'}
                 />
               </View>
-              {topEarnPositions.length === 0 ? (
-                <Text style={styles.emptyText}>No active positions</Text>
-              ) : (
-                topEarnPositions.map((token) => (
-                  <EarnTokenItem
-                    key={`${token.type}:${token.mint}:${token.vaultAddress}`}
-                    type={token.type}
-                    mint={token.mint}
-                    symbol={token.symbol}
-                    vaultTitle={token.vaultTitle}
-                    logoUrl={token.logoUrl}
-                    rewardsRate={token.rewardsRate}
-                    positionAmount={token.position?.balance.uiAmount}
-                    positionUsdValue={token.position?.balance.usdValue}
-                    compact
-                  />
-                ))
-              )}
+              {topEarnPositions.map((token) => (
+                <EarnTokenItem
+                  key={`${token.type}:${token.mint}:${token.vaultAddress}`}
+                  type={token.type}
+                  mint={token.mint}
+                  symbol={token.symbol}
+                  vaultTitle={token.vaultTitle}
+                  logoUrl={token.logoUrl}
+                  rewardsRate={token.rewardsRate}
+                  positionAmount={token.position?.balance.uiAmount}
+                  positionUsdValue={token.position?.balance.usdValue}
+                  compact
+                />
+              ))}
             </>
           )}
         </SectionCard>
+        )}
 
         {/* Useful Section */}
         <SectionCard title="Useful">

@@ -6,7 +6,7 @@ interface WalletContextType {
   wallet: WalletAccount | null;
   isConnecting: boolean;
   balance: number;
-  connect: () => Promise<void>;
+  connect: () => Promise<WalletAccount | null>;
   disconnect: () => Promise<void>;
   refreshBalance: () => Promise<void>;
 }
@@ -25,7 +25,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [wallet]);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (): Promise<WalletAccount | null> => {
     setIsConnecting(true);
     try {
       const account = await walletService.connect();
@@ -33,9 +33,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setWallet(account);
         const bal = await walletService.getBalance(account.publicKey);
         setBalance(bal);
+        return account;
       }
+      return null;
     } catch (error) {
       console.error('Connection error:', error);
+      return null;
     } finally {
       setIsConnecting(false);
     }

@@ -12,8 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
-import walletService from '../services/walletService';
 import { createMultisig } from '../services/squadsService';
+import { useWallet } from '../hooks/useWallet';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -138,10 +138,10 @@ const PAGES: PageData[] = [
 
 export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const flatListRef = useRef<FlatList>(null);
+  const { connect: connectWallet } = useWallet();
   const [currentPage, setCurrentPage] = useState(0);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [statusText, setStatusText] = useState('');
 
   const isLastPage = currentPage === PAGES.length - 1;
 
@@ -153,42 +153,32 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     }
   }, [currentPage]);
 
-  const handleConnectWallet = useCallback(async () => {
-    setConnecting(true);
+  const handleSetup = useCallback(async () => {
+    setLoading(true);
     try {
-      const account = await walletService.connect();
-      if (account) {
-        setWalletAddress(account.publicKey as string);
-      } else {
-        Alert.alert('Connection Failed', 'Could not connect to wallet. Please try again.');
-      }
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to connect wallet.');
-    } finally {
-      setConnecting(false);
-    }
-  }, []);
+      setStatusText('Connecting wallet...');
+      const account = await connectWallet();
+      if (!account) return;
 
-  const handleCreateVault = useCallback(async () => {
-    if (!walletAddress) return;
-    setCreating(true);
-    try {
-      await createMultisig(walletAddress);
+      setStatusText('Creating vault...');
+      await createMultisig(account.publicKey as string);
       onComplete();
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to create vault. Please try again.');
+      const msg = err?.message || '';
+      // Don't show error if user dismissed the wallet popup
+      if (!msg.includes('CancellationException')) {
+        Alert.alert('Error', msg || 'Something went wrong. Please try again.');
+      }
     } finally {
-      setCreating(false);
+      setLoading(false);
+      setStatusText('');
     }
-  }, [walletAddress, onComplete]);
+  }, [connectWallet, onComplete]);
 
   const onScroll = useCallback((e: any) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
     setCurrentPage(page);
   }, []);
-
-  const truncateAddress = (addr: string) =>
-    addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
 
   const renderPage = ({ item }: { item: PageData }) => {
     return (
@@ -244,45 +234,22 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
             >
               <Text style={styles.nextButtonText}>Next</Text>
             </TouchableOpacity>
-          ) : !walletAddress ? (
-            <>
-              <TouchableOpacity
-                style={styles.nextButton}
-                onPress={handleConnectWallet}
-                disabled={connecting}
-                activeOpacity={0.7}
-              >
-                {connecting ? (
-                  <ActivityIndicator color="#175DA3" />
-                ) : (
-                  <Text style={styles.nextButtonText}>Connect Wallet</Text>
-                )}
-              </TouchableOpacity>
-            </>
           ) : (
-            <>
-              <View style={styles.connectedRow}>
-                <View style={styles.connectedDot} />
-                <Text style={styles.connectedText}>
-                  Connected: {truncateAddress(walletAddress)}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.nextButton, creating && styles.buttonDisabled]}
-                onPress={handleCreateVault}
-                disabled={creating}
-                activeOpacity={0.7}
-              >
-                {creating ? (
-                  <View style={styles.loadingRow}>
-                    <ActivityIndicator color="#175DA3" />
-                    <Text style={styles.nextButtonText}>Creating Vault...</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.nextButtonText}>Create Vault</Text>
-                )}
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity
+              style={[styles.nextButton, loading && styles.buttonDisabled]}
+              onPress={handleSetup}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              {loading ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color="#175DA3" />
+                  <Text style={styles.nextButtonText}>{statusText}</Text>
+                </View>
+              ) : (
+                <Text style={styles.nextButtonText}>Get Started</Text>
+              )}
+            </TouchableOpacity>
           )}
         </View>
       </SafeAreaView>
@@ -328,23 +295,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#175DA3',
-  },
-  connectedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  connectedDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#4ADE80',
-  },
-  connectedText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.9)',
   },
   buttonDisabled: {
     opacity: 0.7,

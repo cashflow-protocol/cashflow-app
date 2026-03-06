@@ -1,5 +1,6 @@
 import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol';
 import { address, Address, createSolanaRpc, getBase58Decoder, getBase64Encoder } from '@solana/kit';
+import { Buffer } from 'buffer';
 import { SOLANA_CONFIG } from '../config/solana';
 
 export interface WalletAccount {
@@ -9,7 +10,7 @@ export interface WalletAccount {
 
 const IDENTITY = {
   name: 'Cashflow',
-  uri: 'https://cashflow.app',
+  uri: 'https://cashflow.fun',
   icon: 'favicon.ico',
 };
 
@@ -50,18 +51,41 @@ class WalletService {
   }
 
   async signAndSendTransactions(transactions: Uint8Array[]): Promise<Uint8Array[]> {
+    // MWA expects base64-encoded transaction strings, not raw Uint8Array
+    const base64Payloads = transactions.map(tx =>
+      Buffer.from(tx).toString('base64'),
+    );
+
+    console.log('[MWA] starting transact for signing...');
     return transact(async (wallet) => {
+      // Reauthorize silently if we have a token, otherwise full authorize
       if (this.authToken) {
-        await wallet.reauthorize({ auth_token: this.authToken });
+        console.log('[MWA] reauthorizing with existing token...');
+        const auth = await wallet.reauthorize({ auth_token: this.authToken, identity: IDENTITY });
+        this.authToken = auth.auth_token;
       } else {
+        console.log('[MWA] no token, doing full authorize...');
         const auth = await wallet.authorize({
           cluster: SOLANA_CONFIG.cluster,
           identity: IDENTITY,
         });
         this.authToken = auth.auth_token;
       }
+      console.log('[MWA] authorized, signing', transactions.length, 'tx(s)...');
 
-      return await wallet.signAndSendTransactions({ transactions });
+      try {
+        const result = await wallet.signAndSendTransactions({
+          payloads: base64Payloads,
+        });
+        console.log('[MWA] signAndSendTransactions done, sigs:', result.signatures.length);
+        // Decode base64 signatures back to Uint8Array for callers
+        return result.signatures.map((sig: string) =>
+          new Uint8Array(Buffer.from(sig, 'base64')),
+        );
+      } catch (err: any) {
+        console.error('[MWA] signAndSendTransactions FAILED:', err?.message || err);
+        throw err;
+      }
     });
   }
 

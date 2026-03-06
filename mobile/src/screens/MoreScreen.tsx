@@ -337,6 +337,9 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
           )}
         </View>
 
+        <Text style={styles.devNotice}>
+          This screen is only for testing during development. It will be changed before launch in dApp Store.
+        </Text>
         <Text style={styles.versionText}>App version: {APP_VERSION} ({BUILD_NUMBER})</Text>
       </ScrollView>
     </View>
@@ -583,10 +586,18 @@ const styles = StyleSheet.create({
     color: '#B2B2B2',
     fontWeight: '600',
   },
-  versionText: {
+  devNotice: {
     fontSize: 12,
     color: '#B2B2B2',
     textAlign: 'center',
     marginTop: 24,
+    marginHorizontal: 32,
+    fontStyle: 'italic',
+  },
+  versionText: {
+    fontSize: 12,
+    color: '#B2B2B2',
+    textAlign: 'center',
+    marginTop: 8,
   },
 });
