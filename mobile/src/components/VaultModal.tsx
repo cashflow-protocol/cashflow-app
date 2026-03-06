@@ -133,7 +133,7 @@ export default function VaultModal({
   const exceedsBalance =
     (mode === 'withdraw' && hasPosition && parsedRaw > BigInt(position!.balance.amount)) ||
     (mode === 'deposit' && walletBalance !== null && parsedRaw > walletBalance);
-  const canSubmit = isValidAmount && !exceedsBalance && !loading && !!walletAddress;
+  const canSubmit = isValidAmount && !exceedsBalance && !loading && !!(walletAddress || vaultData);
 
   const handleMaxPress = () => {
     if (mode === 'withdraw' && hasPosition) {
@@ -165,7 +165,7 @@ export default function VaultModal({
           mint,
           vaultAddress,
           amount: rawAmount,
-          walletAddress: walletAddress!,
+          walletAddress: walletAddress ?? vaultData.vaultAddress,
           ownerAddress: vaultData.vaultAddress,
         };
 
