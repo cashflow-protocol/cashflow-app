@@ -1,5 +1,5 @@
 import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol';
-import { address, Address, createSolanaRpc, lamports } from '@solana/kit';
+import { address, Address, createSolanaRpc, getBase58Decoder, getBase64Encoder } from '@solana/kit';
 import { SOLANA_CONFIG } from '../config/solana';
 
 export interface WalletAccount {
@@ -7,8 +7,15 @@ export interface WalletAccount {
   label?: string;
 }
 
+const IDENTITY = {
+  name: 'Cashflow',
+  uri: 'https://cashflow.app',
+  icon: 'favicon.ico',
+};
+
 class WalletService {
   private rpc: ReturnType<typeof createSolanaRpc>;
+  private authToken: string | null = null;
 
   constructor() {
     this.rpc = createSolanaRpc(SOLANA_CONFIG.rpcEndpoint);
@@ -19,17 +26,19 @@ class WalletService {
       const result = await transact(async (wallet) => {
         const authResult = await wallet.authorize({
           cluster: SOLANA_CONFIG.cluster,
-          identity: {
-            name: 'Cashflow',
-            uri: 'https://cashflow.app',
-            icon: 'favicon.ico',
-          },
+          identity: IDENTITY,
         });
 
+        // MWA returns address as base64, convert to base58 for @solana/kit
+        const base64Addr = authResult.accounts[0].address;
+        const bytes = getBase64Encoder().encode(base64Addr);
+        const base58Addr = getBase58Decoder().decode(bytes);
+
+        this.authToken = authResult.auth_token;
+
         return {
-          publicKey: address(authResult.accounts[0].address),
+          publicKey: address(base58Addr),
           label: authResult.accounts[0].label,
-          authToken: authResult.auth_token,
         };
       });
 
@@ -40,11 +49,30 @@ class WalletService {
     }
   }
 
+  async signAndSendTransactions(transactions: Uint8Array[]): Promise<Uint8Array[]> {
+    return transact(async (wallet) => {
+      if (this.authToken) {
+        await wallet.reauthorize({ auth_token: this.authToken });
+      } else {
+        const auth = await wallet.authorize({
+          cluster: SOLANA_CONFIG.cluster,
+          identity: IDENTITY,
+        });
+        this.authToken = auth.auth_token;
+      }
+
+      return await wallet.signAndSendTransactions({ transactions });
+    });
+  }
+
   async disconnect(): Promise<void> {
     try {
       await transact(async (wallet) => {
-        await wallet.deauthorize({ auth_token: '' });
+        if (this.authToken) {
+          await wallet.deauthorize({ auth_token: this.authToken });
+        }
       });
+      this.authToken = null;
     } catch (error) {
       console.error('Failed to disconnect wallet:', error);
     }

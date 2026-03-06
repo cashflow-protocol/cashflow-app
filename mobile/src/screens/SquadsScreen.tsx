@@ -20,7 +20,7 @@ import {
   getVaultBalance,
   type MultisigInfo,
 } from '../services/squadsService';
-import { getDevWalletAddress } from '../services/signingService';
+import { useWallet } from '../hooks/useWallet';
 import type { VaultData } from '../services/vaultStorage';
 
 const squadAvatar = require('../assets/squad-avatar.webp');
@@ -36,6 +36,8 @@ function truncateAddress(addr: string): string {
 }
 
 export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) {
+  const { wallet } = useWallet();
+  const walletAddress = wallet?.publicKey as string | undefined;
   const [vaultData, setVaultData] = useState<VaultData | null>(null);
   const [multisigInfo, setMultisigInfo] = useState<MultisigInfo | null>(null);
   const [balance, setBalance] = useState<number>(0);
@@ -90,9 +92,9 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
   }, []);
 
   const handleCreate = useCallback(async () => {
+    if (!walletAddress) return;
     setCreating(true);
     try {
-      const walletAddress = await getDevWalletAddress();
       const result = await createMultisig(walletAddress);
 
       // Show the vault immediately with local data
@@ -107,7 +109,7 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
     } finally {
       setCreating(false);
     }
-  }, [waitForOnChainData]);
+  }, [walletAddress, waitForOnChainData]);
 
   const copyAddress = (addr: string) => {
     Clipboard.setString(addr);

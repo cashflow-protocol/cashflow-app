@@ -12,9 +12,9 @@ import {
 import * as multisig from '@sqds/multisig';
 import bs58 from 'bs58';
 import { SOLANA_CONFIG } from '../config/solana';
-import { signAndSendTransaction } from './signingService';
 import { saveVault, type VaultData } from './vaultStorage';
 import apiService from './apiService';
+import walletService from './walletService';
 import {
   generateAndStoreCloudKeypair,
   generateAndStoreDeviceKeypair,
@@ -238,11 +238,18 @@ async function signTransactionNatively(
 export async function createMultisig(
   walletAddress: string,
 ): Promise<CreateMultisigResult> {
+  console.log('[createMultisig] start, wallet:', walletAddress);
   const creatorPubkey = new PublicKey(walletAddress);
 
   // Generate keypairs in native code — returns base58 public keys only
+  console.log('[createMultisig] generating cloud keypair...');
   const cloudPubkeyBase58 = await generateAndStoreCloudKeypair();
+  console.log('[createMultisig] cloud:', cloudPubkeyBase58);
+
+  console.log('[createMultisig] generating device keypair...');
   const devicePubkeyBase58 = await generateAndStoreDeviceKeypair();
+  console.log('[createMultisig] device:', devicePubkeyBase58);
+
   const cloudPubkey = new PublicKey(cloudPubkeyBase58);
   const devicePubkey = new PublicKey(devicePubkeyBase58);
 
@@ -257,13 +264,16 @@ export async function createMultisig(
     multisigPda,
     index: 0,
   });
+  console.log('[createMultisig] multisig PDA:', multisigPda.toBase58());
 
   // Fetch program config to get treasury address (required by multisigCreateV2)
+  console.log('[createMultisig] fetching program config...');
   const [programConfigPda] = multisig.getProgramConfigPda({});
   const programConfig = await multisig.accounts.ProgramConfig.fromAccountAddress(
     connection,
     programConfigPda,
   );
+  console.log('[createMultisig] program config fetched');
 
   // --- TX 1: Create multisig + fund cloud key with initial SOL ---
   const createMultisigIx = multisig.instructions.multisigCreateV2({
@@ -289,8 +299,10 @@ export async function createMultisig(
     lamports: TARGET_CLOUD_BALANCE,
   });
 
+  console.log('[createMultisig] fetching LUTs + blockhash...');
   const luts = await getLuts(connection);
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
+  console.log('[createMultisig] building tx...');
   const msg1 = new TransactionMessage({
     payerKey: creatorPubkey,
     recentBlockhash: blockhash,
@@ -301,8 +313,12 @@ export async function createMultisig(
   // Partially sign with the ephemeral createKey (single-use, safe in JS)
   tx1.sign([createKey]);
 
-  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  const { signature } = await signAndSendTransaction(tx1Base64, '');
+  console.log('[createMultisig] signing with wallet and sending...');
+  const [signatureBytes] = await walletService.signAndSendTransactions([
+    new Uint8Array(tx1.serialize()),
+  ]);
+  const signature = bs58.encode(signatureBytes);
+  console.log('[createMultisig] tx sent, signature:', signature);
 
   // Wait for TX 1 to confirm before referencing the multisig account
   await sleep(2000);

@@ -3,10 +3,11 @@
  * @format
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { WalletProvider } from './src/hooks/useWallet';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import NewHomeScreen from './src/screens/NewHomeScreen';
 import EarnScreen from './src/screens/EarnScreen';
 import AssetsScreen from './src/screens/AssetsScreen';
@@ -14,12 +15,23 @@ import MoreScreen from './src/screens/MoreScreen';
 import SquadsScreen from './src/screens/SquadsScreen';
 import AddMemberScreen from './src/screens/AddMemberScreen';
 import TabBar, { type TabName } from './src/components/TabBar';
+import { getVault } from './src/services/vaultStorage';
 
 type SubScreen = 'squads' | 'add-member' | null;
 
 function App() {
+  const [checkingVault, setCheckingVault] = useState(true);
+  const [onboardingDone, setOnboardingDone] = useState(false);
   const [activeTab, setActiveTab] = useState<TabName>('home');
   const [subScreen, setSubScreen] = useState<SubScreen>(null);
+
+  useEffect(() => {
+    (async () => {
+      const vault = await getVault();
+      setOnboardingDone(vault !== null);
+      setCheckingVault(false);
+    })();
+  }, []);
 
   const handleTabPress = useCallback((tab: TabName) => {
     setActiveTab(tab);
@@ -61,6 +73,24 @@ function App() {
         return <NewHomeScreen onNavigateToTab={handleTabPress} />;
     }
   };
+
+  if (checkingVault) {
+    return (
+      <SafeAreaProvider>
+        <View style={styles.root} />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (!onboardingDone) {
+    return (
+      <SafeAreaProvider>
+        <WalletProvider>
+          <OnboardingScreen onComplete={() => setOnboardingDone(true)} />
+        </WalletProvider>
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>

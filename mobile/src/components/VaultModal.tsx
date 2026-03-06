@@ -13,9 +13,12 @@ import BottomSheet from './BottomSheet';
 import type { EarnTokenType, EarnPosition } from '../types/earn';
 import { getTokenIcon } from '../assets/token-icons';
 import apiService from '../services/apiService';
-import { getDevWalletAddress, signAndSendTransaction } from '../services/signingService';
+import walletService from '../services/walletService';
 import { getVault, type VaultData } from '../services/vaultStorage';
 import { executeVaultTransaction } from '../services/squadsService';
+import { useWallet } from '../hooks/useWallet';
+import { Buffer } from 'buffer';
+import bs58 from 'bs58';
 
 const PROTOCOL_LABELS: Record<EarnTokenType, string> = {
   jupiter: 'Jupiter',
@@ -61,12 +64,13 @@ export default function VaultModal({
   rewardsRate,
   position,
 }: VaultModalProps) {
+  const { wallet } = useWallet();
+  const walletAddress = wallet?.publicKey as string | undefined;
   const [mode, setMode] = useState<Mode>('deposit');
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [walletBalance, setWalletBalance] = useState<bigint | null>(null);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [vaultData, setVaultData] = useState<VaultData | null>(null);
 
   // Convert raw bigint amount to UI display string
@@ -98,12 +102,12 @@ export default function VaultModal({
       setVaultData(null);
 
       (async () => {
-        const [vault, devAddr] = await Promise.all([getVault(), getDevWalletAddress()]);
-        setWalletAddress(devAddr);
+        const vault = await getVault();
         setVaultData(vault);
 
-        // Use vault address for balance if available, otherwise dev wallet
-        const balanceAddr = vault?.vaultAddress ?? devAddr;
+        // Use vault address for balance if available, otherwise connected wallet
+        const balanceAddr = vault?.vaultAddress ?? walletAddress;
+        if (!balanceAddr) return;
         try {
           const { amount } = await apiService.getWalletBalance(balanceAddr, mint);
           setWalletBalance(BigInt(amount));
@@ -112,7 +116,7 @@ export default function VaultModal({
         }
       })();
     }
-  }, [visible, mint]);
+  }, [visible, mint, walletAddress]);
 
   const apyPercent = (rewardsRate / 100).toFixed(2);
   const localIcon = getTokenIcon(mint);
@@ -129,7 +133,7 @@ export default function VaultModal({
   const exceedsBalance =
     (mode === 'withdraw' && hasPosition && parsedRaw > BigInt(position!.balance.amount)) ||
     (mode === 'deposit' && walletBalance !== null && parsedRaw > walletBalance);
-  const canSubmit = isValidAmount && !exceedsBalance && !loading && walletAddress !== null;
+  const canSubmit = isValidAmount && !exceedsBalance && !loading && !!walletAddress;
 
   const handleMaxPress = () => {
     if (mode === 'withdraw' && hasPosition) {
@@ -176,7 +180,7 @@ export default function VaultModal({
         );
         signature = result.signature;
       } else {
-        // Legacy flow: get full unsigned transaction, sign with dev wallet
+        // Legacy flow: get full unsigned transaction, sign with MWA
         const params = {
           type,
           mint,
@@ -189,8 +193,9 @@ export default function VaultModal({
           ? await apiService.deposit(params)
           : await apiService.withdraw(params);
 
-        const sendResult = await signAndSendTransaction(res.transaction, res.transactionId);
-        signature = sendResult.signature;
+        const txBytes = new Uint8Array(Buffer.from(res.transaction, 'base64'));
+        const [sigBytes] = await walletService.signAndSendTransactions([txBytes]);
+        signature = bs58.encode(sigBytes);
       }
 
       setResult({
