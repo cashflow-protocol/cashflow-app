@@ -16,11 +16,8 @@ import type { Rpc, SolanaRpcApi, TransactionSigner } from '@solana/kit';
 import {
   findAssociatedTokenPda,
   getCreateAssociatedTokenIdempotentInstruction,
-  getSyncNativeInstruction,
-  getCloseAccountInstruction,
   TOKEN_PROGRAM_ADDRESS,
 } from '@solana-program/token';
-import { getTransferSolInstruction } from '@solana-program/system';
 import { SUPPORTED_TOKEN_MINTS } from '../constants';
 import { EarnTokenType } from '../types';
 import type { SerializedInstruction } from '../types';
@@ -233,7 +230,7 @@ export class JupiterManager {
       // Create ATAs for any new token accounts the vault PDA needs
       const signer = this.createNoopSigner(ownerAddress);
       for (const { ata, mint: ataMint } of result.newAtas) {
-        // Skip wSOL ATA — handled by buildSolWrapIxs
+        // Skip wSOL ATA — Jupiter handles wSOL creation/closing internally
         if (mint === SOL_MINT && ataMint === SOL_MINT) continue;
         ataCreateIxs.push(this.kitIxToSerialized(
           getCreateAssociatedTokenIdempotentInstruction({
@@ -246,18 +243,9 @@ export class JupiterManager {
       }
     }
 
-    if (mint === SOL_MINT) {
-      const { preIxs, postIxs } = await this.buildSolWrapIxs(ownerAddress, BigInt(amount));
-      const allIxs = [
-        ...ataCreateIxs,
-        ...preIxs.map((ix: any) => this.kitIxToSerialized(ix)),
-        ...jupiterIxs,
-        ...postIxs.map((ix: any) => this.kitIxToSerialized(ix)),
-      ];
-      console.log(`[JupiterManager.getDepositInstructions] Returning ${allIxs.length} total instructions (ataCreate=${ataCreateIxs.length}, preIxs=${preIxs.length}, jupiterIxs=${jupiterIxs.length}, postIxs=${postIxs.length})`);
-      return allIxs;
-    }
-
+    // Jupiter's deposit instruction handles wSOL wrapping + closing internally
+    // (its instruction includes ATA program, System program, and Token program).
+    // Don't add our own wrap/close — it causes a double-close error.
     console.log(`[JupiterManager.getDepositInstructions] Returning ${ataCreateIxs.length + jupiterIxs.length} total instructions (ataCreate=${ataCreateIxs.length}, jupiterIxs=${jupiterIxs.length})`);
     return [...ataCreateIxs, ...jupiterIxs];
   }
@@ -301,15 +289,9 @@ export class JupiterManager {
       }
     }
 
-    if (mint === SOL_MINT) {
-      const { postIxs } = await this.buildSolWrapIxs(ownerAddress);
-      return [
-        ...ataCreateIxs,
-        ...jupiterIxs,
-        ...postIxs.map((ix: any) => this.kitIxToSerialized(ix)),
-      ];
-    }
-
+    // Jupiter's withdraw instruction handles wSOL unwrapping + closing internally
+    // (its instruction includes ATA program, System program, and Token program).
+    // Don't add our own closeAccount — it causes a double-close error.
     return [...ataCreateIxs, ...jupiterIxs];
   }
 
@@ -324,11 +306,7 @@ export class JupiterManager {
         { asset: mint, signer: walletAddress, amount },
       );
 
-      if (mint === SOL_MINT) {
-        const { preIxs, postIxs } = await this.buildSolWrapIxs(walletAddress, BigInt(amount));
-        return await this.buildTransaction(response.data.instructions, walletAddress, preIxs, postIxs);
-      }
-
+      // Jupiter handles wSOL wrapping/closing internally — no extra wrap/close needed
       return await this.buildTransaction(response.data.instructions, walletAddress);
     } catch (error) {
       console.error('Error creating Jupiter deposit transaction:', error);
@@ -347,12 +325,7 @@ export class JupiterManager {
         { asset: mint, signer: walletAddress, amount },
       );
 
-      if (mint === SOL_MINT) {
-        // Jupiter already creates the wSOL ATA — just close it after to unwrap
-        const { postIxs } = await this.buildSolWrapIxs(walletAddress);
-        return await this.buildTransaction(response.data.instructions, walletAddress, [], postIxs);
-      }
-
+      // Jupiter handles wSOL unwrapping/closing internally — no extra close needed
       return await this.buildTransaction(response.data.instructions, walletAddress);
     } catch (error) {
       console.error('Error creating Jupiter withdraw transaction:', error);
@@ -380,54 +353,6 @@ export class JupiterManager {
     );
 
     return results.flatMap((r) => r.data);
-  }
-
-  /**
-   * Build SOL wrap/unwrap instructions.
-   * @param walletAddress The wallet address
-   * @param amount If provided, transfer this many lamports into the wSOL ATA (for deposits).
-   *               If omitted, only create ATA + close (for withdrawals).
-   */
-  private async buildSolWrapIxs(walletAddress: string, amount?: bigint) {
-    const signer = this.createNoopSigner(walletAddress);
-    const solMint = address(SOL_MINT);
-    const owner = address(walletAddress);
-
-    const [wsolAta] = await findAssociatedTokenPda({
-      owner,
-      tokenProgram: TOKEN_PROGRAM_ADDRESS,
-      mint: solMint,
-    });
-
-    const preIxs: any[] = [
-      getCreateAssociatedTokenIdempotentInstruction({
-        payer: signer,
-        ata: wsolAta,
-        owner,
-        mint: solMint,
-      }),
-    ];
-
-    if (amount !== undefined) {
-      preIxs.push(
-        getTransferSolInstruction({
-          source: signer,
-          destination: wsolAta,
-          amount,
-        }),
-        getSyncNativeInstruction({ account: wsolAta }),
-      );
-    }
-
-    const postIxs: any[] = [
-      getCloseAccountInstruction({
-        account: wsolAta,
-        destination: owner,
-        owner: signer,
-      }),
-    ];
-
-    return { preIxs, postIxs };
   }
 
   private createNoopSigner(walletAddr: string): TransactionSigner {

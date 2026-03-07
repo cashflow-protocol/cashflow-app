@@ -209,6 +209,7 @@ export default function VaultModal({
         signature = bs58.encode(sigBytes);
       }
 
+      console.log(`[VaultModal] ${mode} success, signature: ${signature}`);
       setResult({
         success: true,
         message: `Sent: ${signature.slice(0, 8)}...`,
@@ -219,6 +220,7 @@ export default function VaultModal({
         onSuccess();
       }, 1500);
     } catch (err) {
+      console.error(`[VaultModal] ${mode} error:`, (err as Error).message);
       setResult({
         success: false,
         message: (err as Error).message || 'Something went wrong',

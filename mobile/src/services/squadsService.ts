@@ -251,7 +251,20 @@ async function signTransactionsWithWallet(
       throw new Error(`Wallet ${walletPubkey.toBase58()} not found in transaction`);
     }
 
-    originalTx.signatures[walletIndex] = signedTx.signatures[walletIndex];
+    const walletSig = signedTx.signatures[walletIndex];
+    const isZero = walletSig.every((b: number) => b === 0);
+    if (isZero) {
+      console.error(`[signWallet] wallet signature at index ${walletIndex} is all zeros! MWA may have signed with a different key.`);
+      console.error(`[signWallet] expected wallet: ${walletPubkey.toBase58()}`);
+      console.error(`[signWallet] tx signers:`, accountKeys.map((k: PublicKey, i: number) => {
+        const sig = signedTx.signatures[i];
+        const hasNonZero = sig.some((b: number) => b !== 0);
+        return `${i}: ${k.toBase58()} ${hasNonZero ? '(signed)' : '(empty)'}`;
+      }));
+      throw new Error('MWA wallet signature is empty — connected wallet may not match multisig member');
+    }
+    console.log(`[signWallet] wallet sig OK at index ${walletIndex}`);
+    originalTx.signatures[walletIndex] = walletSig;
   }
 }
 
@@ -826,7 +839,9 @@ export async function executeVaultTransaction(
 
     // MWA wallet signing: wallet approves the proposal in TX2
     if (IS_SOLANA_MOBILE && walletPubkey) {
+      console.log('[VaultTx] MWA signing TX2...');
       await signTransactionsWithWallet([tx1, tx2, tx3, tx4], [1], walletPubkey);
+      console.log('[VaultTx] MWA signing done');
     }
 
     // Send debug info to backend console
@@ -834,14 +849,19 @@ export async function executeVaultTransaction(
 
     // Serialize AFTER signing — unsigned txs have all-zero signatures
     // which Jito treats as duplicates (first sig = tx ID).
+    console.log('[VaultTx] serializing 4 transactions...');
     const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
     const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
     const tx3Base64 = Buffer.from(tx3.serialize()).toString('base64');
     const tx4Base64 = Buffer.from(tx4.serialize()).toString('base64');
+    console.log(`[VaultTx] sizes: TX1=${tx1Base64.length}, TX2=${tx2Base64.length}, TX3=${tx3Base64.length}, TX4=${tx4Base64.length}`);
 
-    await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64]);
+    console.log('[VaultTx] sending bundle...');
+    const bundleResult = await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64]);
+    console.log(`[VaultTx] bundle result: id=${bundleResult.bundleId}, status=${bundleResult.status}`);
 
     const signature = bs58.encode(tx3.signatures[0]);
+    console.log(`[VaultTx] signature: ${signature}`);
     return { signature };
   } catch (err: any) {
     debugLines.push(`ERROR: ${err.message}`);
