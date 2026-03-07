@@ -25,6 +25,16 @@ const transferManager = new TransferManager();
 const priceManager = new PriceManager();
 const kShouldSimulate = false; // TODO: re-enable after confirming bundle lands on-chain (Helius sim gives false rent error on Jito tip accounts)
 
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
+
+/** Rewrite ipfs.io URLs to go through our proxy for reliable mobile loading */
+function proxyLogoUrl(url: string): string {
+  if (!url) return url;
+  const match = url.match(/^https?:\/\/ipfs\.io\/ipfs\/(.+)$/);
+  if (match) return `${BACKEND_URL}/ipfs/${match[1]}`;
+  return url;
+}
+
 const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
 
@@ -446,7 +456,7 @@ router.get('/assets', async (req: Request, res: Response) => {
         symbol: 'SOL',
         name: 'Solana',
         decimals: 9,
-        logoUrl: SUPPORTED_TOKENS_BY_MINT[SOL_MINT]?.logoUrl ?? '',
+        logoUrl: proxyLogoUrl(SUPPORTED_TOKENS_BY_MINT[SOL_MINT]?.logoUrl ?? ''),
         amount: String(nativeBalance.lamports),
         uiAmount: solUiAmount,
         usdValue: nativeBalance.total_price ?? solUiAmount * solPrice,
@@ -497,7 +507,7 @@ router.get('/assets', async (req: Request, res: Response) => {
         symbol: mint === SOL_MINT ? 'WSOL' : (known?.symbol ?? cached?.symbol ?? tokenInfo.symbol ?? metadata?.symbol ?? mint.slice(0, 6)),
         name: mint === SOL_MINT ? 'Wrapped SOL' : (known?.name ?? cached?.name ?? metadata?.name ?? 'Unknown Token'),
         decimals,
-        logoUrl: known?.logoUrl ?? cached?.logoUrl ?? item.content?.links?.image ?? '',
+        logoUrl: proxyLogoUrl(known?.logoUrl ?? cached?.logoUrl ?? item.content?.links?.image ?? ''),
         amount: String(balance),
         uiAmount,
         usdValue,

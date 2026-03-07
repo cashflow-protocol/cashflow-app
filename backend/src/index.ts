@@ -5,6 +5,7 @@ import configRouter from './routes/config';
 import earnRouter from './routes/earn';
 import solanaRouter from './routes/solana';
 import suggestionsRouter from './routes/suggestions';
+import proxyRouter from './routes/proxy';
 import { initializeScheduler } from './services';
 import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
@@ -27,6 +28,8 @@ app.use('/suggestions/v1', suggestionsRouter);
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+app.use('/ipfs', proxyRouter);
 
 // Debug log relay — mobile client POSTs logs here so they appear in the server console
 app.post('/debug/log', (req, res) => {
