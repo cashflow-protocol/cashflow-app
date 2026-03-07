@@ -25,6 +25,21 @@ export interface WalletAsset {
   isVerified: boolean;
 }
 
+export type SuggestionType = 'link' | 'fund_wallet_from_seeker' | 'transfer_position';
+
+export interface Suggestion {
+  id: string;
+  type: SuggestionType;
+  title: string;
+  description: string;
+  buttonTitle?: string;
+  url?: string;
+  transferPosition?: {
+    from: { protocol: EarnTokenType; mint: string; symbol: string; apy: number };
+    to: { protocol: EarnTokenType; mint: string; symbol: string; apy: number };
+  };
+}
+
 export interface EarnPosition {
   type: EarnTokenType;
   mint: string;

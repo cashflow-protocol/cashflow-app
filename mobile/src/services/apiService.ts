@@ -1,5 +1,5 @@
 import { API_CONFIG } from '../config/api';
-import type { EarnToken, EarnPosition, WalletAsset } from '../types/earn';
+import type { EarnToken, EarnPosition, WalletAsset, Suggestion } from '../types/earn';
 
 export interface SerializedInstruction {
   programId: string;
@@ -152,6 +152,19 @@ class ApiService {
       instructions: SerializedInstruction[];
     }>('/solana/v1/transfer', params);
     return { transactionId: res.transactionId, instructions: res.instructions };
+  }
+
+  async getSuggestions(params: {
+    vaultAddress?: string;
+    walletAddress?: string;
+    appVersion?: string;
+    buildNumber?: string;
+    androidVersion?: string;
+    device?: string;
+    platform?: string;
+  }): Promise<Suggestion[]> {
+    const res = await this.post<{ success: boolean; data: Suggestion[] }>('/suggestions/v1/', params);
+    return res.data;
   }
 
   async getSolPrice(): Promise<number> {

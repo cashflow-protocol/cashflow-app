@@ -255,7 +255,7 @@ router.post('/deposit', async (req: Request, res: Response) => {
     console.error('Error creating deposit transaction:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to create deposit transaction',
+      error: error instanceof Error ? error.message : 'Failed to create deposit transaction',
       timestamp: new Date().toISOString(),
     });
   }
@@ -368,7 +368,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
     console.error('Error creating withdraw transaction:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to create withdraw transaction',
+      error: error instanceof Error ? error.message : 'Failed to create withdraw transaction',
       timestamp: new Date().toISOString(),
     });
   }

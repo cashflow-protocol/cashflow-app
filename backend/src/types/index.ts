@@ -17,3 +17,30 @@ export interface SerializedInstruction {
   accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[];
   data: string; // base64-encoded
 }
+
+export type SuggestionType = 'link' | 'fund_wallet_from_seeker' | 'transfer_position';
+
+export interface Suggestion {
+  id: string;
+  type: SuggestionType;
+  title: string;
+  description: string;
+  // link type
+  buttonTitle?: string;
+  url?: string;
+  // transfer_position type
+  transferPosition?: {
+    from: { protocol: EarnTokenType; mint: string; symbol: string; apy: number };
+    to: { protocol: EarnTokenType; mint: string; symbol: string; apy: number };
+  };
+}
+
+export interface SuggestionsRequest {
+  vaultAddress?: string;
+  walletAddress?: string;
+  appVersion?: string;
+  buildNumber?: string;
+  androidVersion?: string;
+  device?: string;
+  platform?: string;
+}

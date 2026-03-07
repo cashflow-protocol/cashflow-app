@@ -15,6 +15,7 @@ import { useWallet } from '../hooks/useWallet';
 import { useAssets } from '../hooks/useAssets';
 import { useEarnTokens } from '../hooks/useEarnTokens';
 import { useSolPrice } from '../hooks/useSolPrice';
+import { useSuggestions } from '../hooks/useSuggestions';
 import ActionButton from '../components/ActionButton';
 import AssetRow from '../components/AssetRow';
 import EarnTokenItem from '../components/EarnTokenItem';
@@ -23,6 +24,7 @@ import StatBox from '../components/StatBox';
 import type { TabName } from '../components/TabBar';
 import { ReceiveIcon, SendIcon, ConvertIcon, RewardsIcon, ProfileIcon, SupportIcon, QuestionsIcon } from '../assets/home-icons';
 import { getTokenIcon } from '../assets/token-icons';
+import SuggestionCard from '../components/SuggestionCard';
 import ComingSoonModal from '../components/ComingSoonModal';
 import ReceiveModal from '../components/ReceiveModal';
 import SendModal from '../components/SendModal';
@@ -43,6 +45,7 @@ export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
   const { assets, totalUsdValue: assetsTotalUsd, loading: assetsLoading, refresh: refreshAssets } = useAssets();
   const { tokens, loading: earnLoading } = useEarnTokens();
   const { price: solPrice, loading: solPriceLoading } = useSolPrice();
+  const { suggestions } = useSuggestions();
   const [rewardsModalVisible, setRewardsModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [convertModalVisible, setConvertModalVisible] = useState(false);
@@ -159,6 +162,16 @@ export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
         </View>
 
         <View style={styles.sections}>
+        {/* Suggestions */}
+        {suggestions.map((s) => (
+          <SuggestionCard
+            key={s.id}
+            suggestion={s}
+            onFundWallet={() => setReceiveModalVisible(true)}
+            onTransferPosition={() => onNavigateToTab?.('earn')}
+          />
+        ))}
+
         {/* Assets Section — hidden when empty */}
         {(assetsLoading || topAssets.length > 0) && (
         <SectionCard

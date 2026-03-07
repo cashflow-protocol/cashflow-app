@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import configRouter from './routes/config';
 import earnRouter from './routes/earn';
 import solanaRouter from './routes/solana';
+import suggestionsRouter from './routes/suggestions';
 import { initializeScheduler } from './services';
 import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
@@ -20,6 +21,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/config/v1', configRouter);
 app.use('/earn/v1', earnRouter);
 app.use('/solana/v1', solanaRouter);
+app.use('/suggestions/v1', suggestionsRouter);
 
 // Health check
 app.get('/health', (req, res) => {

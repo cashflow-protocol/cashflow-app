@@ -64,7 +64,7 @@ export default function VaultModal({
   rewardsRate,
   position,
 }: VaultModalProps) {
-  const { wallet } = useWallet();
+  const { wallet, connect, isConnecting } = useWallet();
   const walletAddress = wallet?.publicKey as string | undefined;
   const [mode, setMode] = useState<Mode>('deposit');
   const [amount, setAmount] = useState('');
@@ -133,7 +133,7 @@ export default function VaultModal({
   const exceedsBalance =
     (mode === 'withdraw' && hasPosition && parsedRaw > BigInt(position!.balance.amount)) ||
     (mode === 'deposit' && walletBalance !== null && parsedRaw > walletBalance);
-  const canSubmit = isValidAmount && !exceedsBalance && !loading && !!(walletAddress || vaultData);
+  const canSubmit = isValidAmount && !exceedsBalance && !loading;
 
   const handleMaxPress = () => {
     if (mode === 'withdraw' && hasPosition) {
@@ -153,9 +153,20 @@ export default function VaultModal({
     setLoading(true);
     setResult(null);
 
-    const rawAmount = parsedRaw.toString();
-
     try {
+      // Connect wallet if not already connected
+      let addr = walletAddress;
+      if (!addr) {
+        const account = await connect();
+        addr = account?.publicKey as string | undefined;
+        if (!addr) {
+          setResult({ success: false, message: 'Wallet not connected' });
+          setLoading(false);
+          return;
+        }
+      }
+
+      const rawAmount = parsedRaw.toString();
       let signature: string;
 
       if (vaultData) {
@@ -165,7 +176,7 @@ export default function VaultModal({
           mint,
           vaultAddress,
           amount: rawAmount,
-          walletAddress: walletAddress ?? vaultData.vaultAddress,
+          walletAddress: addr,
           ownerAddress: vaultData.vaultAddress,
         };
 
@@ -186,7 +197,7 @@ export default function VaultModal({
           mint,
           vaultAddress,
           amount: rawAmount,
-          walletAddress: walletAddress!,
+          walletAddress: addr,
         };
 
         const res = mode === 'deposit'
