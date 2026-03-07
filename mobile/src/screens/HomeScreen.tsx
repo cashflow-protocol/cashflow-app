@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   Linking,
@@ -171,21 +172,24 @@ export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
           />
         )}
         {suggestions.length > 1 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.suggestionsScroll}
-          >
-            {suggestions.map((s) => (
-              <SuggestionCard
-                key={s.id}
-                suggestion={s}
-                compact
-                onFundWallet={() => setReceiveModalVisible(true)}
-                onTransferPosition={() => onNavigateToTab?.('earn')}
-              />
-            ))}
-          </ScrollView>
+          <View style={styles.suggestionsWrapper}>
+            <FlatList
+              horizontal
+              data={suggestions}
+              keyExtractor={(s) => s.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestionsScroll}
+              ItemSeparatorComponent={() => <View style={{ width: 10 }} />}
+              renderItem={({ item }) => (
+                <SuggestionCard
+                  suggestion={item}
+                  compact
+                  onFundWallet={() => setReceiveModalVisible(true)}
+                  onTransferPosition={() => onNavigateToTab?.('earn')}
+                />
+              )}
+            />
+          </View>
         )}
 
         {/* Assets Section — hidden when empty */}
@@ -369,8 +373,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     gap: 14,
   },
+  suggestionsWrapper: {
+    marginHorizontal: -14,
+  },
   suggestionsScroll: {
-    gap: 10,
+    paddingHorizontal: 14,
   },
   statsRow: {
     flexDirection: 'row',

@@ -44,6 +44,15 @@ router.post('/', async (req: Request, res: Response) => {
 
     const targetAddress = vaultAddress || walletAddress;
 
+    suggestions.push({
+      id: 'fund-wallet-usdc',
+      type: 'fund_wallet_from_seeker',
+      title: 'Fund your wallet',
+      description: 'Your vault USDC balance is low. You can get up to 10% APY on your stables.',
+      color: '#F95357',
+      buttonTitle: 'Fund',
+    });
+
     // --- Fund wallet suggestion ---
     if (targetAddress) {
       try {
