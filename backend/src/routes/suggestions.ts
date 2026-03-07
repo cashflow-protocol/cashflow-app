@@ -42,27 +42,6 @@ router.post('/', async (req: Request, res: Response) => {
     //   color: '#ff0',
     // });
 
-    // --- Link suggestions (hardcoded for now) ---
-    // Example: uncomment to add announcements
-    suggestions.push({
-      id: 'link-twitter',
-      type: 'link',
-      title: 'Build in public',
-      description: 'We build Cashflow in public with every day video updates. Follow @cashflow_fi on X.',
-      color: '#000000',
-      buttonTitle: 'Follow',
-      url: 'https://x.com/cashflow_fi',
-    });
-
-    suggestions.push({
-      id: 'fund-wallet-general',
-      type: 'fund_wallet_from_seeker',
-      title: 'Fund your wallet',
-      description: 'Fund your vault with SOL and USDC. You can get up to 10% APY on your stables.',
-      color: '#000000',
-      buttonTitle: 'Fund',
-    });
-
     // --- Fund wallet suggestion ---
     if (vaultAddress) {
       try {
@@ -107,6 +86,17 @@ router.post('/', async (req: Request, res: Response) => {
         console.error('Error checking balances for suggestions:', err);
       }
     }
+
+    suggestions.push({
+      id: 'link-twitter',
+      type: 'link',
+      title: 'Build in public',
+      description: 'We build Cashflow in public with every day video updates. Follow @cashflow_fi on X.',
+      color: '#000000',
+      buttonTitle: 'Follow',
+      url: 'https://x.com/cashflow_fi',
+    });
+
 
     // --- Transfer position suggestions ---
     // if (vaultAddress) {
