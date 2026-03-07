@@ -16,6 +16,8 @@ const kaminoManager = new KaminoManager();
 
 // Minimum SOL balance (in lamports) below which we suggest funding
 const LOW_SOL_THRESHOLD = 50_000_000n; // 0.05 SOL
+const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+const LOW_USDC_THRESHOLD = 1_000_000n; // 1 USDC (6 decimals)
 
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -53,10 +55,10 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     suggestions.push({
-      id: 'fund-wallet-usdc',
+      id: 'fund-wallet-general',
       type: 'fund_wallet_from_seeker',
       title: 'Fund your wallet',
-      description: 'Your vault USDC balance is low. You can get up to 10% APY on your stables.',
+      description: 'Fund your vault with SOL and USDC. You can get up to 10% APY on your stables.',
       color: '#000000',
       buttonTitle: 'Fund',
     });
@@ -64,19 +66,45 @@ router.post('/', async (req: Request, res: Response) => {
     // --- Fund wallet suggestion ---
     if (vaultAddress) {
       try {
-        const balanceResult = await rpc.getBalance(address(vaultAddress)).send();
-        if (balanceResult.value < LOW_SOL_THRESHOLD) {
+        const [solBalanceResult, usdcAccountsResult] = await Promise.all([
+          rpc.getBalance(address(vaultAddress)).send(),
+          rpc.getTokenAccountsByOwner(
+            address(vaultAddress),
+            { mint: address(USDC_MINT) },
+            { encoding: 'jsonParsed' },
+          ).send(),
+        ]);
+        const usdcBalance = usdcAccountsResult.value.length > 0
+          ? BigInt((usdcAccountsResult.value[0].account.data as any).parsed.info.tokenAmount.amount)
+          : 0n;
+
+        const needMoreSol = solBalanceResult.value < LOW_SOL_THRESHOLD;
+        const needMoreUsdc = usdcBalance < LOW_USDC_THRESHOLD;
+      
+        let description: string | undefined = undefined;
+        if (needMoreSol && needMoreUsdc){
+          description = 'Your SOL and USDC balances are low. Deposit some SOL & USDC to start earning up to 10% APY.'
+        }
+        else if (needMoreSol){
+          description = 'Your SOL balance is low. Deposit some SOL to conver transaction fees and start earning up to 10% APY.'
+        }
+        else if (needMoreUsdc){
+          description = 'Your USDC balance is low. Deposit USDC to start earning up to 10% APY.'
+        }
+
+        if (description){
           suggestions.push({
             id: 'fund-wallet',
             type: 'fund_wallet_from_seeker',
-            title: 'Fund your wallet',
-            description: 'Your vault SOL balance is low. Transfer some SOL to cover transaction fees.',
+            title: 'Fund',
+            description: description,
             color: '#000000',
             buttonTitle: 'Fund',
           });
         }
+        
       } catch (err) {
-        console.error('Error checking SOL balance for suggestions:', err);
+        console.error('Error checking balances for suggestions:', err);
       }
     }
 

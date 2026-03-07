@@ -13,12 +13,15 @@ import { getVault } from '../services/vaultStorage';
 
 const cashflowLogo = require('../assets/cashflow-logo-rounded.png');
 
+import { IS_SOLANA_MOBILE } from '../config/constants';
+
 interface ReceiveModalProps {
   visible: boolean;
   onClose: () => void;
+  onFundFromSeeker?: () => void;
 }
 
-export default function ReceiveModal({ visible, onClose }: ReceiveModalProps) {
+export default function ReceiveModal({ visible, onClose, onFundFromSeeker }: ReceiveModalProps) {
   const [address, setAddress] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -119,6 +122,17 @@ export default function ReceiveModal({ visible, onClose }: ReceiveModalProps) {
             >
               <Text style={styles.copyButtonText}>Copy address</Text>
             </TouchableOpacity>
+
+            {/* From Seeker button — Solana Mobile only */}
+            {IS_SOLANA_MOBILE && onFundFromSeeker && (
+              <TouchableOpacity
+                style={styles.fromSeekerButton}
+                onPress={onFundFromSeeker}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.fromSeekerButtonText}>From Seeker</Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
       </View>
@@ -199,5 +213,17 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#fff',
+  },
+  fromSeekerButton: {
+    backgroundColor: '#F4F4F4',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    width: '100%',
+  },
+  fromSeekerButtonText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#000',
   },
 });

@@ -301,6 +301,10 @@ export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
       <ReceiveModal
         visible={receiveModalVisible}
         onClose={() => setReceiveModalVisible(false)}
+        onFundFromSeeker={() => {
+          setReceiveModalVisible(false);
+          setFundWalletModalVisible(true);
+        }}
       />
       <SendModal
         visible={sendModalVisible}
