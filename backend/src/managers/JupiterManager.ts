@@ -227,7 +227,7 @@ export class JupiterManager {
     let ataCreateIxs: SerializedInstruction[] = [];
 
     if (templateSigner && templateSigner !== ownerAddress) {
-      const result = await this.replaceAuthority(jupiterIxs, templateSigner, ownerAddress);
+      const result = await this.replaceAuthority(jupiterIxs, templateSigner, ownerAddress, [mint]);
       jupiterIxs = result.instructions;
 
       // Create ATAs for any new token accounts the vault PDA needs
@@ -283,7 +283,7 @@ export class JupiterManager {
     let ataCreateIxs: SerializedInstruction[] = [];
 
     if (templateSigner && templateSigner !== ownerAddress) {
-      const result = await this.replaceAuthority(jupiterIxs, templateSigner, ownerAddress);
+      const result = await this.replaceAuthority(jupiterIxs, templateSigner, ownerAddress, [mint]);
       jupiterIxs = result.instructions;
 
       // Create ATAs for any new token accounts the vault PDA needs
@@ -486,6 +486,7 @@ export class JupiterManager {
     instructions: SerializedInstruction[],
     oldAuthority: string,
     newAuthority: string,
+    additionalMints: string[] = [],
   ): Promise<{ instructions: SerializedInstruction[]; newAtas: Array<{ ata: string; mint: string }> }> {
     const replacements = new Map<string, string>();
     replacements.set(oldAuthority, newAuthority);
@@ -498,11 +499,15 @@ export class JupiterManager {
       }
     }
 
+    // Also include caller-supplied mints (e.g. SOL_MINT) — Token::Transfer
+    // doesn't list the mint in its accounts, so ATA detection misses it.
+    const potentialMints = new Set([...allAddresses, ...additionalMints]);
+
     // For each address that could be a mint, check whether there's a
     // matching ATA derived from oldAuthority.  If so, compute the
     // replacement ATA derived from newAuthority.
     const newAtas: Array<{ ata: string; mint: string }> = [];
-    for (const potentialMint of allAddresses) {
+    for (const potentialMint of potentialMints) {
       const [oldAta] = await findAssociatedTokenPda({
         owner: address(oldAuthority),
         tokenProgram: TOKEN_PROGRAM_ADDRESS,
