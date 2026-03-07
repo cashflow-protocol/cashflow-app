@@ -525,6 +525,39 @@ export class JupiterManager {
       }
     }
 
+    // Log all replacements for debugging
+    console.log(`[replaceAuthority] replacements:`);
+    for (const [from, to] of replacements) {
+      console.log(`  ${from} → ${to}`);
+    }
+
+    // Log any instruction accounts that are NOT being replaced
+    const unreplaced = new Set<string>();
+    for (const ix of instructions) {
+      for (const acc of ix.accounts) {
+        if (!replacements.has(acc.pubkey) && acc.pubkey !== oldAuthority) {
+          unreplaced.add(acc.pubkey);
+        }
+      }
+    }
+    if (unreplaced.size > 0) {
+      console.log(`[replaceAuthority] unreplaced accounts (${unreplaced.size}):`);
+      for (const addr of unreplaced) {
+        console.log(`  ${addr}`);
+      }
+    }
+
+    // Log raw Jupiter instructions for debugging
+    console.log(`[replaceAuthority] raw Jupiter instructions (${instructions.length}):`);
+    for (let i = 0; i < instructions.length; i++) {
+      const ix = instructions[i];
+      console.log(`  ix[${i}] program=${ix.programId} accounts=${ix.accounts.length} data=${ix.data.length}b`);
+      for (const acc of ix.accounts) {
+        const replaced = replacements.has(acc.pubkey);
+        console.log(`    ${acc.pubkey} signer=${acc.isSigner} writable=${acc.isWritable}${replaced ? ' → REPLACED' : ''}`);
+      }
+    }
+
     const replacedInstructions = instructions.map((ix) => ({
       ...ix,
       accounts: ix.accounts.map((acc) => {
