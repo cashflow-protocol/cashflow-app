@@ -1,7 +1,20 @@
-import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol';
 import { address, Address, createSolanaRpc, getBase58Decoder, getBase64Encoder } from '@solana/kit';
 import { Buffer } from 'buffer';
 import { SOLANA_CONFIG } from '../config/solana';
+import { IS_SOLANA_MOBILE } from '../config/constants';
+
+// Lazy-load MWA to avoid crashing on iOS (native module doesn't exist there)
+let _transact: typeof import('@solana-mobile/mobile-wallet-adapter-protocol').transact | null = null;
+async function getTransact() {
+  if (!IS_SOLANA_MOBILE) {
+    throw new Error('MWA is not available on this platform');
+  }
+  if (!_transact) {
+    const mwa = await import('@solana-mobile/mobile-wallet-adapter-protocol');
+    _transact = mwa.transact;
+  }
+  return _transact;
+}
 
 export interface WalletAccount {
   publicKey: Address;
@@ -24,7 +37,7 @@ class WalletService {
 
   async connect(): Promise<WalletAccount | null> {
     try {
-      const result = await transact(async (wallet) => {
+      const result = await (await getTransact())(async (wallet: any) => {
         const authResult = await wallet.authorize({
           cluster: SOLANA_CONFIG.cluster,
           identity: IDENTITY,
@@ -57,7 +70,7 @@ class WalletService {
     );
 
     console.log('[MWA] starting transact for signing...');
-    return transact(async (wallet) => {
+    return (await getTransact())(async (wallet: any) => {
       // Reauthorize silently if we have a token, otherwise full authorize
       if (this.authToken) {
         console.log('[MWA] reauthorizing with existing token...');
@@ -95,7 +108,7 @@ class WalletService {
     );
 
     console.log('[MWA] starting transact for sign-only...');
-    return transact(async (wallet) => {
+    return (await getTransact())(async (wallet: any) => {
       if (this.authToken) {
         console.log('[MWA] reauthorizing with existing token...');
         const auth = await wallet.reauthorize({ auth_token: this.authToken, identity: IDENTITY });
@@ -127,7 +140,7 @@ class WalletService {
 
   async disconnect(): Promise<void> {
     try {
-      await transact(async (wallet) => {
+      await (await getTransact())(async (wallet: any) => {
         if (this.authToken) {
           await wallet.deauthorize({ auth_token: this.authToken });
         }

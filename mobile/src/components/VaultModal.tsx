@@ -17,6 +17,7 @@ import walletService from '../services/walletService';
 import { getVault, type VaultData } from '../services/vaultStorage';
 import { executeVaultTransaction } from '../services/squadsService';
 import { useWallet } from '../hooks/useWallet';
+import { getCloudPublicKey } from '../services/keypairStorage';
 import { Buffer } from 'buffer';
 import bs58 from 'bs58';
 
@@ -154,16 +155,13 @@ export default function VaultModal({
     setResult(null);
 
     try {
-      // Connect wallet if not already connected
-      let addr = walletAddress;
+      // Use cloud wallet as the template signer for Jupiter API calls.
+      // The backend replaces this with the vault PDA in the actual instructions.
+      const addr = await getCloudPublicKey();
       if (!addr) {
-        const account = await connect();
-        addr = account?.publicKey as string | undefined;
-        if (!addr) {
-          setResult({ success: false, message: 'Wallet not connected' });
-          setLoading(false);
-          return;
-        }
+        setResult({ success: false, message: 'Cloud wallet not found' });
+        setLoading(false);
+        return;
       }
 
       const rawAmount = parsedRaw.toString();
