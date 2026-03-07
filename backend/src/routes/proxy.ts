@@ -3,9 +3,9 @@ import { Router, Request, Response } from 'express';
 const router = Router();
 
 // IPFS proxy — rewrites ipfs.io URLs so mobile clients load images reliably
-router.get('/*', async (req: Request, res: Response) => {
+router.get('/:cid', async (req: Request, res: Response) => {
   try {
-    const ipfsPath = req.path.replace('/', '');
+    const ipfsPath = req.params.cid;
     if (!ipfsPath) {
       res.status(400).send('Missing IPFS path');
       return;
