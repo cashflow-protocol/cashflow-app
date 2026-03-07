@@ -20,6 +20,7 @@ import {
   getSyncNativeInstruction,
   TOKEN_PROGRAM_ADDRESS,
 } from '@solana-program/token';
+import { TOKEN_2022_PROGRAM_ADDRESS } from '@solana-program/token-2022';
 import { getTransferSolInstruction } from '@solana-program/system';
 import { SUPPORTED_TOKEN_MINTS } from '../constants';
 import { EarnTokenType } from '../types';
@@ -202,11 +203,6 @@ export class JupiterManager {
 
   /**
    * Get raw deposit instructions for Jupiter Lend (used by Squads vault flow).
-   * Passes ownerAddress directly to Jupiter API — no account replacement needed.
-   * For SOL deposits, prepends wSOL wrapping instructions (create ATA + fund + syncNative).
-   */
-  /**
-   * Get raw deposit instructions for Jupiter Lend (used by Squads vault flow).
    * Uses templateSigner for the API call (Jupiter rejects PDAs), then replaces
    * all occurrences of templateSigner and its derived ATAs with ownerAddress.
    * For SOL deposits, prepends wSOL wrapping instructions (create ATA + fund + syncNative).
@@ -225,7 +221,8 @@ export class JupiterManager {
     );
 
     // Replace template signer and its ATAs with the real owner (vault PDA)
-    const jupiterIxs = await this.replaceAuthority(response.data.instructions, templateSigner, ownerAddress, mint);
+    const jupiterIxs = (await this.replaceAuthority(response.data.instructions, templateSigner, ownerAddress, mint))
+      .map(ix => this.makeAtaIdempotent(ix));
     console.log(`[JupiterManager.getDepositInstructions] Jupiter returned ${response.data.instructions.length} ixs, after replacement: ${jupiterIxs.length}`);
 
     // For SOL deposits: create + fund the wSOL ATA before calling Jupiter's deposit.
@@ -273,7 +270,8 @@ export class JupiterManager {
       { asset: mint, signer: templateSigner, amount },
     );
 
-    return await this.replaceAuthority(response.data.instructions, templateSigner, ownerAddress, mint);
+    return (await this.replaceAuthority(response.data.instructions, templateSigner, ownerAddress, mint))
+      .map(ix => this.makeAtaIdempotent(ix));
   }
 
   /**
@@ -462,41 +460,78 @@ export class JupiterManager {
 
     // For each address that could be a mint (including the deposit mint itself),
     // check whether there's a matching ATA derived from oldAuthority.
-    // If so, compute the replacement ATA derived from newAuthority.
+    // Try both Token and Token2022 programs since fTokens may use either.
+    const TOKEN_PROGRAMS = [TOKEN_PROGRAM_ADDRESS, TOKEN_2022_PROGRAM_ADDRESS];
     const potentialMints = new Set([...allAddresses, depositMint]);
     for (const mint of potentialMints) {
-      try {
-        const [oldAta] = await findAssociatedTokenPda({
-          owner: address(oldAuthority),
-          tokenProgram: TOKEN_PROGRAM_ADDRESS,
-          mint: address(mint),
-        });
-
-        if (allAddresses.has(oldAta as string) && !replacements.has(oldAta as string)) {
-          const [newAta] = await findAssociatedTokenPda({
-            owner: address(newAuthority),
-            tokenProgram: TOKEN_PROGRAM_ADDRESS,
+      for (const tokenProgram of TOKEN_PROGRAMS) {
+        try {
+          const [oldAta] = await findAssociatedTokenPda({
+            owner: address(oldAuthority),
+            tokenProgram,
             mint: address(mint),
           });
-          replacements.set(oldAta as string, newAta as string);
+
+          if (allAddresses.has(oldAta as string) && !replacements.has(oldAta as string)) {
+            const [newAta] = await findAssociatedTokenPda({
+              owner: address(newAuthority),
+              tokenProgram,
+              mint: address(mint),
+            });
+            replacements.set(oldAta as string, newAta as string);
+            console.log(`[replaceAuthority] ATA match via ${tokenProgram === TOKEN_2022_PROGRAM_ADDRESS ? 'Token2022' : 'Token'} for mint ${mint}`);
+          }
+        } catch {
+          // Not a valid mint address — skip
         }
-      } catch {
-        // Not a valid mint address — skip
       }
     }
+
+    // Diagnostic: check the deposit mint's on-chain owner to detect Token2022
+    try {
+      const mintInfo = await this.rpc.getAccountInfo(address(depositMint), { encoding: 'base64' }).send();
+      const mintOwner = mintInfo.value?.owner;
+      console.log(`[replaceAuthority] deposit mint ${depositMint} owner=${mintOwner}`);
+    } catch { /* diagnostic only */ }
 
     console.log(`[replaceAuthority] ${replacements.size} replacements:`);
     for (const [from, to] of replacements) {
       console.log(`  ${from} → ${to}`);
     }
 
-    return instructions.map((ix) => ({
+    const result = instructions.map((ix) => ({
       ...ix,
       accounts: ix.accounts.map((acc) => {
         const replacement = replacements.get(acc.pubkey);
         return replacement ? { ...acc, pubkey: replacement } : acc;
       }),
     }));
+
+    // Log final instructions for debugging
+    for (let i = 0; i < result.length; i++) {
+      const ix = result[i];
+      console.log(`[replaceAuthority] final ix[${i}] program=${ix.programId} accounts=${ix.accounts.length}`);
+      for (const acc of ix.accounts) {
+        console.log(`  ${acc.pubkey} signer=${acc.isSigner} writable=${acc.isWritable}`);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Convert a non-idempotent CreateAssociatedTokenAccount (0-byte data) to
+   * CreateAssociatedTokenIdempotent (1-byte discriminator = 1).
+   * Jupiter's API returns non-idempotent ATA creates which fail with IllegalOwner
+   * if the account already exists — idempotent is safe in all cases.
+   */
+  private makeAtaIdempotent(ix: SerializedInstruction): SerializedInstruction {
+    const ATA_PROGRAM_ID = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+    if (ix.programId === ATA_PROGRAM_ID && Buffer.from(ix.data, 'base64').length === 0) {
+      console.log('[makeAtaIdempotent] Converting non-idempotent ATA create → idempotent');
+      return { ...ix, data: Buffer.from([1]).toString('base64') };
+    }
+    return ix;
   }
 
   private kitIxToSerialized(ix: any): SerializedInstruction {
