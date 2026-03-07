@@ -16,8 +16,11 @@ import type { Rpc, SolanaRpcApi, TransactionSigner } from '@solana/kit';
 import {
   findAssociatedTokenPda,
   getCreateAssociatedTokenIdempotentInstruction,
+  getCloseAccountInstruction,
+  getSyncNativeInstruction,
   TOKEN_PROGRAM_ADDRESS,
 } from '@solana-program/token';
+import { getTransferSolInstruction } from '@solana-program/system';
 import { SUPPORTED_TOKEN_MINTS } from '../constants';
 import { EarnTokenType } from '../types';
 import type { SerializedInstruction } from '../types';
@@ -230,7 +233,7 @@ export class JupiterManager {
       // Create ATAs for any new token accounts the vault PDA needs
       const signer = this.createNoopSigner(ownerAddress);
       for (const { ata, mint: ataMint } of result.newAtas) {
-        // Skip wSOL ATA — Jupiter handles wSOL creation/closing internally
+        // Skip wSOL ATA for SOL deposits — handled separately in wrapIxs below
         if (mint === SOL_MINT && ataMint === SOL_MINT) continue;
         ataCreateIxs.push(this.kitIxToSerialized(
           getCreateAssociatedTokenIdempotentInstruction({
@@ -243,11 +246,35 @@ export class JupiterManager {
       }
     }
 
-    // Jupiter's deposit instruction handles wSOL wrapping + closing internally
-    // (its instruction includes ATA program, System program, and Token program).
-    // Don't add our own wrap/close — it causes a double-close error.
-    console.log(`[JupiterManager.getDepositInstructions] Returning ${ataCreateIxs.length + jupiterIxs.length} total instructions (ataCreate=${ataCreateIxs.length}, jupiterIxs=${jupiterIxs.length})`);
-    return [...ataCreateIxs, ...jupiterIxs];
+    // For SOL deposits: create + fund the wSOL ATA before calling Jupiter's deposit.
+    // Jupiter's on-chain program expects a pre-funded depositorTokenAccount (wSOL ATA).
+    // We do NOT add a closeAccount — Jupiter may close it internally, and a duplicate
+    // close causes "Provided owner is not allowed".
+    let wrapIxs: SerializedInstruction[] = [];
+    if (mint === SOL_MINT && templateSigner && templateSigner !== ownerAddress) {
+      const signer = this.createNoopSigner(ownerAddress);
+      const solMint = address(SOL_MINT);
+      const owner = address(ownerAddress);
+      const [wsolAta] = await findAssociatedTokenPda({
+        owner,
+        tokenProgram: TOKEN_PROGRAM_ADDRESS,
+        mint: solMint,
+      });
+
+      wrapIxs = [
+        this.kitIxToSerialized(getCreateAssociatedTokenIdempotentInstruction({
+          payer: signer, ata: wsolAta, owner, mint: solMint,
+        })),
+        this.kitIxToSerialized(getTransferSolInstruction({
+          source: signer, destination: wsolAta, amount: BigInt(amount),
+        })),
+        this.kitIxToSerialized(getSyncNativeInstruction({ account: wsolAta })),
+      ];
+    }
+
+    const allIxs = [...ataCreateIxs, ...wrapIxs, ...jupiterIxs];
+    console.log(`[JupiterManager.getDepositInstructions] Returning ${allIxs.length} total instructions (ataCreate=${ataCreateIxs.length}, wrapIxs=${wrapIxs.length}, jupiterIxs=${jupiterIxs.length})`);
+    return allIxs;
   }
 
   /**
@@ -277,7 +304,6 @@ export class JupiterManager {
       // Create ATAs for any new token accounts the vault PDA needs
       const signer = this.createNoopSigner(ownerAddress);
       for (const { ata, mint: ataMint } of result.newAtas) {
-        if (mint === SOL_MINT && ataMint === SOL_MINT) continue;
         ataCreateIxs.push(this.kitIxToSerialized(
           getCreateAssociatedTokenIdempotentInstruction({
             payer: signer,
@@ -289,9 +315,6 @@ export class JupiterManager {
       }
     }
 
-    // Jupiter's withdraw instruction handles wSOL unwrapping + closing internally
-    // (its instruction includes ATA program, System program, and Token program).
-    // Don't add our own closeAccount — it causes a double-close error.
     return [...ataCreateIxs, ...jupiterIxs];
   }
 
@@ -306,7 +329,11 @@ export class JupiterManager {
         { asset: mint, signer: walletAddress, amount },
       );
 
-      // Jupiter handles wSOL wrapping/closing internally — no extra wrap/close needed
+      if (mint === SOL_MINT) {
+        const { preIxs, postIxs } = await this.buildSolWrapIxs(walletAddress, BigInt(amount));
+        return await this.buildTransaction(response.data.instructions, walletAddress, preIxs, postIxs);
+      }
+
       return await this.buildTransaction(response.data.instructions, walletAddress);
     } catch (error) {
       console.error('Error creating Jupiter deposit transaction:', error);
@@ -325,7 +352,11 @@ export class JupiterManager {
         { asset: mint, signer: walletAddress, amount },
       );
 
-      // Jupiter handles wSOL unwrapping/closing internally — no extra close needed
+      if (mint === SOL_MINT) {
+        const { postIxs } = await this.buildSolWrapIxs(walletAddress);
+        return await this.buildTransaction(response.data.instructions, walletAddress, [], postIxs);
+      }
+
       return await this.buildTransaction(response.data.instructions, walletAddress);
     } catch (error) {
       console.error('Error creating Jupiter withdraw transaction:', error);
@@ -353,6 +384,54 @@ export class JupiterManager {
     );
 
     return results.flatMap((r) => r.data);
+  }
+
+  /**
+   * Build SOL wrap/unwrap instructions (used by legacy non-Squads flows).
+   * @param walletAddress The wallet address
+   * @param amount If provided, transfer this many lamports into the wSOL ATA (for deposits).
+   *               If omitted, only create ATA + close (for withdrawals).
+   */
+  private async buildSolWrapIxs(walletAddress: string, amount?: bigint) {
+    const signer = this.createNoopSigner(walletAddress);
+    const solMint = address(SOL_MINT);
+    const owner = address(walletAddress);
+
+    const [wsolAta] = await findAssociatedTokenPda({
+      owner,
+      tokenProgram: TOKEN_PROGRAM_ADDRESS,
+      mint: solMint,
+    });
+
+    const preIxs: any[] = [
+      getCreateAssociatedTokenIdempotentInstruction({
+        payer: signer,
+        ata: wsolAta,
+        owner,
+        mint: solMint,
+      }),
+    ];
+
+    if (amount !== undefined) {
+      preIxs.push(
+        getTransferSolInstruction({
+          source: signer,
+          destination: wsolAta,
+          amount,
+        }),
+        getSyncNativeInstruction({ account: wsolAta }),
+      );
+    }
+
+    const postIxs: any[] = [
+      getCloseAccountInstruction({
+        account: wsolAta,
+        destination: owner,
+        owner: signer,
+      }),
+    ];
+
+    return { preIxs, postIxs };
   }
 
   private createNoopSigner(walletAddr: string): TransactionSigner {
