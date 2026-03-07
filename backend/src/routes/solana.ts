@@ -1,5 +1,16 @@
 import { Router, Request, Response } from 'express';
-import { createSolanaRpc, address } from '@solana/kit';
+import {
+  createSolanaRpc,
+  address,
+  pipe,
+  createTransactionMessage,
+  setTransactionMessageFeePayer,
+  setTransactionMessageLifetimeUsingBlockhash,
+  appendTransactionMessageInstruction,
+  compileTransaction,
+  getBase64EncodedWireTransaction,
+  AccountRole,
+} from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from '@solana/kit';
 import { DBManager, JitoManager, PriceManager, TokenManager, TransferManager } from '../managers';
 import { TransactionAction } from '../models/Transaction';
@@ -254,6 +265,67 @@ router.post('/transfer', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error?.message || 'Failed to create transfer instructions',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// POST /solana/v1/build-transfer - Build a full unsigned transaction for a direct wallet-to-wallet transfer
+router.post('/build-transfer', async (req: Request, res: Response) => {
+  try {
+    const { fromAddress, toAddress, mint, amount, decimals } = req.body;
+
+    if (!fromAddress || !toAddress || !mint || !amount || decimals == null) {
+      res.status(400).json({
+        success: false,
+        error: 'fromAddress, toAddress, mint, amount, and decimals are required',
+      });
+      return;
+    }
+
+    // Get serialized instructions from TransferManager
+    const serializedIxs = await transferManager.getTransferInstructions(
+      mint, amount, fromAddress, toAddress, decimals,
+    );
+
+    // Convert serialized instructions back to @solana/kit instruction format
+    const instructions = serializedIxs.map((ix) => ({
+      programAddress: address(ix.programId),
+      accounts: ix.accounts.map((acc) => ({
+        address: address(acc.pubkey),
+        role: acc.isSigner && acc.isWritable
+          ? AccountRole.WRITABLE_SIGNER
+          : acc.isSigner
+            ? AccountRole.READONLY_SIGNER
+            : acc.isWritable
+              ? AccountRole.WRITABLE
+              : AccountRole.READONLY,
+      })),
+      data: new Uint8Array(Buffer.from(ix.data, 'base64')),
+    }));
+
+    const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
+
+    const transactionMessage = pipe(
+      createTransactionMessage({ version: 0 }),
+      (tx) => setTransactionMessageFeePayer(address(fromAddress), tx),
+      (tx) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, tx),
+      (tx) => instructions.reduce((msg: any, ix) => appendTransactionMessageInstruction(ix, msg), tx),
+    );
+
+    const compiled = compileTransaction(transactionMessage);
+    const transaction = getBase64EncodedWireTransaction(compiled);
+
+    res.json({
+      success: true,
+      transaction,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('Error building transfer transaction:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to build transfer transaction',
       timestamp: new Date().toISOString(),
     });
   }

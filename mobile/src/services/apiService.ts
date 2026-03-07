@@ -167,6 +167,17 @@ class ApiService {
     return res.data;
   }
 
+  async buildTransfer(params: {
+    fromAddress: string;
+    toAddress: string;
+    mint: string;
+    amount: string;
+    decimals: number;
+  }): Promise<{ transaction: string }> {
+    const res = await this.post<{ success: boolean; transaction: string }>('/solana/v1/build-transfer', params);
+    return { transaction: res.transaction };
+  }
+
   async getSolPrice(): Promise<number> {
     const res = await this.get<{ success: boolean; data: { price: number } }>('/solana/v1/sol-price');
     return res.data.price;

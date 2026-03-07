@@ -29,6 +29,7 @@ import SuggestionCard from '../components/SuggestionCard';
 import ComingSoonModal from '../components/ComingSoonModal';
 import ReceiveModal from '../components/ReceiveModal';
 import SendModal from '../components/SendModal';
+import FundWalletModal from '../components/FundWalletModal';
 
 // Bottom padding to account for floating tab bar
 const TAB_BAR_PADDING = 120;
@@ -52,6 +53,7 @@ export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
   const [convertModalVisible, setConvertModalVisible] = useState(false);
   const [receiveModalVisible, setReceiveModalVisible] = useState(false);
   const [sendModalVisible, setSendModalVisible] = useState(false);
+  const [fundWalletModalVisible, setFundWalletModalVisible] = useState(false);
 
   // Top 3 assets sorted by USD value descending
   const topAssets = useMemo(() => {
@@ -167,7 +169,7 @@ export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
         {suggestions.length === 1 && (
           <SuggestionCard
             suggestion={suggestions[0]}
-            onFundWallet={() => setReceiveModalVisible(true)}
+            onFundWallet={() => setFundWalletModalVisible(true)}
             onTransferPosition={() => onNavigateToTab?.('earn')}
           />
         )}
@@ -184,7 +186,7 @@ export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
                 <SuggestionCard
                   suggestion={item}
                   compact
-                  onFundWallet={() => setReceiveModalVisible(true)}
+                  onFundWallet={() => setFundWalletModalVisible(true)}
                   onTransferPosition={() => onNavigateToTab?.('earn')}
                 />
               )}
@@ -303,6 +305,11 @@ export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
       <SendModal
         visible={sendModalVisible}
         onClose={() => setSendModalVisible(false)}
+        onSuccess={refreshAssets}
+      />
+      <FundWalletModal
+        visible={fundWalletModalVisible}
+        onClose={() => setFundWalletModalVisible(false)}
         onSuccess={refreshAssets}
       />
       <ComingSoonModal
