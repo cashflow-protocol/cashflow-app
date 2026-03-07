@@ -33,37 +33,46 @@ router.post('/', async (req: Request, res: Response) => {
 
     // --- Link suggestions (hardcoded for now) ---
     // Example: uncomment to add announcements
-    // suggestions.push({
-    //   id: 'link-telegram',
-    //   type: 'link',
-    //   title: 'Join our community',
-    //   description: 'Get the latest updates and connect with other users on Telegram.',
-    //   buttonTitle: 'Open Telegram',
-    //   url: 'https://t.me/cashflow_app',
-    // });
+    suggestions.push({
+      id: 'link-twitter',
+      type: 'link',
+      title: 'Build in public',
+      description: 'We build Cashflow in public with every day video updates. Follow @cashflow_fi on X.',
+      color: '#000000',
+      buttonTitle: 'Follow',
+      url: 'https://x.com/cashflow_fi',
+    });
 
-    const targetAddress = vaultAddress || walletAddress;
+    suggestions.push({
+      id: 'test',
+      type: 'link',
+      title: 'Info',
+      description: `vaultAddress: ${vaultAddress}\nwallet: ${walletAddress}\napp version: ${appVersion}\nbuildNumber: ${buildNumber}\nplatform: ${platform}\nandroidVersion: ${androidVersion}\ndevice: ${device}`,
+      color: '#000000',
+      buttonTitle: 'Follow',
+      url: 'https://x.com/cashflow_fi',
+    });
 
     suggestions.push({
       id: 'fund-wallet-usdc',
       type: 'fund_wallet_from_seeker',
       title: 'Fund your wallet',
       description: 'Your vault USDC balance is low. You can get up to 10% APY on your stables.',
-      color: '#F95357',
+      color: '#000000',
       buttonTitle: 'Fund',
     });
 
     // --- Fund wallet suggestion ---
-    if (targetAddress) {
+    if (vaultAddress) {
       try {
-        const balanceResult = await rpc.getBalance(address(targetAddress)).send();
+        const balanceResult = await rpc.getBalance(address(vaultAddress)).send();
         if (balanceResult.value < LOW_SOL_THRESHOLD) {
           suggestions.push({
             id: 'fund-wallet',
             type: 'fund_wallet_from_seeker',
             title: 'Fund your wallet',
             description: 'Your vault SOL balance is low. Transfer some SOL to cover transaction fees.',
-            color: '#F95357',
+            color: '#000000',
             buttonTitle: 'Fund',
           });
         }
@@ -73,35 +82,35 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // --- Transfer position suggestions ---
-    if (targetAddress) {
-      try {
-        const kaminoPositions = await kaminoManager.getWalletPositions(targetAddress);
+    // if (vaultAddress) {
+    //   try {
+    //     const kaminoPositions = await kaminoManager.getWalletPositions(vaultAddress);
 
-        for (const pos of kaminoPositions) {
-          const mint = (pos as any).mint;
-          const tokenInfo = mint ? SUPPORTED_TOKENS_BY_MINT[mint] : undefined;
-          const symbol = tokenInfo?.symbol ?? '';
-          const uiAmount = Number((pos as any).amount ?? 0) / 10 ** (tokenInfo?.decimals ?? 0);
+    //     for (const pos of kaminoPositions) {
+    //       const mint = (pos as any).mint;
+    //       const tokenInfo = mint ? SUPPORTED_TOKENS_BY_MINT[mint] : undefined;
+    //       const symbol = tokenInfo?.symbol ?? '';
+    //       const uiAmount = Number((pos as any).amount ?? 0) / 10 ** (tokenInfo?.decimals ?? 0);
 
-          if (uiAmount > 0 && (symbol === 'USDC' || symbol === 'USDS')) {
-            suggestions.push({
-              id: `transfer-kamino-${symbol}-to-jupiter`,
-              type: 'transfer_position',
-              title: `Move ${symbol} to Jupiter`,
-              description: `You have ${uiAmount.toFixed(2)} ${symbol} earning on Kamino. Jupiter Lend currently offers higher rates for similar assets.`,
-              color: '#19C394',
-              buttonTitle: 'View Earn',
-              transferPosition: {
-                from: { protocol: EarnTokenType.KAMINO, mint, symbol, apy: 0 },
-                to: { protocol: EarnTokenType.JUPITER, mint: '', symbol: 'JupSOL', apy: 0 },
-              },
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Error checking positions for suggestions:', err);
-      }
-    }
+    //       if (uiAmount > 0 && (symbol === 'USDC' || symbol === 'USDS')) {
+    //         suggestions.push({
+    //           id: `transfer-kamino-${symbol}-to-jupiter`,
+    //           type: 'transfer_position',
+    //           title: `Move ${symbol} to Jupiter`,
+    //           description: `You have ${uiAmount.toFixed(2)} ${symbol} earning on Kamino. Jupiter Lend currently offers higher rates for similar assets.`,
+    //           color: '#19C394',
+    //           buttonTitle: 'View Earn',
+    //           transferPosition: {
+    //             from: { protocol: EarnTokenType.KAMINO, mint, symbol, apy: 0 },
+    //             to: { protocol: EarnTokenType.JUPITER, mint: '', symbol: 'JupSOL', apy: 0 },
+    //           },
+    //         });
+    //       }
+    //     }
+    //   } catch (err) {
+    //     console.error('Error checking positions for suggestions:', err);
+    //   }
+    // }
 
     res.json({
       success: true,

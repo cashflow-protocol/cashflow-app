@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardCompact: {
-    width: 200,
+    width: 260,
   },
   content: {
     gap: 4,
