@@ -32,6 +32,7 @@ export interface Suggestion {
   type: SuggestionType;
   title: string;
   description: string;
+  color: string;
   buttonTitle?: string;
   url?: string;
   transferPosition?: {

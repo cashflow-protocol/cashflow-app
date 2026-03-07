@@ -25,7 +25,7 @@ export interface Suggestion {
   type: SuggestionType;
   title: string;
   description: string;
-  // link type
+  color: string;
   buttonTitle?: string;
   url?: string;
   // transfer_position type

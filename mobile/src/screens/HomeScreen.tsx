@@ -163,14 +163,30 @@ export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
 
         <View style={styles.sections}>
         {/* Suggestions */}
-        {suggestions.map((s) => (
+        {suggestions.length === 1 && (
           <SuggestionCard
-            key={s.id}
-            suggestion={s}
+            suggestion={suggestions[0]}
             onFundWallet={() => setReceiveModalVisible(true)}
             onTransferPosition={() => onNavigateToTab?.('earn')}
           />
-        ))}
+        )}
+        {suggestions.length > 1 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.suggestionsScroll}
+          >
+            {suggestions.map((s) => (
+              <SuggestionCard
+                key={s.id}
+                suggestion={s}
+                compact
+                onFundWallet={() => setReceiveModalVisible(true)}
+                onTransferPosition={() => onNavigateToTab?.('earn')}
+              />
+            ))}
+          </ScrollView>
+        )}
 
         {/* Assets Section — hidden when empty */}
         {(assetsLoading || topAssets.length > 0) && (
@@ -352,6 +368,9 @@ const styles = StyleSheet.create({
   sections: {
     paddingHorizontal: 14,
     gap: 14,
+  },
+  suggestionsScroll: {
+    gap: 10,
   },
   statsRow: {
     flexDirection: 'row',

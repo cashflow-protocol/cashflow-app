@@ -53,8 +53,9 @@ router.post('/', async (req: Request, res: Response) => {
             id: 'fund-wallet',
             type: 'fund_wallet_from_seeker',
             title: 'Fund your wallet',
-            description: 'Your vault SOL balance is low. Transfer SOL from your Solana wallet to cover transaction fees.',
-            buttonTitle: 'Receive SOL',
+            description: 'Your vault SOL balance is low. Transfer some SOL to cover transaction fees.',
+            color: '#F95357',
+            buttonTitle: 'Fund',
           });
         }
       } catch (err) {
@@ -79,6 +80,7 @@ router.post('/', async (req: Request, res: Response) => {
               type: 'transfer_position',
               title: `Move ${symbol} to Jupiter`,
               description: `You have ${uiAmount.toFixed(2)} ${symbol} earning on Kamino. Jupiter Lend currently offers higher rates for similar assets.`,
+              color: '#19C394',
               buttonTitle: 'View Earn',
               transferPosition: {
                 from: { protocol: EarnTokenType.KAMINO, mint, symbol, apy: 0 },

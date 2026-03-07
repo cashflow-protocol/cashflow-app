@@ -2,20 +2,15 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import type { Suggestion } from '../types/earn';
 
-const ACCENT_COLORS: Record<string, string> = {
-  link: '#175DA3',
-  fund_wallet_from_seeker: '#F95357',
-  transfer_position: '#19C394',
-};
-
 interface SuggestionCardProps {
   suggestion: Suggestion;
+  compact?: boolean;
   onFundWallet?: () => void;
   onTransferPosition?: (suggestion: Suggestion) => void;
 }
 
-export default function SuggestionCard({ suggestion, onFundWallet, onTransferPosition }: SuggestionCardProps) {
-  const accent = ACCENT_COLORS[suggestion.type] ?? '#175DA3';
+export default function SuggestionCard({ suggestion, compact, onFundWallet, onTransferPosition }: SuggestionCardProps) {
+  const accent = suggestion.color;
 
   const handlePress = () => {
     switch (suggestion.type) {
@@ -32,7 +27,7 @@ export default function SuggestionCard({ suggestion, onFundWallet, onTransferPos
   };
 
   return (
-    <View style={[styles.card, { borderLeftColor: accent }]}>
+    <View style={[styles.card, { borderLeftColor: accent }, compact && styles.cardCompact]}>
       <View style={styles.content}>
         <Text style={styles.title}>{suggestion.title}</Text>
         <Text style={styles.description}>{suggestion.description}</Text>
@@ -56,6 +51,9 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     padding: 16,
     gap: 12,
+  },
+  cardCompact: {
+    width: 260,
   },
   content: {
     gap: 4,
