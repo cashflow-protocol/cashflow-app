@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Platform } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 import apiService from '../services/apiService';
 import { getVault } from '../services/vaultStorage';
 import { APP_VERSION, BUILD_NUMBER } from '../config/version';
@@ -22,7 +23,8 @@ export function useSuggestions() {
         appVersion: APP_VERSION,
         buildNumber: BUILD_NUMBER,
         platform: Platform.OS,
-        androidVersion: Platform.OS === 'android' ? String(Platform.Version) : undefined,
+        osVersion: DeviceInfo.getSystemVersion() || String(Platform.Version),
+        device: `${DeviceInfo.getBrand() || Platform.OS} ${DeviceInfo.getModel() || ''}`.trim(),
       });
 
       cachedSuggestions = data;

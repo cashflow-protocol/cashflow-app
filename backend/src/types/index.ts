@@ -40,7 +40,7 @@ export interface SuggestionsRequest {
   walletAddress?: string;
   appVersion?: string;
   buildNumber?: string;
-  androidVersion?: string;
+  osVersion?: string;
   device?: string;
   platform?: string;
 }

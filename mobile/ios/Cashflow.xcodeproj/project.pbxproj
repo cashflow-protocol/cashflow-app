@@ -10,12 +10,12 @@
 		0C80B921A6F3F58F76C31292 /* libPods-Cashflow.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-Cashflow.a */; };
 		10304E60703AFC97E8B3E4FB /* RCTCashflowSigning.mm in Sources */ = {isa = PBXBuildFile; fileRef = 153C2621B0DBE7209605B16D /* RCTCashflowSigning.mm */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		3C6C546221A84946A73B6281 /* Poppins-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 19BD4B818B7C430F950C2310 /* Poppins-Medium.ttf */; };
+		4D71D20838784224A76B83A3 /* Poppins-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4DAD7A285CB44CAE985C6F04 /* Poppins-Light.ttf */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		B70AF146C74A73D44B0B2547 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		D19B8CFD53D019992ACE4D20 /* CashflowSigningImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092ED883571EDF1151AF816F /* CashflowSigningImpl.swift */; };
-		4D71D20838784224A76B83A3 /* Poppins-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4DAD7A285CB44CAE985C6F04 /* Poppins-Light.ttf */; };
-		3C6C546221A84946A73B6281 /* Poppins-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 19BD4B818B7C430F950C2310 /* Poppins-Medium.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -25,15 +25,15 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Cashflow/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = Cashflow/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		153C2621B0DBE7209605B16D /* RCTCashflowSigning.mm */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.objcpp; name = RCTCashflowSigning.mm; path = Cashflow/RCTCashflowSigning.mm; sourceTree = "<group>"; };
+		19BD4B818B7C430F950C2310 /* Poppins-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-Medium.ttf"; path = "../assets/fonts/Poppins-Medium.ttf"; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-Cashflow.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Cashflow.debug.xcconfig"; path = "Target Support Files/Pods-Cashflow/Pods-Cashflow.debug.xcconfig"; sourceTree = "<group>"; };
+		4DAD7A285CB44CAE985C6F04 /* Poppins-Light.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-Light.ttf"; path = "../assets/fonts/Poppins-Light.ttf"; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-Cashflow.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Cashflow.release.xcconfig"; path = "Target Support Files/Pods-Cashflow/Pods-Cashflow.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-Cashflow.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Cashflow.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Cashflow/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = Cashflow/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		9AF1E6F256ED640C1F1A84C7 /* RCTCashflowSigning.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = RCTCashflowSigning.h; path = Cashflow/RCTCashflowSigning.h; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		4DAD7A285CB44CAE985C6F04 /* Poppins-Light.ttf */ = {isa = PBXFileReference; name = "Poppins-Light.ttf"; path = "../assets/fonts/Poppins-Light.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		19BD4B818B7C430F950C2310 /* Poppins-Medium.ttf */ = {isa = PBXFileReference; name = "Poppins-Medium.ttf"; path = "../assets/fonts/Poppins-Medium.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +70,16 @@
 				5DCACB8F33CDC322A6C60F78 /* libPods-Cashflow.a */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		48D713D0586F4C66A9D3A4F3 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				4DAD7A285CB44CAE985C6F04 /* Poppins-Light.ttf */,
+				19BD4B818B7C430F950C2310 /* Poppins-Medium.ttf */,
+			);
+			name = Resources;
+			path = "";
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -110,16 +120,6 @@
 			);
 			path = Pods;
 			sourceTree = "<group>";
-		};
-		48D713D0586F4C66A9D3A4F3 /* Resources */ = {
-			isa = "PBXGroup";
-			children = (
-				4DAD7A285CB44CAE985C6F04 /* Poppins-Light.ttf */,
-				19BD4B818B7C430F950C2310 /* Poppins-Medium.ttf */,
-			);
-			name = Resources;
-			sourceTree = "<group>";
-			path = "";
 		};
 /* End PBXGroup section */
 

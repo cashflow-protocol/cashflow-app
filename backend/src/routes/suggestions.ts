@@ -24,12 +24,21 @@ router.post('/', async (req: Request, res: Response) => {
       walletAddress,
       appVersion,
       buildNumber,
-      androidVersion,
+      osVersion,
       device,
       platform,
     } = req.body as SuggestionsRequest;
 
     const suggestions: Suggestion[] = [];
+
+    // INFO ABOUT MY DEVICE
+    // suggestions.push({
+    //   id: 'test',
+    //   type: 'link',
+    //   title: 'Info',
+    //   description: `vaultAddress: ${vaultAddress}\nwallet: ${walletAddress}\napp version: ${appVersion}\nbuildNumber: ${buildNumber}\nplatform: ${platform}\nosVersion: ${osVersion}\ndevice: ${device}`,
+    //   color: '#ff0',
+    // });
 
     // --- Link suggestions (hardcoded for now) ---
     // Example: uncomment to add announcements
@@ -38,16 +47,6 @@ router.post('/', async (req: Request, res: Response) => {
       type: 'link',
       title: 'Build in public',
       description: 'We build Cashflow in public with every day video updates. Follow @cashflow_fi on X.',
-      color: '#000000',
-      buttonTitle: 'Follow',
-      url: 'https://x.com/cashflow_fi',
-    });
-
-    suggestions.push({
-      id: 'test',
-      type: 'link',
-      title: 'Info',
-      description: `vaultAddress: ${vaultAddress}\nwallet: ${walletAddress}\napp version: ${appVersion}\nbuildNumber: ${buildNumber}\nplatform: ${platform}\nandroidVersion: ${androidVersion}\ndevice: ${device}`,
       color: '#000000',
       buttonTitle: 'Follow',
       url: 'https://x.com/cashflow_fi',

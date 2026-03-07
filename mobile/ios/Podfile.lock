@@ -1905,6 +1905,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - RNDeviceInfo (15.0.2):
+    - React-Core
   - RNKeychain (10.0.0):
     - hermes-engine
     - RCTRequired
@@ -2053,6 +2055,7 @@ DEPENDENCIES:
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - ReactNativeDependencies (from `../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
   - "RNCClipboard (from `../node_modules/@react-native-clipboard/clipboard`)"
+  - RNDeviceInfo (from `../node_modules/react-native-device-info`)
   - RNKeychain (from `../node_modules/react-native-keychain`)
   - RNSVG (from `../node_modules/react-native-svg`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
@@ -2217,6 +2220,8 @@ EXTERNAL SOURCES:
     :podspec: "../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
   RNCClipboard:
     :path: "../node_modules/@react-native-clipboard/clipboard"
+  RNDeviceInfo:
+    :path: "../node_modules/react-native-device-info"
   RNKeychain:
     :path: "../node_modules/react-native-keychain"
   RNSVG:
@@ -2303,6 +2308,7 @@ SPEC CHECKSUMS:
   ReactCommon: 92b53b0bd7f7d86154dc9f512c1ea5dee717cc72
   ReactNativeDependencies: 4a2b60ee94f49b70d5fd798b46d7f655bb00adbf
   RNCClipboard: 88d7eeb555d1183915f0885bdbc5c97eb6f7f3ba
+  RNDeviceInfo: 4c852998208b60dc192ae3529e5867817719ad1e
   RNKeychain: 667b7bd224f14055ae4cb52b41a82ad0ad70574f
   RNSVG: 507bf2685de6b3d49449efd4aae7e7471bb9c433
   Yoga: 772166513f9cd2d61a6251d0dacbbfaa5b537479
