@@ -40,6 +40,14 @@ class ApiService {
     return { amount: res.data.amount, uiAmount: res.data.uiAmount };
   }
 
+  async getEmptyTokenAccounts(walletAddress: string): Promise<{ total: number; empty: number }> {
+    const res = await this.get<{ success: boolean; data: { total: number; empty: number } }>(
+      '/solana/v1/empty-token-accounts',
+      { walletAddress },
+    );
+    return res.data;
+  }
+
   async getAssets(walletAddress: string): Promise<{ totalUsdValue: number; assets: WalletAsset[] }> {
     const res = await this.get<{
       success: boolean;

@@ -392,6 +392,42 @@ router.get('/wallet-balance', async (req: Request, res: Response) => {
   }
 });
 
+// GET /solana/v1/empty-token-accounts - Count empty (zero-balance) token accounts on a wallet
+router.get('/empty-token-accounts', async (req: Request, res: Response) => {
+  try {
+    const { walletAddress } = req.query;
+    if (!walletAddress || typeof walletAddress !== 'string') {
+      res.status(400).json({ success: false, error: 'walletAddress query param is required' });
+      return;
+    }
+
+    const accounts = await rpc.getTokenAccountsByOwner(
+      address(walletAddress),
+      { programId: address('TokenkegQfeN4jG6CKiR2inLta7dTGqqmqiaBZabp7pN') },
+      { encoding: 'jsonParsed' },
+    ).send();
+
+    const emptyAccounts = accounts.value.filter((acc) => {
+      const parsed = acc.account.data as any;
+      const amount = BigInt(parsed.parsed.info.tokenAmount.amount);
+      return amount === 0n;
+    });
+
+    res.json({
+      success: true,
+      data: { total: accounts.value.length, empty: emptyAccounts.length },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error fetching empty token accounts:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch empty token accounts',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 // GET /solana/v1/assets - Get all wallet assets via Helius DAS API
 router.get('/assets', async (req: Request, res: Response) => {
   try {

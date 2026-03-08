@@ -48,6 +48,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
   const [cloudBalance, setCloudBalance] = useState<number | null>(null);
   const [deviceBalance, setDeviceBalance] = useState<number | null>(null);
   const [reclaimStatus, setReclaimStatus] = useState<string | null>(null);
+  const [emptyAccounts, setEmptyAccounts] = useState<{ total: number; empty: number } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -78,6 +79,11 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
       setVaultBalance(balanceResults[0]);
       setCloudBalance(balanceResults[1]);
       setDeviceBalance(balanceResults[2]);
+
+      // Fetch empty token accounts for vault
+      if (v?.vaultAddress) {
+        apiService.getEmptyTokenAccounts(v.vaultAddress).then(setEmptyAccounts).catch(() => {});
+      }
     })();
   }, []);
 
@@ -222,6 +228,11 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
                   </TouchableOpacity>
                   {vaultBalance !== null && (
                     <Text style={styles.balanceText}>{formatSol(vaultBalance)}</Text>
+                  )}
+                  {emptyAccounts !== null && emptyAccounts.empty > 0 && (
+                    <Text style={styles.emptyAccountsText}>
+                      {emptyAccounts.empty} empty token account{emptyAccounts.empty !== 1 ? 's' : ''}
+                    </Text>
                   )}
                 </View>
                 <Text style={styles.menuArrow}>{'>'}</Text>
@@ -496,6 +507,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#1A1A1A',
+    marginTop: 2,
+  },
+  emptyAccountsText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#F5A623',
     marginTop: 2,
   },
   exportKeyText: {
