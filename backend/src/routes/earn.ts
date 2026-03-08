@@ -53,19 +53,30 @@ router.get('/positions', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'walletAddress query param is required' });
       return;
     }
-    const positionPromises: Promise<any[]>[] = [
-      jupiterManager.getWalletPositions(walletAddress),
-      kaminoManager.getWalletPositions(walletAddress),
+    const positionPromises: [string, Promise<any[]>][] = [
+      ['jupiter', jupiterManager.getWalletPositions(walletAddress)],
+      ['kamino', kaminoManager.getWalletPositions(walletAddress)],
     ];
     if (driftManager) {
       positionPromises.push(
-        (async () => { await driftReady; return driftManager!.getWalletPositions(walletAddress); })(),
+        ['drift', (async () => { await driftReady; return driftManager!.getWalletPositions(walletAddress); })()],
       );
     }
-    const [jupiterPositions, kaminoPositions, driftPositions = []] = await Promise.all(positionPromises);
+
+    const results = await Promise.allSettled(positionPromises.map(([, p]) => p));
+    const settled: Record<string, any[]> = {};
+    results.forEach((r, i) => {
+      const name = positionPromises[i][0];
+      if (r.status === 'fulfilled') {
+        settled[name] = r.value;
+      } else {
+        console.error(`[positions] ${name} failed:`, r.reason?.message ?? r.reason);
+        settled[name] = [];
+      }
+    });
 
     const positions = [
-      ...jupiterPositions
+      ...settled.jupiter
         .filter((p: any) => Number(p.underlyingAssets) > 0)
         .map((p: any) => {
           const mint = p.token.assetAddress;
@@ -85,7 +96,7 @@ router.get('/positions', async (req: Request, res: Response) => {
             } as IBalance,
           };
         }),
-      ...kaminoPositions.map((p: any) => {
+      ...(settled.kamino ?? []).map((p: any) => {
         const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
         const decimals = tokenInfo?.decimals ?? 0;
         const symbol = tokenInfo?.symbol ?? '';
@@ -103,7 +114,7 @@ router.get('/positions', async (req: Request, res: Response) => {
           } as IBalance,
         };
       }),
-      ...driftPositions.map((p: any) => {
+      ...(settled.drift ?? []).map((p: any) => {
         const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
         const decimals = tokenInfo?.decimals ?? 0;
         const symbol = tokenInfo?.symbol ?? '';
