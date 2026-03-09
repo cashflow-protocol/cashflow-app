@@ -38,6 +38,8 @@ import type { SerializedInstruction } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const NATIVE_SOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 const DRIFT_ACCOUNT_INIT_COST = 30_000_000; // ~0.03 SOL for UserStats + User account rent
 
 interface DriftSpotMarketData {
@@ -251,6 +253,13 @@ export class DriftManager {
       await this.driftClient.addExtraAccountMetasToRemainingAccounts(spotMarket.mint, remainingAccounts);
     }
 
+    // For SOL deposits: wrap native SOL → wSOL before calling Drift's deposit
+    if (spotMarket.mint.equals(NATIVE_SOL_MINT)) {
+      instructions.push(
+        ...this.buildSolWrapInstructions(userPubkey, ata, tokenProgramId, bnAmount),
+      );
+    }
+
     const depositIx = await this.driftClient.program.methods
       .deposit(spotMarket.marketIndex, bnAmount, false)
       .accounts({
@@ -322,7 +331,14 @@ export class DriftManager {
       .remainingAccounts(remainingAccounts)
       .instruction();
 
-    return [createAtaIx, withdrawIx].map((ix) => this.web3IxToSerialized(ix));
+    const instructions = [createAtaIx, withdrawIx];
+
+    // For SOL withdrawals: close wSOL ATA to unwrap back to native SOL
+    if (spotMarket.mint.equals(NATIVE_SOL_MINT)) {
+      instructions.push(this.buildCloseAccountInstruction(ata, userPubkey, tokenProgramId));
+    }
+
+    return instructions.map((ix) => this.web3IxToSerialized(ix));
   }
 
   /**
@@ -549,6 +565,58 @@ export class DriftManager {
     const market = markets.find((m) => m.pubkey.toBase58() === vaultAddress);
     if (!market) throw new Error(`Drift spot market not found: ${vaultAddress}`);
     return market;
+  }
+
+  /**
+   * Build wSOL wrapping instructions: create ATA (idempotent) + transfer SOL + syncNative.
+   */
+  private buildSolWrapInstructions(
+    owner: PublicKey, wsolAta: PublicKey, tokenProgramId: PublicKey, amount: BN,
+  ): TransactionInstruction[] {
+    const createAtaIx = new TransactionInstruction({
+      keys: [
+        { pubkey: owner, isSigner: true, isWritable: true },
+        { pubkey: wsolAta, isSigner: false, isWritable: true },
+        { pubkey: owner, isSigner: false, isWritable: false },
+        { pubkey: NATIVE_SOL_MINT, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: tokenProgramId, isSigner: false, isWritable: false },
+      ],
+      programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+      data: Buffer.from([1]), // CreateAssociatedTokenAccountIdempotent
+    });
+
+    const transferIx = SystemProgram.transfer({
+      fromPubkey: owner,
+      toPubkey: wsolAta,
+      lamports: BigInt(amount.toString()),
+    });
+
+    // SyncNative instruction (SPL Token instruction index 17)
+    const syncNativeIx = new TransactionInstruction({
+      keys: [{ pubkey: wsolAta, isSigner: false, isWritable: true }],
+      programId: TOKEN_PROGRAM_ID,
+      data: Buffer.from([17]),
+    });
+
+    return [createAtaIx, transferIx, syncNativeIx];
+  }
+
+  /**
+   * Build a CloseAccount instruction (SPL Token instruction index 9).
+   */
+  private buildCloseAccountInstruction(
+    account: PublicKey, destination: PublicKey, tokenProgramId: PublicKey,
+  ): TransactionInstruction {
+    return new TransactionInstruction({
+      keys: [
+        { pubkey: account, isSigner: false, isWritable: true },
+        { pubkey: destination, isSigner: false, isWritable: true },
+        { pubkey: destination, isSigner: true, isWritable: false }, // owner = destination
+      ],
+      programId: tokenProgramId,
+      data: Buffer.from([9]),
+    });
   }
 
   private getAssociatedTokenAddress(mint: PublicKey, owner: PublicKey, tokenProgramId: PublicKey): PublicKey {
