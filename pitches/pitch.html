@@ -743,6 +743,27 @@
             line-height: 1.3;
         }
 
+        /* X screenshots row */
+        .traction-section-title {
+            font-size: var(--tiny-size);
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: clamp(0.3rem, 0.6vw, 0.5rem);
+        }
+
+        .x-screenshots {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: clamp(0.5rem, 1.2vw, 1rem);
+        }
+
+        .x-screenshot {
+            width: 100%;
+            border-radius: clamp(8px, 1.2vw, 14px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            object-fit: contain;
+        }
+
         /* ===========================================
            ROADMAP (Slide 11)
            =========================================== */
@@ -1504,37 +1525,35 @@
         <div class="slide-inner">
             <div class="reveal">
                 <p class="slide-label">Traction</p>
-                <h2 class="slide-title">Built, tested, and shipping in public.</h2>
+                <h2 class="slide-title">Building in public. Growing organically.</h2>
             </div>
 
-            <div class="grid-3 reveal" style="transition-delay: 0.12s;">
-                <div class="glass metric-card">
-                    <p class="metric-value accent">3</p>
-                    <p class="metric-label">Protocols</p>
-                    <p class="metric-desc">Jupiter Lend, Kamino, Drift integrated</p>
-                </div>
-                <div class="glass metric-card">
-                    <p class="metric-value accent">Mainnet</p>
-                    <p class="metric-label">Live</p>
-                    <p class="metric-desc">Tested with real funds on Solana mainnet</p>
-                </div>
-                <div class="glass metric-card">
-                    <p class="metric-value accent">Squads</p>
-                    <p class="metric-label">Security</p>
-                    <p class="metric-desc">Multi-sig vault built on Squads Protocol</p>
+            <!-- Build in Public — X screenshots -->
+            <div class="reveal" style="transition-delay: 0.12s;">
+                <p class="traction-section-title">Daily video updates on X</p>
+                <div class="x-screenshots">
+                    <img src="files/IMG_0995.jpg" alt="X post screenshot" class="x-screenshot">
+                    <img src="files/IMG_0996.PNG" alt="X post screenshot" class="x-screenshot">
+                    <img src="files/IMG_0997.PNG" alt="X post screenshot" class="x-screenshot">
                 </div>
             </div>
 
-            <div class="grid-2 reveal" style="transition-delay: 0.22s;">
+            <!-- Waitlist + Community -->
+            <div class="grid-3 reveal" style="transition-delay: 0.22s;">
                 <div class="glass metric-card">
-                    <p class="metric-value accent">Waitlist</p>
-                    <p class="metric-label">Early Signups</p>
-                    <p class="metric-desc">Growing organically through community</p>
+                    <p class="metric-value accent">100+</p>
+                    <p class="metric-label">Waitlist Signups</p>
+                    <p class="metric-desc">Early users ready for launch</p>
                 </div>
                 <div class="glass metric-card">
-                    <p class="metric-value accent">Daily</p>
-                    <p class="metric-label">Building in Public</p>
-                    <p class="metric-desc">Daily video updates on X & Telegram</p>
+                    <p class="metric-value accent">2,330</p>
+                    <p class="metric-label">X Followers</p>
+                    <p class="metric-desc">@heymike777</p>
+                </div>
+                <div class="glass metric-card">
+                    <p class="metric-value accent">625</p>
+                    <p class="metric-label">Telegram Subscribers</p>
+                    <p class="metric-desc">Private channel</p>
                 </div>
             </div>
         </div>
