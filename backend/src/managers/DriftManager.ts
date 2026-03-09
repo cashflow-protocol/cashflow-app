@@ -38,6 +38,7 @@ import type { SerializedInstruction } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+const DRIFT_ACCOUNT_INIT_COST = 30_000_000; // ~0.03 SOL for UserStats + User account rent
 
 interface DriftSpotMarketData {
   marketIndex: number;
@@ -198,6 +199,12 @@ export class DriftManager {
     const userInitialized = userAccountInfo !== null;
 
     if (!userInitialized) {
+      // Check SOL balance for account creation rent
+      const solBalance = await this.connection.getBalance(userPubkey);
+      if (solBalance < DRIFT_ACCOUNT_INIT_COST) {
+        throw new Error('You need at least 0.03 SOL to create your Drift account');
+      }
+
       const userStatsInfo = await this.connection.getAccountInfo(userStatsPubkey);
       if (!userStatsInfo) {
         const initStatsIx = await this.driftClient.program.methods
@@ -342,6 +349,12 @@ export class DriftManager {
     const userInitialized = userAccountInfo !== null;
 
     if (!userInitialized) {
+      // Check SOL balance for account creation rent
+      const solBalance = await this.connection.getBalance(userPubkey);
+      if (solBalance < DRIFT_ACCOUNT_INIT_COST) {
+        throw new Error('You need at least 0.03 SOL to create your Drift account');
+      }
+
       const userStatsInfo = await this.connection.getAccountInfo(userStatsPubkey);
       if (!userStatsInfo) {
         const initStatsIx = await this.driftClient.program.methods

@@ -74,7 +74,7 @@ export default function EarnTokenItem({
         {compact && hasPosition ? (
           <View style={styles.depositRight}>
             <Text style={styles.depositUsd}>{positionUsdValue != null ? formatUsd(positionUsdValue) : ''}</Text>
-            <Text style={styles.depositAmount}>{positionAmount.toFixed(2)} {symbol}</Text>
+            <Text style={styles.depositAmount}>{parseFloat(positionAmount.toFixed(9))} {symbol}</Text>
           </View>
         ) : (
           <Text style={styles.apy}>{apyPercent}%</Text>
@@ -84,7 +84,7 @@ export default function EarnTokenItem({
       {!compact && hasPosition && (
         <View style={styles.positionBar}>
           <Text style={styles.positionLabel}>Your deposit</Text>
-          <Text style={styles.positionAmount}>{positionAmount.toFixed(2)} {symbol}</Text>
+          <Text style={styles.positionAmount}>{parseFloat(positionAmount.toFixed(9))} {symbol}</Text>
         </View>
       )}
     </TouchableOpacity>

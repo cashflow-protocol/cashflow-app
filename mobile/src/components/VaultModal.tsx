@@ -282,7 +282,7 @@ export default function VaultModal({
                 <View style={styles.positionBar}>
                   <Text style={styles.positionLabel}>Your deposit</Text>
                   <Text style={styles.positionAmount}>
-                    {position!.balance.uiAmount.toFixed(2)} {symbol}
+                    {parseFloat(position!.balance.uiAmount.toFixed(9))} {symbol}
                   </Text>
                 </View>
               )}
