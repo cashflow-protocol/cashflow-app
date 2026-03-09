@@ -33,6 +33,13 @@ function formatUsd(value: number): string {
   return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** Format amount with up to 9 decimals, trimming trailing zeros. Avoids scientific notation. */
+function formatAmount(value: number): string {
+  if (value === 0) return '0';
+  const str = value.toFixed(9);
+  return str.replace(/\.?0+$/, '');
+}
+
 export default function EarnTokenItem({
   type,
   mint,
@@ -74,7 +81,7 @@ export default function EarnTokenItem({
         {compact && hasPosition ? (
           <View style={styles.depositRight}>
             <Text style={styles.depositUsd}>{positionUsdValue != null ? formatUsd(positionUsdValue) : ''}</Text>
-            <Text style={styles.depositAmount}>{parseFloat(positionAmount.toFixed(9))} {symbol}</Text>
+            <Text style={styles.depositAmount}>{formatAmount(positionAmount)} {symbol}</Text>
           </View>
         ) : (
           <Text style={styles.apy}>{apyPercent}%</Text>
@@ -84,7 +91,7 @@ export default function EarnTokenItem({
       {!compact && hasPosition && (
         <View style={styles.positionBar}>
           <Text style={styles.positionLabel}>Your deposit</Text>
-          <Text style={styles.positionAmount}>{parseFloat(positionAmount.toFixed(9))} {symbol}</Text>
+          <Text style={styles.positionAmount}>{formatAmount(positionAmount)} {symbol}</Text>
         </View>
       )}
     </TouchableOpacity>

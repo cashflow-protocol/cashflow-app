@@ -270,8 +270,28 @@ export class JupiterManager {
       { asset: mint, signer: templateSigner, amount },
     );
 
-    return (await this.replaceAuthority(response.data.instructions, templateSigner, ownerAddress, mint))
+    const jupiterIxs = (await this.replaceAuthority(response.data.instructions, templateSigner, ownerAddress, mint))
       .map(ix => this.makeAtaIdempotent(ix));
+
+    // For SOL withdrawals: close the wSOL ATA to unwrap back to native SOL
+    if (mint === SOL_MINT) {
+      const signer = this.createNoopSigner(ownerAddress);
+      const owner = address(ownerAddress);
+      const [wsolAta] = await findAssociatedTokenPda({
+        owner, tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: address(SOL_MINT),
+      });
+
+      const closeIx = this.kitIxToSerialized(getCloseAccountInstruction({
+        account: wsolAta,
+        destination: owner,
+        owner: signer,
+      }));
+
+      console.log(`[JupiterManager.getWithdrawInstructions] SOL withdraw: ${jupiterIxs.length} jupiter + 1 close = ${jupiterIxs.length + 1} total`);
+      return [...jupiterIxs, closeIx];
+    }
+
+    return jupiterIxs;
   }
 
   /**

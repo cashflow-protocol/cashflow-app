@@ -34,6 +34,13 @@ const PROTOCOL_ICONS: Record<EarnTokenType, ImageSourcePropType> = {
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const SOL_RENT_RESERVE = BigInt(10_000_000); // 0.01 SOL in lamports
 
+/** Format amount with up to 9 decimals, trimming trailing zeros. Avoids scientific notation. */
+function formatAmount(value: number): string {
+  if (value === 0) return '0';
+  const str = value.toFixed(9);
+  return str.replace(/\.?0+$/, '');
+}
+
 interface VaultModalProps {
   visible: boolean;
   onClose: () => void;
@@ -282,7 +289,7 @@ export default function VaultModal({
                 <View style={styles.positionBar}>
                   <Text style={styles.positionLabel}>Your deposit</Text>
                   <Text style={styles.positionAmount}>
-                    {parseFloat(position!.balance.uiAmount.toFixed(9))} {symbol}
+                    {formatAmount(position!.balance.uiAmount)} {symbol}
                   </Text>
                 </View>
               )}
