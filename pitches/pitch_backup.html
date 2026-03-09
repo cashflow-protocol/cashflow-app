@@ -1433,9 +1433,35 @@
          SLIDE 6: DEMO
          ═══════════════════════════════════════════ -->
     <section class="slide" data-slide="6">
-        <div class="slide-inner" style="justify-content: center; align-items: center; text-align: center;">
-            <div class="reveal">
-                <h2 class="slide-title gradient-text" style="font-size: clamp(3rem, 8vw, 7rem);">Live Demo</h2>
+        <div class="slide-inner">
+            <div class="demo-layout">
+                <div class="demo-text">
+                    <div class="reveal">
+                        <p class="slide-label">Product</p>
+                        <h2 class="slide-title gradient-text">Live Demo</h2>
+                    </div>
+
+                    <div class="demo-steps reveal" style="transition-delay: 0.15s;">
+                        <div class="demo-step-row">
+                            <span class="demo-step-num">1</span>
+                            <span class="demo-step-label">Create Vault</span>
+                        </div>
+                        <div class="demo-step-row">
+                            <span class="demo-step-num">2</span>
+                            <span class="demo-step-label">Fund with stablecoins</span>
+                        </div>
+                        <div class="demo-step-row">
+                            <span class="demo-step-num">3</span>
+                            <span class="demo-step-label">Deposit & Earn</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="seeker-device reveal-scale" style="transition-delay: 0.2s;">
+                    <img src="files/seeker.png" alt="Solana Seeker" class="seeker-img">
+                    <video id="demo-video" src="files/cashflow-demo.mp4" loop muted playsinline></video>
+                    <button class="video-play-btn" id="demo-play-btn" aria-label="Play demo video"></button>
+                </div>
             </div>
         </div>
     </section>
