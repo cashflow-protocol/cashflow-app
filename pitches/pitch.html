@@ -1212,6 +1212,44 @@
             html { scroll-behavior: auto; }
             .orb { animation: none !important; }
         }
+        /* ===========================================
+           PRINT / PDF EXPORT
+           =========================================== */
+        @media print {
+            html, body {
+                height: auto;
+                overflow: visible;
+                scroll-snap-type: none;
+                background: var(--bg-deep);
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .slide {
+                min-height: 100vh;
+                height: 100vh;
+                scroll-snap-align: none;
+                page-break-after: always;
+                break-after: page;
+            }
+
+            .slide:last-child {
+                page-break-after: avoid;
+                break-after: avoid;
+            }
+
+            /* Make all reveal animations visible */
+            .reveal, .reveal-scale {
+                opacity: 1 !important;
+                transform: none !important;
+            }
+
+            /* Hide nav dots if any */
+            .slide-nav {
+                display: none !important;
+            }
+        }
+
     </style>
 </head>
 <body>
