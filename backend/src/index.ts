@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI;
 
 // Middleware
-app.use(cors({ origin: ['https://cashflow.fun', 'http://localhost:3000'] }));
+app.use(cors({ origin: ['https://cashflow.fun', 'https://www.cashflow.fun', 'http://localhost:3000'] }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
