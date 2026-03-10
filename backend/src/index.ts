@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express, { Application } from 'express';
+import cors from 'cors';
 import mongoose from 'mongoose';
 import configRouter from './routes/config';
 import earnRouter from './routes/earn';
@@ -16,6 +17,7 @@ const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI;
 
 // Middleware
+app.use(cors({ origin: ['https://cashflow.fun', 'http://localhost:3000'] }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
