@@ -43,7 +43,7 @@
       <h1>Rething<br><span class="gradient-text">yield generation.</span></h1>
       <p>Earn yield across top Solana protocols.<br>One mobile app for everything.</p>
       <div class="hero-buttons">
-        <a href="#cta" class="btn btn-l btn-gradient">Get the App</a>
+        <button class="btn btn-l btn-gradient open-waitlist">Join Waitlist</button>
         <a href="#earn" class="btn btn-l btn-outline">How it works</a>
       </div>
     </div>
@@ -74,7 +74,7 @@
             <span class="tag">Kamino</span>
             <span class="tag">Drift</span>
           </div>
-          <a href="#cta" class="btn btn-m btn-dark">Start earning</a>
+          <button class="btn btn-m btn-dark open-waitlist">Start earning</button>
         </div>
         <div class="card-phone">
           <div class="phone">
@@ -102,7 +102,7 @@
             <span class="tag">Send & Receive</span>
             <span class="tag">Token convert</span>
           </div>
-          <a href="#cta" class="btn btn-m btn-dark">Try it out</a>
+          <button class="btn btn-m btn-dark open-waitlist">Try it out</button>
         </div>
       </div>
     </div>
@@ -121,7 +121,7 @@
             <span class="tag">Stocks</span>
             <span class="tag">Metals</span>
           </div>
-          <a href="#cta" class="btn btn-m btn-gradient">Download</a>
+          <button class="btn btn-m btn-gradient open-waitlist">Download</button>
         </div>
         <div class="card-phone">
           <div class="phone">
@@ -202,8 +202,41 @@
       <h2>Start earning on Solana</h2>
       <p>Put your assets to work across the best DeFi protocols.</p>
       <div class="cta-buttons">
-        <a href="https://x.com/cashflow_fi" target="_blank" rel="noopener" class="btn btn-l btn-white">Follow for Updates</a>
-        <a href="#" class="btn btn-l btn-outline">Coming Soon to Seeker</a>
+        <button class="btn btn-l btn-white open-waitlist">Join Waitlist</button>
+        <a href="https://x.com/cashflow_fi" target="_blank" rel="noopener" class="btn btn-l btn-outline">Follow for Updates</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Waitlist Modal -->
+  <div id="waitlist-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <button id="modal-close" class="modal-close">&times;</button>
+      <h2>Join the waitlist</h2>
+      <p>Be the first to know when Cashflow launches.</p>
+
+      <!-- Step 1: Email input -->
+      <div id="waitlist-email" class="waitlist-step">
+        <div class="waitlist-form">
+          <input type="email" id="waitlist-input" placeholder="Enter your email" autocomplete="email">
+          <button id="waitlist-send" class="btn btn-l btn-gradient">Join</button>
+        </div>
+        <p id="waitlist-email-error" class="waitlist-error"></p>
+      </div>
+
+      <!-- Step 2: Verification code -->
+      <div id="waitlist-verify" class="waitlist-step" style="display:none;">
+        <p class="waitlist-subtitle">Enter the 6-digit code sent to <span id="waitlist-sent-email"></span></p>
+        <div class="waitlist-form">
+          <input type="text" id="waitlist-code" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+          <button id="waitlist-confirm" class="btn btn-l btn-gradient">Verify</button>
+        </div>
+        <p id="waitlist-verify-error" class="waitlist-error"></p>
+      </div>
+
+      <!-- Step 3: Success -->
+      <div id="waitlist-success" class="waitlist-step" style="display:none;">
+        <p class="waitlist-success-msg">You're on the list! We'll be in touch.</p>
       </div>
     </div>
   </div>

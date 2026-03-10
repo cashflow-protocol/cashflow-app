@@ -6,6 +6,7 @@ import earnRouter from './routes/earn';
 import solanaRouter from './routes/solana';
 import suggestionsRouter from './routes/suggestions';
 import proxyRouter from './routes/proxy';
+import waitlistRouter from './routes/waitlist';
 import { initializeScheduler } from './services';
 import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
@@ -23,6 +24,7 @@ app.use('/config/v1', configRouter);
 app.use('/earn/v1', earnRouter);
 app.use('/solana/v1', solanaRouter);
 app.use('/suggestions/v1', suggestionsRouter);
+app.use('/waitlist/v1', waitlistRouter);
 
 // Health check
 app.get('/health', (req, res) => {

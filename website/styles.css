@@ -674,6 +674,157 @@ nav.scrolled {
   flex-wrap: wrap;
 }
 
+/* --- Waitlist Modal --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.modal-overlay.open {
+  opacity: 1;
+}
+
+.modal-card {
+  background: linear-gradient(135deg, #175DA3 0%, #1E8260 100%);
+  border-radius: var(--radius-card);
+  padding: 60px 48px;
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+  position: relative;
+  transform: translateY(20px) scale(0.97);
+  transition: transform 0.3s ease;
+}
+
+.modal-overlay.open .modal-card {
+  transform: translateY(0) scale(1);
+}
+
+.modal-card h2 {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 12px;
+  color: var(--white);
+}
+
+.modal-card > p {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 32px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: var(--white);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition);
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* --- Waitlist Form --- */
+.waitlist-step {
+  position: relative;
+}
+
+.waitlist-form {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  position: relative;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.waitlist-form input {
+  flex: 1;
+  padding: 16px 24px;
+  font-size: 16px;
+  font-family: inherit;
+  font-weight: 500;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-btn);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--white);
+  outline: none;
+  transition: border-color var(--transition), background var(--transition);
+  min-height: 56px;
+}
+
+.waitlist-form input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.waitlist-form input:focus {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+#waitlist-code {
+  text-align: center;
+  letter-spacing: 8px;
+  font-size: 24px;
+  font-weight: 700;
+  max-width: 200px;
+}
+
+.waitlist-subtitle {
+  font-size: 16px !important;
+  opacity: 0.8;
+  margin-bottom: 24px !important;
+}
+
+.waitlist-subtitle span {
+  font-weight: 700;
+  opacity: 1;
+}
+
+.waitlist-error {
+  color: #ff6b6b;
+  font-size: 14px;
+  margin-top: 12px;
+  min-height: 20px;
+  position: relative;
+}
+
+.waitlist-success-msg {
+  font-size: 20px !important;
+  font-weight: 600;
+  opacity: 1 !important;
+  color: var(--white);
+  position: relative;
+}
+
+.waitlist-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* --- Footer --- */
 footer {
   padding: 40px 24px;
@@ -838,6 +989,24 @@ footer {
 
   .cta-card h2 {
     font-size: 32px;
+  }
+
+  .modal-card {
+    padding: 48px 24px;
+    border-radius: 24px;
+  }
+
+  .modal-card h2 {
+    font-size: 28px;
+  }
+
+  .waitlist-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #waitlist-code {
+    max-width: 100%;
   }
 
   .nav-links {
