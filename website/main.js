@@ -44,11 +44,23 @@ window.addEventListener('scroll', () => {
     document.body.style.overflow = 'hidden';
   }
 
+  function resetModal() {
+    emailStep.style.display = '';
+    verifyStep.style.display = 'none';
+    successStep.style.display = 'none';
+    emailInput.value = '';
+    codeInput.value = '';
+    showError(emailError, '');
+    showError(verifyError, '');
+    currentEmail = '';
+  }
+
   function closeModal() {
     modal.classList.remove('open');
     setTimeout(() => {
       modal.style.display = 'none';
       document.body.style.overflow = '';
+      resetModal();
     }, 300);
   }
 
