@@ -221,7 +221,7 @@ export class KaminoManager {
       ...depositResult.stakeInFarmIfNeededIxs,
     ];
 
-    return allIxs.map((ix: any) => this.kitIxToSerialized(ix));
+    return allIxs.map((ix: any) => this.kitIxToSerialized(ix)).map(ix => this.makeAtaIdempotent(ix));
   }
 
   /**
@@ -242,7 +242,7 @@ export class KaminoManager {
       ...withdrawResult.postWithdrawIxs,
     ];
 
-    return allIxs.map((ix: any) => this.kitIxToSerialized(ix));
+    return allIxs.map((ix: any) => this.kitIxToSerialized(ix)).map(ix => this.makeAtaIdempotent(ix));
   }
 
   /**
@@ -342,6 +342,20 @@ export class KaminoManager {
       console.error('Error creating Kamino withdraw transaction:', error);
       throw error;
     }
+  }
+
+  /**
+   * Convert non-idempotent CreateAssociatedTokenAccount to idempotent.
+   * Kamino SDK may return non-idempotent ATA creates that fail with IllegalOwner
+   * if the account already exists (e.g. from a previous deposit).
+   */
+  private makeAtaIdempotent(ix: SerializedInstruction): SerializedInstruction {
+    const ATA_PROGRAM_ID = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+    if (ix.programId === ATA_PROGRAM_ID && Buffer.from(ix.data, 'base64').length === 0) {
+      console.log('[KaminoManager] Converting non-idempotent ATA create → idempotent');
+      return { ...ix, data: Buffer.from([1]).toString('base64') };
+    }
+    return ix;
   }
 
   private kitIxToSerialized(ix: any): SerializedInstruction {
