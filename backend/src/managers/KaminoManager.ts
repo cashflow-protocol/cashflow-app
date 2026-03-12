@@ -201,6 +201,8 @@ export class KaminoManager {
         vaultTitle: vault.state.name,
         symbol: SUPPORTED_TOKENS_BY_MINT[vault.state.tokenMint]?.symbol ?? '',
         rewardsRate: (parseFloat(metrics!.apy) + parseFloat(metrics!.apyIncentives) + parseFloat(metrics!.apyReservesIncentives) + parseFloat(metrics!.apyFarmRewards)) * 10000,
+        minDepositAmount: vault.state.minDepositAmount ?? '0',
+        minWithdrawAmount: vault.state.minWithdrawAmount ?? '0',
         protocolData: { ...vault, metrics },
       }));
 

@@ -54,6 +54,8 @@ interface VaultModalProps {
   logoUrl: string;
   rewardsRate: number;
   position?: EarnPosition;
+  minDepositAmount?: string;
+  minWithdrawAmount?: string;
 }
 
 type Mode = 'deposit' | 'withdraw';
@@ -71,6 +73,8 @@ export default function VaultModal({
   logoUrl,
   rewardsRate,
   position,
+  minDepositAmount,
+  minWithdrawAmount,
 }: VaultModalProps) {
   const { wallet, connect, isConnecting } = useWallet();
   const walletAddress = wallet?.publicKey as string | undefined;
@@ -141,7 +145,11 @@ export default function VaultModal({
   const exceedsBalance =
     (mode === 'withdraw' && hasPosition && parsedRaw > BigInt(position!.balance.amount)) ||
     (mode === 'deposit' && walletBalance !== null && parsedRaw > walletBalance);
-  const canSubmit = isValidAmount && !exceedsBalance && !loading;
+  const minAmountRaw = mode === 'deposit'
+    ? BigInt(minDepositAmount || '0')
+    : BigInt(minWithdrawAmount || '0');
+  const belowMinimum = isValidAmount && minAmountRaw > 0n && parsedRaw < minAmountRaw;
+  const canSubmit = isValidAmount && !exceedsBalance && !belowMinimum && !loading;
 
   const handleMaxPress = () => {
     if (mode === 'withdraw' && hasPosition) {
@@ -317,6 +325,11 @@ export default function VaultModal({
               {exceedsBalance && (
                 <Text style={styles.validationError}>
                   {mode === 'withdraw' ? 'Exceeds your deposit balance' : 'Exceeds your wallet balance'}
+                </Text>
+              )}
+              {belowMinimum && (
+                <Text style={styles.validationError}>
+                  Minimum {mode} is {toUiAmount(minAmountRaw, decimals)} {symbol}
                 </Text>
               )}
 

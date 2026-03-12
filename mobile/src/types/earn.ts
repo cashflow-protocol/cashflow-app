@@ -11,6 +11,8 @@ export interface EarnToken {
   name: string;
   decimals: number;
   logoUrl: string;
+  minDepositAmount?: string;
+  minWithdrawAmount?: string;
 }
 
 export interface WalletAsset {

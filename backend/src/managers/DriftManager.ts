@@ -664,6 +664,8 @@ export class DriftManager {
       vaultTitle: `Drift - ${SUPPORTED_TOKENS_BY_MINT[market.mint]?.symbol ?? ''}`,
       symbol: SUPPORTED_TOKENS_BY_MINT[market.mint]?.symbol ?? '',
       rewardsRate: market.depositRate * 10000,
+      minDepositAmount: '0',
+      minWithdrawAmount: '0',
       protocolData: market.rawAccount,
     }));
 

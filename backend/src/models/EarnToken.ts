@@ -41,6 +41,12 @@ export class EarnToken {
   @prop({ required: true, enum: ['active', 'inactive'], default: 'inactive' })
   public status!: 'active' | 'inactive';
 
+  @prop({ default: '0' })
+  public minDepositAmount?: string;
+
+  @prop({ default: '0' })
+  public minWithdrawAmount?: string;
+
   @prop({ type: () => Object })
   public jupiterToken?: Record<string, any>;
 

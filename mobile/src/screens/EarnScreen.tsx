@@ -217,6 +217,8 @@ export default function EarnScreen() {
           logoUrl={selectedToken.logoUrl}
           rewardsRate={selectedToken.rewardsRate}
           position={selectedToken.position}
+          minDepositAmount={selectedToken.minDepositAmount}
+          minWithdrawAmount={selectedToken.minWithdrawAmount}
         />
       )}
     </View>

@@ -158,6 +158,15 @@ router.post('/deposit', async (req: Request, res: Response) => {
     const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
     console.log(`DEPOSIT walletAddress: ${walletAddress}, ownerAddress: ${authority}, type: ${type}, mint: ${mint}, symbol: ${tokenInfo?.symbol}, amount (raw): ${amount}, decimals: ${tokenInfo?.decimals}, vaultAddress: ${vaultAddress}, returnInstructions: ${!!returnInstructions}`)
 
+    // Validate minimum deposit amount
+    const earnToken = await EarnTokenModel.findOne({ type, mint, vaultAddress, status: 'active' }).lean();
+    if (earnToken?.minDepositAmount && earnToken.minDepositAmount !== '0' && BigInt(amount) < BigInt(earnToken.minDepositAmount)) {
+      const decimals = tokenInfo?.decimals ?? 0;
+      const minUi = (Number(earnToken.minDepositAmount) / 10 ** decimals).toString();
+      res.status(400).json({ success: false, error: `Minimum deposit is ${minUi} ${tokenInfo?.symbol ?? ''}` });
+      return;
+    }
+
     // Return raw instructions for Squads vault flow
     if (returnInstructions) {
       let instructions: any[];
@@ -277,6 +286,16 @@ router.post('/withdraw', async (req: Request, res: Response) => {
   try {
     const { type, mint, vaultAddress, amount, walletAddress, ownerAddress, returnInstructions } = req.body;
     const authority = ownerAddress || walletAddress;
+
+    // Validate minimum withdraw amount
+    const earnToken = await EarnTokenModel.findOne({ type, mint, vaultAddress, status: 'active' }).lean();
+    if (earnToken?.minWithdrawAmount && earnToken.minWithdrawAmount !== '0' && BigInt(amount) < BigInt(earnToken.minWithdrawAmount)) {
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+      const decimals = tokenInfo?.decimals ?? 0;
+      const minUi = (Number(earnToken.minWithdrawAmount) / 10 ** decimals).toString();
+      res.status(400).json({ success: false, error: `Minimum withdrawal is ${minUi} ${tokenInfo?.symbol ?? ''}` });
+      return;
+    }
 
     // Return raw instructions for Squads vault flow
     if (returnInstructions) {

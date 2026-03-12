@@ -576,6 +576,8 @@ export class JupiterManager {
         vaultTitle: `Jupiter Lend - ${token.asset.symbol}`,
         symbol: token.asset.symbol,
         rewardsRate: parseFloat(token.totalRate),
+        minDepositAmount: '0',
+        minWithdrawAmount: '0',
         protocolData: token,
       }));
 

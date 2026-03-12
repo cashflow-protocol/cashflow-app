@@ -8,6 +8,8 @@ export interface EarnTokenUpsert {
   vaultTitle: string;
   symbol: string;
   rewardsRate: number;
+  minDepositAmount?: string;
+  minWithdrawAmount?: string;
   protocolData?: Record<string, any>;
 }
 
@@ -43,6 +45,8 @@ export class DBManager {
               vaultTitle: token.vaultTitle,
               symbol: token.symbol,
               rewardsRate: token.rewardsRate,
+              ...(token.minDepositAmount && { minDepositAmount: token.minDepositAmount }),
+              ...(token.minWithdrawAmount && { minWithdrawAmount: token.minWithdrawAmount }),
               ...(token.protocolData && { [dataField]: token.protocolData }),
             },
             $setOnInsert: {
@@ -77,7 +81,7 @@ export class DBManager {
     }
 
     return EarnTokenModel.find(query)
-      .select('type mint vaultAddress vaultTitle symbol rewardsRate status')
+      .select('type mint vaultAddress vaultTitle symbol rewardsRate status minDepositAmount minWithdrawAmount')
       .sort({ rewardsRate: -1 });
   }
 
