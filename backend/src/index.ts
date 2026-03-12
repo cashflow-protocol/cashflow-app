@@ -10,6 +10,7 @@ import proxyRouter from './routes/proxy';
 import waitlistRouter from './routes/waitlist';
 import authRouter from './routes/auth';
 import { requireAuth } from './middleware/auth';
+import { signResponseMiddleware } from './middleware/signResponse';
 import { initializeScheduler } from './services';
 import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
@@ -33,9 +34,9 @@ app.use('/waitlist/v1', waitlistRouter);
 // Auth routes (no auth required)
 app.use('/auth/v2', authRouter);
 
-// v2 routes (JWT auth required)
-app.use('/earn/v2', requireAuth, earnRouter);
-app.use('/solana/v2', requireAuth, solanaRouter);
+// v2 routes (JWT auth required, response signing for transaction routes)
+app.use('/earn/v2', requireAuth, signResponseMiddleware, earnRouter);
+app.use('/solana/v2', requireAuth, signResponseMiddleware, solanaRouter);
 app.use('/suggestions/v2', requireAuth, suggestionsRouter);
 
 // Health check
@@ -60,6 +61,9 @@ if (!MONGODB_URI){
 }
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET is required');
+}
+if (!process.env.RESPONSE_SIGNING_KEY) {
+  throw new Error('RESPONSE_SIGNING_KEY is required');
 }
 mongoose
   .connect(MONGODB_URI)

@@ -1,6 +1,7 @@
 import { API_CONFIG } from '../config/api';
 import type { EarnToken, EarnPosition, WalletAsset, Suggestion } from '../types/earn';
 import authService from './authService';
+import { verifyResponseSignature } from './responseVerifier';
 
 export interface SerializedInstruction {
   programId: string;
@@ -109,6 +110,17 @@ class ApiService {
     return res.json();
   }
 
+  /** Like post(), but verifies the Ed25519 response signature to detect MITM tampering. */
+  private async signedPost<T>(path: string, body: Record<string, any>): Promise<T> {
+    const res = await this.post<T & { responseSignature?: string }>(path, body);
+    const valid = await verifyResponseSignature(res as Record<string, any>);
+    if (!valid) {
+      throw new Error('Response integrity check failed');
+    }
+    const { responseSignature: _, ...data } = res as any;
+    return data as T;
+  }
+
   async debugLog(tag: string, lines: string[]): Promise<void> {
     // Debug log is an unauthenticated inline route — bypass auth
     await fetch(`${this.baseUrl}/debug/log`, {
@@ -125,7 +137,7 @@ class ApiService {
     amount: string;
     walletAddress: string;
   }): Promise<{ transactionId: string; transaction: string }> {
-    const res = await this.post<{
+    const res = await this.signedPost<{
       success: boolean;
       transactionId: string;
       transaction: string;
@@ -140,7 +152,7 @@ class ApiService {
     amount: string;
     walletAddress: string;
   }): Promise<{ transactionId: string; transaction: string }> {
-    const res = await this.post<{
+    const res = await this.signedPost<{
       success: boolean;
       transactionId: string;
       transaction: string;
@@ -155,7 +167,7 @@ class ApiService {
     walletAddress: string;
     ownerAddress: string;
   }): Promise<{ transactionId: string; instructions: SerializedInstruction[]; lookupTableAddress?: string; extraLookupTables?: string[] }> {
-    const res = await this.post<{
+    const res = await this.signedPost<{
       success: boolean;
       transactionId: string;
       instructions: SerializedInstruction[];
@@ -173,7 +185,7 @@ class ApiService {
     walletAddress: string;
     ownerAddress: string;
   }): Promise<{ transactionId: string; instructions: SerializedInstruction[]; lookupTableAddress?: string; extraLookupTables?: string[] }> {
-    const res = await this.post<{
+    const res = await this.signedPost<{
       success: boolean;
       transactionId: string;
       instructions: SerializedInstruction[];
@@ -191,7 +203,7 @@ class ApiService {
     walletAddress: string;
     decimals: number;
   }): Promise<{ transactionId: string; instructions: SerializedInstruction[] }> {
-    const res = await this.post<{
+    const res = await this.signedPost<{
       success: boolean;
       transactionId: string;
       instructions: SerializedInstruction[];
@@ -219,7 +231,7 @@ class ApiService {
     amount: string;
     decimals: number;
   }): Promise<{ transaction: string }> {
-    const res = await this.post<{ success: boolean; transaction: string }>('/solana/v2/build-transfer', params);
+    const res = await this.signedPost<{ success: boolean; transaction: string }>('/solana/v2/build-transfer', params);
     return { transaction: res.transaction };
   }
 
@@ -229,7 +241,7 @@ class ApiService {
   }
 
   async sendTransaction(transaction: string, transactionId: string): Promise<{ signature: string }> {
-    const res = await this.post<{
+    const res = await this.signedPost<{
       success: boolean;
       signature: string;
     }>('/solana/v2/send', { transaction, transactionId });
@@ -237,7 +249,7 @@ class ApiService {
   }
 
   async sendBundle(transactions: string[]): Promise<{ bundleId: string; status: string }> {
-    const res = await this.post<{
+    const res = await this.signedPost<{
       success: boolean;
       bundleId: string;
       status: string;
