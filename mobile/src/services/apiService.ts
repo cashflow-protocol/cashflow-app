@@ -1,5 +1,6 @@
 import { API_CONFIG } from '../config/api';
 import type { EarnToken, EarnPosition, WalletAsset, Suggestion } from '../types/earn';
+import authService from './authService';
 
 export interface SerializedInstruction {
   programId: string;
@@ -15,7 +16,19 @@ class ApiService {
     if (params) {
       Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
     }
-    const res = await fetch(url.toString());
+    const token = await authService.getToken();
+    const res = await fetch(url.toString(), {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (res.status === 401) {
+      authService.clearToken();
+      const newToken = await authService.getToken();
+      const retry = await fetch(url.toString(), {
+        headers: { 'Authorization': `Bearer ${newToken}` },
+      });
+      if (!retry.ok) throw new Error(`API error: ${retry.status}`);
+      return retry.json();
+    }
     if (!res.ok) {
       throw new Error(`API error: ${res.status}`);
     }
@@ -23,18 +36,18 @@ class ApiService {
   }
 
   async getConfig(): Promise<{ lookupTableAddress: string | null }> {
-    const res = await this.get<{ success: boolean; data: { lookupTableAddress: string | null } }>('/config/v1');
+    const res = await this.get<{ success: boolean; data: { lookupTableAddress: string | null } }>('/config/v2');
     return res.data;
   }
 
   async getEarnTokens(): Promise<EarnToken[]> {
-    const res = await this.get<{ success: boolean; data: EarnToken[] }>('/earn/v1/tokens');
+    const res = await this.get<{ success: boolean; data: EarnToken[] }>('/earn/v2/tokens');
     return res.data;
   }
 
   async getWalletBalance(walletAddress: string, mint: string): Promise<{ amount: string; uiAmount: number }> {
     const res = await this.get<{ success: boolean; data: { mint: string; amount: string; uiAmount: number } }>(
-      '/solana/v1/wallet-balance',
+      '/solana/v2/wallet-balance',
       { walletAddress, mint },
     );
     return { amount: res.data.amount, uiAmount: res.data.uiAmount };
@@ -42,7 +55,7 @@ class ApiService {
 
   async getEmptyTokenAccounts(walletAddress: string): Promise<{ total: number; empty: number }> {
     const res = await this.get<{ success: boolean; data: { total: number; empty: number } }>(
-      '/solana/v1/empty-token-accounts',
+      '/solana/v2/empty-token-accounts',
       { walletAddress },
     );
     return res.data;
@@ -52,12 +65,12 @@ class ApiService {
     const res = await this.get<{
       success: boolean;
       data: { totalUsdValue: number; assets: WalletAsset[] };
-    }>('/solana/v1/assets', { walletAddress });
+    }>('/solana/v2/assets', { walletAddress });
     return res.data;
   }
 
   async getPositions(walletAddress: string): Promise<EarnPosition[]> {
-    const res = await this.get<{ success: boolean; data: EarnPosition[] }>('/earn/v1/positions', {
+    const res = await this.get<{ success: boolean; data: EarnPosition[] }>('/earn/v2/positions', {
       walletAddress,
     });
     return res.data;
@@ -65,11 +78,27 @@ class ApiService {
 
   private async post<T>(path: string, body: Record<string, any>): Promise<T> {
     const url = `${this.baseUrl}${path}`;
+    const token = await authService.getToken();
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
+    if (res.status === 401) {
+      authService.clearToken();
+      const newToken = await authService.getToken();
+      const retry = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${newToken}` },
+        body: JSON.stringify(body),
+      });
+      if (!retry.ok) {
+        const errorBody = await retry.json().catch(() => ({}));
+        throw new Error(errorBody.error || `API error: ${retry.status}`);
+      }
+      return retry.json();
+    }
     if (!res.ok) {
       const errorBody = await res.json().catch(() => ({}));
       throw new Error(errorBody.error || `API error: ${res.status}`);
@@ -78,7 +107,12 @@ class ApiService {
   }
 
   async debugLog(tag: string, lines: string[]): Promise<void> {
-    await this.post('/debug/log', { tag, lines });
+    // Debug log is an unauthenticated inline route — bypass auth
+    await fetch(`${this.baseUrl}/debug/log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag, lines }),
+    });
   }
 
   async deposit(params: {
@@ -92,7 +126,7 @@ class ApiService {
       success: boolean;
       transactionId: string;
       transaction: string;
-    }>('/earn/v1/deposit', params);
+    }>('/earn/v2/deposit', params);
     return { transactionId: res.transactionId, transaction: res.transaction };
   }
 
@@ -107,7 +141,7 @@ class ApiService {
       success: boolean;
       transactionId: string;
       transaction: string;
-    }>('/earn/v1/withdraw', params);
+    }>('/earn/v2/withdraw', params);
     return { transactionId: res.transactionId, transaction: res.transaction };
   }
   async depositInstructions(params: {
@@ -124,7 +158,7 @@ class ApiService {
       instructions: SerializedInstruction[];
       lookupTableAddress?: string;
       extraLookupTables?: string[];
-    }>('/earn/v1/deposit', { ...params, returnInstructions: true });
+    }>('/earn/v2/deposit', { ...params, returnInstructions: true });
     return { transactionId: res.transactionId, instructions: res.instructions, lookupTableAddress: res.lookupTableAddress, extraLookupTables: res.extraLookupTables };
   }
 
@@ -142,7 +176,7 @@ class ApiService {
       instructions: SerializedInstruction[];
       lookupTableAddress?: string;
       extraLookupTables?: string[];
-    }>('/earn/v1/withdraw', { ...params, returnInstructions: true });
+    }>('/earn/v2/withdraw', { ...params, returnInstructions: true });
     return { transactionId: res.transactionId, instructions: res.instructions, lookupTableAddress: res.lookupTableAddress, extraLookupTables: res.extraLookupTables };
   }
 
@@ -158,7 +192,7 @@ class ApiService {
       success: boolean;
       transactionId: string;
       instructions: SerializedInstruction[];
-    }>('/solana/v1/transfer', params);
+    }>('/solana/v2/transfer', params);
     return { transactionId: res.transactionId, instructions: res.instructions };
   }
 
@@ -171,7 +205,7 @@ class ApiService {
     device?: string;
     platform?: string;
   }): Promise<Suggestion[]> {
-    const res = await this.post<{ success: boolean; data: Suggestion[] }>('/suggestions/v1/', params);
+    const res = await this.post<{ success: boolean; data: Suggestion[] }>('/suggestions/v2/', params);
     return res.data;
   }
 
@@ -182,12 +216,12 @@ class ApiService {
     amount: string;
     decimals: number;
   }): Promise<{ transaction: string }> {
-    const res = await this.post<{ success: boolean; transaction: string }>('/solana/v1/build-transfer', params);
+    const res = await this.post<{ success: boolean; transaction: string }>('/solana/v2/build-transfer', params);
     return { transaction: res.transaction };
   }
 
   async getSolPrice(): Promise<number> {
-    const res = await this.get<{ success: boolean; data: { price: number } }>('/solana/v1/sol-price');
+    const res = await this.get<{ success: boolean; data: { price: number } }>('/solana/v2/sol-price');
     return res.data.price;
   }
 
@@ -195,7 +229,7 @@ class ApiService {
     const res = await this.post<{
       success: boolean;
       signature: string;
-    }>('/solana/v1/send', { transaction, transactionId });
+    }>('/solana/v2/send', { transaction, transactionId });
     return { signature: res.signature };
   }
 
@@ -204,7 +238,7 @@ class ApiService {
       success: boolean;
       bundleId: string;
       status: string;
-    }>('/solana/v1/send-bundle', { transactions });
+    }>('/solana/v2/send-bundle', { transactions });
     return { bundleId: res.bundleId, status: res.status };
   }
 }

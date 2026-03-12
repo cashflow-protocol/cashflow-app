@@ -8,6 +8,8 @@ import solanaRouter from './routes/solana';
 import suggestionsRouter from './routes/suggestions';
 import proxyRouter from './routes/proxy';
 import waitlistRouter from './routes/waitlist';
+import authRouter from './routes/auth';
+import { requireAuth } from './middleware/auth';
 import { initializeScheduler } from './services';
 import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
@@ -21,12 +23,21 @@ app.use(cors({ origin: ['https://cashflow.fun', 'https://www.cashflow.fun', 'htt
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
+// v1 routes (deprecated — do not modify, use v2 instead)
 app.use('/config/v1', configRouter);
 app.use('/earn/v1', earnRouter);
 app.use('/solana/v1', solanaRouter);
 app.use('/suggestions/v1', suggestionsRouter);
 app.use('/waitlist/v1', waitlistRouter);
+
+// Auth routes (no auth required)
+app.use('/auth/v2', authRouter);
+
+// v2 routes (JWT auth required)
+app.use('/config/v2', requireAuth, configRouter);
+app.use('/earn/v2', requireAuth, earnRouter);
+app.use('/solana/v2', requireAuth, solanaRouter);
+app.use('/suggestions/v2', requireAuth, suggestionsRouter);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -44,9 +55,12 @@ app.post('/debug/log', (req, res) => {
   res.json({ ok: true });
 });
 
-// Database connection
+// Validate required env vars
 if (!MONGODB_URI){
   throw new Error('MONGODB_URI is required');
+}
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET is required');
 }
 mongoose
   .connect(MONGODB_URI)
