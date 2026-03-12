@@ -1,4 +1,4 @@
-import { EarnTokenModel, TransactionModel, TransactionAction, TransactionStatus, CachedTokenModel, WaitlistEntryModel } from '../models';
+import { EarnTokenModel, TransactionModel, TransactionAction, TransactionStatus, CachedTokenModel, WaitlistEntryModel, UserModel, AuthLogModel } from '../models';
 import { EarnTokenType } from '../types';
 
 export interface EarnTokenUpsert {
@@ -135,5 +135,7 @@ export class DBManager {
     await TransactionModel.syncIndexes();
     await CachedTokenModel.syncIndexes();
     await WaitlistEntryModel.syncIndexes();
+    await UserModel.syncIndexes();
+    await AuthLogModel.syncIndexes();
   }
 }

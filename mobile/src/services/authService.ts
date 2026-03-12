@@ -1,5 +1,9 @@
+import { Platform } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 import { API_CONFIG } from '../config/api';
+import { APP_VERSION, BUILD_NUMBER } from '../config/version';
 import { getCloudPublicKey, signWithCloud } from './keypairStorage';
+import { getVault } from './vaultStorage';
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Re-authenticate 5 min before expiry
 
@@ -44,11 +48,22 @@ class AuthService {
     const challengeBase64 = Buffer.from(challenge, 'utf-8').toString('base64');
     const signatureBase64 = await signWithCloud(challengeBase64);
 
-    // Step 3: Verify signature and get JWT
+    // Step 3: Verify signature and get JWT (include device info for auth logging)
+    const vault = await getVault();
     const verifyRes = await fetch(`${API_CONFIG.baseUrl}/auth/v2/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publicKey, challenge, signature: signatureBase64 }),
+      body: JSON.stringify({
+        publicKey,
+        challenge,
+        signature: signatureBase64,
+        vaultAddress: vault?.vaultAddress,
+        appVersion: APP_VERSION,
+        buildNumber: BUILD_NUMBER,
+        platform: Platform.OS,
+        osVersion: DeviceInfo.getSystemVersion() || String(Platform.Version),
+        device: `${DeviceInfo.getBrand() || Platform.OS} ${DeviceInfo.getModel() || ''}`.trim(),
+      }),
     });
 
     if (!verifyRes.ok) {

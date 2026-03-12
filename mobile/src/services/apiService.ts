@@ -36,7 +36,10 @@ class ApiService {
   }
 
   async getConfig(): Promise<{ lookupTableAddress: string | null }> {
-    const res = await this.get<{ success: boolean; data: { lookupTableAddress: string | null } }>('/config/v2');
+    // Config is needed during vault creation (before auth is available) — bypass auth
+    const r = await fetch(`${this.baseUrl}/config/v1`);
+    if (!r.ok) throw new Error(`API error: ${r.status}`);
+    const res: { success: boolean; data: { lookupTableAddress: string | null } } = await r.json();
     return res.data;
   }
 

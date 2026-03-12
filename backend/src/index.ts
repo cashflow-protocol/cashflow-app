@@ -34,7 +34,6 @@ app.use('/waitlist/v1', waitlistRouter);
 app.use('/auth/v2', authRouter);
 
 // v2 routes (JWT auth required)
-app.use('/config/v2', requireAuth, configRouter);
 app.use('/earn/v2', requireAuth, earnRouter);
 app.use('/solana/v2', requireAuth, solanaRouter);
 app.use('/suggestions/v2', requireAuth, suggestionsRouter);

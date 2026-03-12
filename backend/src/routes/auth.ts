@@ -2,6 +2,7 @@ import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { getBase58Encoder } from '@solana/kit';
 import { createChallenge, consumeChallenge } from '../services/challengeStore';
+import { UserModel, AuthLogModel } from '../models';
 
 const router = Router();
 
@@ -44,10 +45,10 @@ router.post('/challenge', (req, res) => {
  */
 router.post('/verify', async (req, res) => {
   try {
-    const { publicKey, challenge, signature } = req.body;
+    const { publicKey, challenge, signature, vaultAddress, appVersion, buildNumber, osVersion, device, platform } = req.body;
 
-    if (!publicKey || !challenge || !signature) {
-      res.status(400).json({ success: false, error: 'publicKey, challenge, and signature are required' });
+    if (!publicKey || !challenge || !signature || !vaultAddress) {
+      res.status(400).json({ success: false, error: 'publicKey, challenge, signature, and vaultAddress are required' });
       return;
     }
 
@@ -89,9 +90,27 @@ router.post('/verify', async (req, res) => {
       return;
     }
 
+    // Upsert user and log auth event (non-blocking)
+    const now = new Date();
+    UserModel.findOneAndUpdate(
+      { vaultAddress },
+      { $set: { lastSeenAt: now, publicKey }, $setOnInsert: { vaultAddress } },
+      { upsert: true },
+    ).catch((err) => console.error('User upsert error:', err));
+
+    AuthLogModel.create({
+      publicKey,
+      appVersion,
+      buildNumber,
+      osVersion,
+      device,
+      platform,
+      ipAddress: req.ip,
+    }).catch((err) => console.error('AuthLog create error:', err));
+
     // Issue JWT
     const accessToken = jwt.sign(
-      { sub: publicKey },
+      { sub: publicKey, vaultAddress },
       process.env.JWT_SECRET!,
       { expiresIn: TOKEN_EXPIRY_SECONDS },
     );

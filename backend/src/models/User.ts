@@ -1,0 +1,21 @@
+import { prop, getModelForClass, modelOptions, index } from '@typegoose/typegoose';
+
+@modelOptions({
+  schemaOptions: {
+    timestamps: { createdAt: true, updatedAt: false },
+    collection: 'users',
+  },
+})
+@index({ vaultAddress: 1 }, { unique: true })
+export class User {
+  @prop({ required: true })
+  public vaultAddress!: string;
+
+  @prop({ required: true })
+  public publicKey!: string;
+
+  @prop({ required: true, default: () => new Date() })
+  public lastSeenAt!: Date;
+}
+
+export const UserModel = getModelForClass(User);
