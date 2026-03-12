@@ -200,7 +200,7 @@ export class KaminoManager {
         vaultAddress: vault.address,
         vaultTitle: vault.state.name,
         symbol: SUPPORTED_TOKENS_BY_MINT[vault.state.tokenMint]?.symbol ?? '',
-        rewardsRate: (parseFloat(metrics!.apy) + parseFloat(metrics!.apyIncentives) + parseFloat(metrics!.apyReservesIncentives) + parseFloat(metrics!.apyFarmRewards)) * 10000,
+        rewardsRate: ((parseFloat(metrics!.apy) || 0) + (parseFloat(metrics!.apyIncentives) || 0) + (parseFloat(metrics!.apyReservesIncentives) || 0) + (parseFloat(metrics!.apyFarmRewards) || 0)) * 10000,
         minDepositAmount: vault.state.minDepositAmount ?? '0',
         minWithdrawAmount: vault.state.minWithdrawAmount ?? '0',
         protocolData: { ...vault, metrics },
