@@ -220,7 +220,7 @@ class ApiService {
     device?: string;
     platform?: string;
   }): Promise<Suggestion[]> {
-    const res = await this.post<{ success: boolean; data: Suggestion[] }>('/suggestions/v2/', params);
+    const res = await this.signedPost<{ success: boolean; data: Suggestion[] }>('/suggestions/v2/', params);
     return res.data;
   }
 

@@ -37,7 +37,7 @@ app.use('/auth/v2', authRouter);
 // v2 routes (JWT auth required, response signing for transaction routes)
 app.use('/earn/v2', requireAuth, signResponseMiddleware, earnRouter);
 app.use('/solana/v2', requireAuth, signResponseMiddleware, solanaRouter);
-app.use('/suggestions/v2', requireAuth, suggestionsRouter);
+app.use('/suggestions/v2', requireAuth, signResponseMiddleware, suggestionsRouter);
 
 // Health check
 app.get('/health', (req, res) => {
