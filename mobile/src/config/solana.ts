@@ -7,11 +7,20 @@ export const RPC_ENDPOINTS = {
   testnet: 'https://api.testnet.solana.com',
 } as const;
 
-export const SOLANA_CONFIG = {
-  cluster: 'mainnet-beta' as Cluster,
+export const SOLANA_CONFIG: {
+  cluster: Cluster;
+  rpcEndpoint: string;
+  commitment: 'confirmed';
+} = {
+  cluster: 'mainnet-beta',
   rpcEndpoint: RPC_ENDPOINTS['mainnet-beta'],
-  commitment: 'confirmed' as const,
+  commitment: 'confirmed',
 };
+
+/** Override the RPC endpoint at runtime (called after fetching config from backend). */
+export function setSolanaRpcEndpoint(url: string): void {
+  SOLANA_CONFIG.rpcEndpoint = url;
+}
 
 export const NETWORK_CONFIG = {
   devnet: {

@@ -35,11 +35,11 @@ class ApiService {
     return res.json();
   }
 
-  async getConfig(): Promise<{ lookupTableAddress: string | null }> {
+  async getConfig(): Promise<{ lookupTableAddress: string | null; solanaRpcUrl: string | null }> {
     // Config is needed during vault creation (before auth is available) — bypass auth
     const r = await fetch(`${this.baseUrl}/config/v1`);
     if (!r.ok) throw new Error(`API error: ${r.status}`);
-    const res: { success: boolean; data: { lookupTableAddress: string | null } } = await r.json();
+    const res: { success: boolean; data: { lookupTableAddress: string | null; solanaRpcUrl: string | null } } = await r.json();
     return res.data;
   }
 

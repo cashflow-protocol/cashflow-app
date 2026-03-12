@@ -9,6 +9,7 @@ router.get('/', (req: Request, res: Response) => {
     success: true,
     data: {
       lookupTableAddress: LookupManager.lookupTableAddress ?? null,
+      solanaRpcUrl: process.env.MOBILE_SOLANA_RPC ?? null,
     },
   });
 });

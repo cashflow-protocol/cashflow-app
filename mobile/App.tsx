@@ -16,6 +16,8 @@ import SquadsScreen from './src/screens/SquadsScreen';
 import AddMemberScreen from './src/screens/AddMemberScreen';
 import TabBar, { type TabName } from './src/components/TabBar';
 import { getVault } from './src/services/vaultStorage';
+import apiService from './src/services/apiService';
+import { setSolanaRpcEndpoint } from './src/config/solana';
 
 type SubScreen = 'squads' | 'add-member' | null;
 
@@ -27,7 +29,13 @@ function App() {
 
   useEffect(() => {
     (async () => {
-      const vault = await getVault();
+      const [vault, config] = await Promise.all([
+        getVault(),
+        apiService.getConfig().catch(() => null),
+      ]);
+      if (config?.solanaRpcUrl) {
+        setSolanaRpcEndpoint(config.solanaRpcUrl);
+      }
       setOnboardingDone(vault !== null);
       setCheckingVault(false);
     })();
