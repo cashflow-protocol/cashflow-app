@@ -176,18 +176,21 @@ class CashflowSigningImpl: NSObject {
   }
 
   private func loadPrivateKey(tag: String) throws -> Data? {
-    let context = LAContext()
-    // Allow reuse of biometric auth for 30 seconds to avoid repeated prompts during multi-step transactions
-    context.touchIDAuthenticationAllowableReuseDuration = 30
-
     var query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: servicePrefix + tag,
       kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecReturnData as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
-      kSecUseAuthenticationContext as String: context,
     ]
+
+    // Only use LAContext for device keys (biometric-protected)
+    // Cloud keys don't have biometric access control, so LAContext can cause issues
+    if tag != "cloud" {
+      let context = LAContext()
+      context.touchIDAuthenticationAllowableReuseDuration = 30
+      query[kSecUseAuthenticationContext as String] = context
+    }
 
     var result: AnyObject?
     let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -238,36 +241,73 @@ class CashflowSigningImpl: NSObject {
     _ resolve: @escaping (Any?) -> Void,
     reject: @escaping (String?, String?, (any Error)?) -> Void
   ) {
-    let migrationKey = "fun.cashflow.signing.biometricMigrated"
+    let migrationKey = "fun.cashflow.signing.biometricMigrated.v2"
     if UserDefaults.standard.bool(forKey: migrationKey) {
       resolve(false)
       return
     }
 
     do {
-      // Migrate both keys: device key gets AES encryption + biometric access control
-      // Cloud key is re-stored as-is (no AES, keeps iCloud sync for cross-device recovery)
+      // Only migrate the device key — cloud key stays as-is (no AES, iCloud sync)
+      let readQuery: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: servicePrefix + "device",
+        kSecAttrSynchronizable as String: false as CFBoolean,
+        kSecReturnData as String: true,
+        kSecMatchLimit as String: kSecMatchLimitOne,
+      ]
 
-      for (tag, cloudSync) in [("device", false), ("cloud", true)] {
-        let syncAttr: Any = cloudSync ? kSecAttrSynchronizableAny : (false as CFBoolean)
-        let plainQuery: [String: Any] = [
+      var result: AnyObject?
+      let status = SecItemCopyMatching(readQuery as CFDictionary, &result)
+
+      if status == errSecSuccess, let rawSeed = result as? Data, rawSeed.count == 32 {
+        // Raw 32-byte seed → needs AES encryption + biometric access control
+        // Use a temp tag to write the new entry first, then swap
+        let encryptedData = try aesEncrypt(rawSeed)
+
+        var error: Unmanaged<CFError>?
+        guard let accessControl = SecAccessControlCreateWithFlags(
+          kCFAllocatorDefault,
+          kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+          .userPresence,
+          &error
+        ) else {
+          throw NSError(domain: "CashflowSigning", code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: "Failed to create access control"])
+        }
+
+        // Write new entry first (with temp account to avoid collision)
+        let addQuery: [String: Any] = [
           kSecClass as String: kSecClassGenericPassword,
-          kSecAttrService as String: servicePrefix + tag,
-          kSecAttrSynchronizable as String: syncAttr,
-          kSecReturnData as String: true,
-          kSecMatchLimit as String: kSecMatchLimitOne,
+          kSecAttrService as String: servicePrefix + "device",
+          kSecAttrAccount as String: "device",
+          kSecValueData as String: encryptedData,
+          kSecAttrSynchronizable as String: false as CFBoolean,
+          kSecAttrAccessControl as String: accessControl,
         ]
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(plainQuery as CFDictionary, &result)
+        // Delete old, then add new — we have rawSeed in memory as backup
+        let deleteQuery: [String: Any] = [
+          kSecClass as String: kSecClassGenericPassword,
+          kSecAttrService as String: servicePrefix + "device",
+          kSecAttrSynchronizable as String: false as CFBoolean,
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
 
-        if status == errSecSuccess, let rawSeed = result as? Data {
-          // Check if data is already AES-encrypted (AES-GCM combined is 12 nonce + data + 16 tag = 60 bytes for 32-byte seed)
-          // Raw Ed25519 seed is exactly 32 bytes; encrypted is always > 32
-          if rawSeed.count == 32 {
-            // Re-store with AES encryption (+ biometric for device key)
-            try storePrivateKey(rawSeed, tag: tag, cloudSync: cloudSync, biometric: !cloudSync)
-          }
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        if addStatus != errSecSuccess {
+          // Add failed — try to restore the original unencrypted key
+          let restoreQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: servicePrefix + "device",
+            kSecAttrAccount as String: "device",
+            kSecValueData as String: rawSeed,
+            kSecAttrSynchronizable as String: false as CFBoolean,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+          ]
+          SecItemAdd(restoreQuery as CFDictionary, nil)
+          throw NSError(domain: "CashflowSigning", code: Int(addStatus),
+                        userInfo: [NSLocalizedDescriptionKey: "Migration add failed: \(addStatus)"])
         }
       }
 

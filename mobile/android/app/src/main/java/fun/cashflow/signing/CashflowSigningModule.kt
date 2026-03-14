@@ -384,6 +384,9 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     return keyGenerator.generateKey()
   }
 
+  // Version byte prefixed to encrypted data to distinguish HKDF-masked (v2) from plain (v1)
+  private val ENCRYPT_VERSION_V2: Byte = 0x02
+
   private fun encryptWithKeystore(plaintext: ByteArray, biometric: Boolean = false): ByteArray {
     // XOR plaintext with HKDF-derived mask before Keystore encryption
     // This ensures the Keystore key alone can't recover the seed without the salt
@@ -395,20 +398,30 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     cipher.init(Cipher.ENCRYPT_MODE, key)
     val iv = cipher.iv
     val ciphertext = cipher.doFinal(masked)
-    return iv + ciphertext
+    // Prefix with version byte so decryptWithKeystore knows to un-XOR
+    return byteArrayOf(ENCRYPT_VERSION_V2) + iv + ciphertext
   }
 
   private fun decryptWithKeystore(data: ByteArray, biometric: Boolean = false): ByteArray {
+    // Check if data has v2 prefix (HKDF-masked)
+    val hasV2Prefix = data.isNotEmpty() && data[0] == ENCRYPT_VERSION_V2
+    val payload = if (hasV2Prefix) data.copyOfRange(1, data.size) else data
+
     val key = getOrCreateAesKey(biometric)
-    val iv = data.copyOfRange(0, 12)
-    val ciphertext = data.copyOfRange(12, data.size)
+    val iv = payload.copyOfRange(0, 12)
+    val ciphertext = payload.copyOfRange(12, payload.size)
     val cipher = Cipher.getInstance("AES/GCM/NoPadding")
     cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH, iv))
-    val masked = cipher.doFinal(ciphertext)
+    val decrypted = cipher.doFinal(ciphertext)
 
-    // Un-XOR with the same HKDF-derived mask
-    val mask = hkdfDerive(masked.size)
-    return ByteArray(masked.size) { i -> (masked[i].toInt() xor mask[i].toInt()).toByte() }
+    if (!hasV2Prefix) {
+      // v1 data: no HKDF mask was applied
+      return decrypted
+    }
+
+    // v2 data: un-XOR with the same HKDF-derived mask
+    val mask = hkdfDerive(decrypted.size)
+    return ByteArray(decrypted.size) { i -> (decrypted[i].toInt() xor mask[i].toInt()).toByte() }
   }
 
   /// HKDF-SHA256 key derivation using the hardcoded salt to produce a mask of the given length.

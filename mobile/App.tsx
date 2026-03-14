@@ -57,7 +57,9 @@ function App() {
 
       // Migrate existing keys to biometric protection (one-time, safe to call repeatedly)
       if (hasVault) {
-        migrateKeypairsToBiometric().catch(() => {});
+        migrateKeypairsToBiometric().catch((err) => {
+          console.error('Migration failed:', err);
+        });
       }
     })();
   }, []);
