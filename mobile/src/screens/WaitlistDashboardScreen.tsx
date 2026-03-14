@@ -152,15 +152,12 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
       />
 
       <SafeAreaView edges={['top']} style={styles.header}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton}>
-            <ArrowLeft size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Waitlist</Text>
-          <View style={{ width: 24 }} />
-        </View>
+        <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton}>
+          <ArrowLeft size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Waitlist</Text>
         <Text style={styles.headerSubtitle}>
-          Complete tasks to earn XP and move up the queue
+          Complete tasks to earn XP{'\n'}and move up the queue
         </Text>
       </SafeAreaView>
 
@@ -307,33 +304,30 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 185,
+    height: 255,
   },
   header: {
+    alignItems: 'center',
+    paddingTop: 8,
     paddingBottom: 24,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
   backButton: {
+    alignSelf: 'flex-start',
     padding: 4,
+    marginLeft: 16,
+    marginBottom: 8,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 6,
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
-    paddingHorizontal: 32,
-    marginTop: 4,
+    lineHeight: 22,
   },
   statsScroll: {
     maxHeight: 70,
