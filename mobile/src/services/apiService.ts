@@ -112,13 +112,40 @@ class ApiService {
 
   /** Like post(), but verifies the Ed25519 response signature to detect MITM tampering. */
   private async signedPost<T>(path: string, body: Record<string, any>): Promise<T> {
-    const res = await this.post<T & { responseSignature?: string }>(path, body);
-    const valid = await verifyResponseSignature(res as Record<string, any>);
+    const url = `${this.baseUrl}${path}`;
+    const token = await authService.getToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+
+    let res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (res.status === 401) {
+      authService.clearToken();
+      const newToken = await authService.getToken();
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${newToken}` },
+        body: JSON.stringify(body),
+      });
+    }
+
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => ({}));
+      throw new Error(errorBody.error || `API error: ${res.status}`);
+    }
+
+    const rawText = await res.text();
+    const signature = res.headers.get('X-Response-Signature');
+
+    const valid = await verifyResponseSignature(rawText, signature);
     if (!valid) {
       throw new Error('Response integrity check failed');
     }
-    const { responseSignature: _, ...data } = res as any;
-    return data as T;
+
+    return JSON.parse(rawText) as T;
   }
 
   async debugLog(tag: string, lines: string[]): Promise<void> {

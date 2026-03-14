@@ -127,6 +127,9 @@ dependencies {
     // BouncyCastle for Ed25519 signing (Android Keystore doesn't support Ed25519 below API 33)
     implementation("org.bouncycastle:bcprov-jdk18on:1.79")
 
+    // Biometric authentication for wallet key protection
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {

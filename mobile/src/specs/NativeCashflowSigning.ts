@@ -8,6 +8,8 @@ export interface Spec extends TurboModule {
   sign(tag: string, messageBase64: string): Promise<string>;
   hasKeypair(tag: string): Promise<boolean>;
   deleteKeypair(tag: string): Promise<void>;
+  authenticate(reason: string): Promise<boolean>;
+  migrateKeypairsToBiometric(): Promise<boolean>;
 }
 
 export default TurboModuleRegistry.get<Spec>('CashflowSigning');

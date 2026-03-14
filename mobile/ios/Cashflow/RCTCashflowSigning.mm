@@ -62,4 +62,15 @@
   [self.impl deleteKeypair:tag resolve:resolve reject:reject];
 }
 
+- (void)authenticate:(NSString *)reason
+             resolve:(RCTPromiseResolveBlock)resolve
+              reject:(RCTPromiseRejectBlock)reject {
+  [self.impl authenticate:reason resolve:resolve reject:reject];
+}
+
+- (void)migrateKeypairsToBiometric:(RCTPromiseResolveBlock)resolve
+                            reject:(RCTPromiseRejectBlock)reject {
+  [self.impl migrateKeypairsToBiometric:resolve reject:reject];
+}
+
 @end

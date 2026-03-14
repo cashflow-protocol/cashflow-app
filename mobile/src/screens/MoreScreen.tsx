@@ -319,6 +319,14 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={styles.changePinButton}
+              onPress={() => onNavigate?.('change-pin')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.changePinButtonText}>Change PIN</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.removeButton}
               onPress={handleRemoveVault}
               activeOpacity={0.7}
@@ -540,6 +548,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#19C394',
+  },
+  changePinButton: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#6B7B8D',
+  },
+  changePinButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B7B8D',
   },
   removeButton: {
     marginTop: 12,

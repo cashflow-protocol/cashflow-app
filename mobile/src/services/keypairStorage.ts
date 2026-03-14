@@ -107,3 +107,20 @@ export async function deleteAllKeypairs(): Promise<void> {
     mod.deleteKeypair('device'),
   ]);
 }
+
+/**
+ * Prompt the user for biometric authentication (Face ID / Touch ID / passcode).
+ * Returns true if authenticated, false if cancelled or failed.
+ */
+export async function authenticate(reason: string): Promise<boolean> {
+  return getModule().authenticate(reason);
+}
+
+/**
+ * One-time migration: re-store existing device keys with biometric access control.
+ * Safe to call multiple times — skips if already migrated.
+ * Returns true if migration was performed, false if already done or no keys exist.
+ */
+export async function migrateKeypairsToBiometric(): Promise<boolean> {
+  return getModule().migrateKeypairsToBiometric();
+}

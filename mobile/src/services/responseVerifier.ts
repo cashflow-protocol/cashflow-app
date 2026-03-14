@@ -7,16 +7,16 @@ const publicKey = new Uint8Array(spkiBytes.subarray(12));
 
 /**
  * Verify that a backend response has not been tampered with.
- * Returns true if the signature is valid, false otherwise.
+ * Takes the raw response text and the base64 signature from the X-Response-Signature header.
  */
 export async function verifyResponseSignature(
-  body: Record<string, any>,
+  rawText: string,
+  signature: string | null,
 ): Promise<boolean> {
-  const { responseSignature, ...rest } = body;
-  if (!responseSignature) return false;
+  if (!signature) return false;
 
-  const message = new Uint8Array(Buffer.from(JSON.stringify(rest), 'utf-8'));
-  const signature = new Uint8Array(Buffer.from(responseSignature, 'base64'));
+  const message = new Uint8Array(Buffer.from(rawText, 'utf-8'));
+  const sigBytes = new Uint8Array(Buffer.from(signature, 'base64'));
 
-  return verifyAsync(signature, message, publicKey);
+  return verifyAsync(sigBytes, message, publicKey);
 }
