@@ -18,8 +18,8 @@ async function getSigningKey(): Promise<CryptoKey> {
 }
 
 /** Sign raw bytes with Ed25519. Returns base64 signature. */
-export async function signResponseBytes(data: Uint8Array): Promise<string> {
+export async function signResponseBytes(data: Buffer): Promise<string> {
   const key = await getSigningKey();
-  const signature = await crypto.subtle.sign('Ed25519', key, data);
+  const signature = await crypto.subtle.sign('Ed25519', key, new Uint8Array(data));
   return Buffer.from(signature).toString('base64');
 }
