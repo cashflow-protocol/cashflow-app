@@ -8,6 +8,8 @@ import { View, StatusBar, StyleSheet, AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { WalletProvider } from './src/hooks/useWallet';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import InviteCodeScreen from './src/screens/InviteCodeScreen';
+import VaultSetupScreen from './src/screens/VaultSetupScreen';
 import PinSetupScreen from './src/screens/PinSetupScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import EarnScreen from './src/screens/EarnScreen';
@@ -27,6 +29,7 @@ import { setSolanaRpcEndpoint } from './src/config/solana';
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 type SubScreen = 'squads' | 'add-member' | 'change-pin' | null;
+type OnboardingStep = 'carousel' | 'invite-code' | 'vault-setup' | 'waitlist' | null;
 
 function App() {
   const [checkingVault, setCheckingVault] = useState(true);
@@ -35,6 +38,8 @@ function App() {
   const [locked, setLocked] = useState(true);
   const [activeTab, setActiveTab] = useState<TabName>('home');
   const [subScreen, setSubScreen] = useState<SubScreen>(null);
+  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('carousel');
+  const [inviteCode, setInviteCode] = useState('');
   const backgroundedAt = useRef<number | null>(null);
 
   useEffect(() => {
@@ -88,6 +93,8 @@ function App() {
   const handleNavigate = useCallback((screen: string) => {
     if (screen === 'onboarding') {
       setOnboardingDone(false);
+      setOnboardingStep('carousel');
+      setInviteCode('');
       setActiveTab('home');
       setSubScreen(null);
       return;
@@ -144,14 +151,60 @@ function App() {
   }
 
   if (!onboardingDone) {
+    const handleVaultComplete = () => {
+      setOnboardingDone(true);
+      setNeedsPinSetup(true);
+      setOnboardingStep('carousel');
+      setInviteCode('');
+    };
+
+    let onboardingContent;
+    switch (onboardingStep) {
+      case 'invite-code':
+        onboardingContent = (
+          <InviteCodeScreen
+            onValidCode={(code) => {
+              setInviteCode(code);
+              setOnboardingStep('vault-setup');
+            }}
+            onBack={() => setOnboardingStep('carousel')}
+          />
+        );
+        break;
+      case 'vault-setup':
+        onboardingContent = (
+          <VaultSetupScreen
+            inviteCode={inviteCode}
+            onComplete={handleVaultComplete}
+            onBack={() => setOnboardingStep('invite-code')}
+          />
+        );
+        break;
+      case 'waitlist':
+        // TODO: WaitlistDashboardScreen (PR 2)
+        onboardingContent = (
+          <OnboardingScreen
+            onHaveInviteCode={() => setOnboardingStep('invite-code')}
+            onJoinWaitlist={() => {}}
+          />
+        );
+        break;
+      case 'carousel':
+      default:
+        onboardingContent = (
+          <OnboardingScreen
+            onHaveInviteCode={() => setOnboardingStep('invite-code')}
+            onJoinWaitlist={() => setOnboardingStep('waitlist')}
+          />
+        );
+        break;
+    }
+
     return (
       <SafeAreaProvider>
         <StatusBar translucent backgroundColor="transparent" />
         <WalletProvider>
-          <OnboardingScreen onComplete={() => {
-            setOnboardingDone(true);
-            setNeedsPinSetup(true);
-          }} />
+          {onboardingContent}
         </WalletProvider>
       </SafeAreaProvider>
     );

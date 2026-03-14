@@ -4,3 +4,4 @@ export { CachedToken, CachedTokenModel } from './CachedToken';
 export { WaitlistEntry, WaitlistEntryModel } from './WaitlistEntry';
 export { User, UserModel } from './User';
 export { AuthLog, AuthLogModel } from './AuthLog';
+export { InviteCode, InviteCodeModel } from './InviteCode';

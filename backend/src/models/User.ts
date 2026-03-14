@@ -16,6 +16,9 @@ export class User {
 
   @prop({ required: true, default: () => new Date() })
   public lastSeenAt!: Date;
+
+  @prop()
+  public inviteCode?: string;
 }
 
 export const UserModel = getModelForClass(User);

@@ -9,6 +9,7 @@ import suggestionsRouter from './routes/suggestions';
 import proxyRouter from './routes/proxy';
 import waitlistRouter from './routes/waitlist';
 import authRouter from './routes/auth';
+import onboardingRouter from './routes/onboarding';
 import { requireAuth } from './middleware/auth';
 import { signResponseMiddleware } from './middleware/signResponse';
 import { initializeScheduler } from './services';
@@ -33,6 +34,9 @@ app.use('/waitlist/v1', waitlistRouter);
 
 // Auth routes (no auth required)
 app.use('/auth/v2', authRouter);
+
+// Onboarding routes (no auth required — pre-wallet users)
+app.use('/onboarding/v1', onboardingRouter);
 
 // v2 routes (JWT auth required, response signing for transaction routes)
 app.use('/earn/v2', requireAuth, signResponseMiddleware, earnRouter);

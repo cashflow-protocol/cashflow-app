@@ -45,7 +45,7 @@ router.post('/challenge', (req, res) => {
  */
 router.post('/verify', async (req, res) => {
   try {
-    const { publicKey, challenge, signature, vaultAddress, appVersion, buildNumber, osVersion, device, platform } = req.body;
+    const { publicKey, challenge, signature, vaultAddress, inviteCode, appVersion, buildNumber, osVersion, device, platform } = req.body;
 
     if (!publicKey || !challenge || !signature || !vaultAddress) {
       res.status(400).json({ success: false, error: 'publicKey, challenge, signature, and vaultAddress are required' });
@@ -94,7 +94,7 @@ router.post('/verify', async (req, res) => {
     const now = new Date();
     UserModel.findOneAndUpdate(
       { vaultAddress },
-      { $set: { lastSeenAt: now, publicKey }, $setOnInsert: { vaultAddress } },
+      { $set: { lastSeenAt: now, publicKey, ...(inviteCode ? { inviteCode } : {}) }, $setOnInsert: { vaultAddress } },
       { upsert: true },
     ).catch((err) => console.error('User upsert error:', err));
 

@@ -10,6 +10,12 @@ const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Re-authenticate 5 min before e
 class AuthService {
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
+  private pendingInviteCode: string | null = null;
+
+  /** Set an invite code to include in the next authentication request. */
+  setInviteCode(code: string): void {
+    this.pendingInviteCode = code;
+  }
 
   /** Get a valid access token, silently authenticating if needed. */
   async getToken(): Promise<string> {
@@ -58,6 +64,7 @@ class AuthService {
         challenge,
         signature: signatureBase64,
         vaultAddress: vault?.vaultAddress,
+        ...(this.pendingInviteCode ? { inviteCode: this.pendingInviteCode } : {}),
         appVersion: APP_VERSION,
         buildNumber: BUILD_NUMBER,
         platform: Platform.OS,
@@ -75,6 +82,7 @@ class AuthService {
 
     this.accessToken = accessToken;
     this.tokenExpiresAt = Date.now() + expiresIn * 1000;
+    this.pendingInviteCode = null;
 
     return accessToken;
   }
