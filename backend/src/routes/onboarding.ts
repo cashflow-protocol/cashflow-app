@@ -4,6 +4,7 @@ import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel } from '../models
 
 const router = Router();
 
+const BREVO_WAITLIST_LIST_ID = 14;
 const CODE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 const pendingEmailCodes = new Map<string, { code: string; expiresAt: number }>();
 
@@ -308,6 +309,19 @@ router.post('/waitlist/connect-email/verify', async (req, res) => {
         $inc: { xp: xpReward },
       },
     );
+
+    // Add to Brevo "Cashflow Waitlist" list
+    try {
+      const brevo = getBrevoClient();
+      await brevo.contacts.createContact({
+        email: normalizedEmail,
+        listIds: [BREVO_WAITLIST_LIST_ID],
+        updateEnabled: true,
+      });
+    } catch (brevoError) {
+      console.error('Brevo contact creation error:', brevoError);
+      // Don't fail the request — email is already saved to MongoDB
+    }
 
     res.json({ success: true, xpAwarded: xpReward });
   } catch (error) {

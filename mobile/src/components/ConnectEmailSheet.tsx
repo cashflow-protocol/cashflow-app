@@ -87,6 +87,7 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
 
       {step === 'email' ? (
         <TextInput
+          key="email-input"
           style={styles.input}
           value={email}
           onChangeText={setEmail}
@@ -100,6 +101,7 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
         />
       ) : (
         <TextInput
+          key="code-input"
           style={[styles.input, styles.codeInput]}
           value={code}
           onChangeText={setCode}

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
+import { ArrowLeft } from 'lucide-react-native';
 import { validateInviteCode } from '../services/onboardingService';
 import Toast from '../components/Toast';
 
@@ -66,7 +67,7 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
         >
           {/* Back button */}
           <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
-            <Text style={styles.backButtonText}>Back</Text>
+            <ArrowLeft size={24} color="#fff" />
           </TouchableOpacity>
 
           <View style={styles.content}>

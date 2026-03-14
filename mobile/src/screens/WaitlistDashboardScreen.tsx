@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
-import Svg, { Path } from 'react-native-svg';
+import { ArrowLeft, Check, Lock, ChevronRight, Zap, Hash, Clock } from 'lucide-react-native';
 import {
   getWaitlistTasks,
   checkWaitlistStatus,
@@ -20,42 +20,25 @@ import {
 import { generateAndStoreCloudKeypair, getCloudPublicKey } from '../services/keypairStorage';
 import ConnectEmailSheet from '../components/ConnectEmailSheet';
 
+function getCountdown(): string {
+  const now = new Date();
+  const next = new Date(now);
+  if (now.getUTCHours() < 12) {
+    next.setUTCHours(12, 0, 0, 0);
+  } else {
+    next.setUTCDate(next.getUTCDate() + 1);
+    next.setUTCHours(0, 0, 0, 0);
+  }
+  const diff = next.getTime() - now.getTime();
+  const h = Math.floor(diff / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  const s = Math.floor((diff % 60_000) / 1_000);
+  return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+}
+
 interface WaitlistDashboardScreenProps {
   onApproved: (inviteCode: string) => void;
   onBack: () => void;
-}
-
-function CheckIcon() {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"
-        fill="#22C55E"
-      />
-    </Svg>
-  );
-}
-
-function LockIcon() {
-  return (
-    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM9 8V6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9z"
-        fill="#999"
-      />
-    </Svg>
-  );
-}
-
-function ChevronIcon() {
-  return (
-    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M9.29 6.71a1 1 0 000 1.41L13.17 12l-3.88 3.88a1 1 0 101.41 1.41l4.59-4.59a1 1 0 000-1.41L10.7 6.7a1 1 0 00-1.41.01z"
-        fill="#CCC"
-      />
-    </Svg>
-  );
 }
 
 export default function WaitlistDashboardScreen({ onApproved, onBack }: WaitlistDashboardScreenProps) {
@@ -66,8 +49,12 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [emailSheetVisible, setEmailSheetVisible] = useState(false);
+  const [countdown, setCountdown] = useState(getCountdown());
+  useEffect(() => {
+    const id = setInterval(() => setCountdown(getCountdown()), 1_000);
+    return () => clearInterval(id);
+  }, []);
 
-  // Initialize: get or generate cloud keypair, register, load tasks
   useEffect(() => {
     (async () => {
       try {
@@ -93,7 +80,6 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
     setXp(data.xp);
     setRank(data.rank);
 
-    // Check approval status
     const status = await checkWaitlistStatus(pk);
     if (status.approved && status.inviteCode) {
       onApproved(status.inviteCode);
@@ -131,7 +117,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
     }
   };
 
-  const handleEmailSuccess = useCallback((xpAwarded: number) => {
+  const handleEmailSuccess = useCallback((_xpAwarded: number) => {
     setEmailSheetVisible(false);
     if (publicKey) {
       loadTasks(publicKey);
@@ -142,112 +128,157 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
     return (
       <View style={styles.container}>
         <LinearGradient
-          colors={['#0D4A82', '#175DA3', '#347AC0', '#5A9AD5']}
-          style={StyleSheet.absoluteFill}
+          colors={['#104982', '#3985D8']}
+          style={styles.headerGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
         />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#fff" />
+          <ActivityIndicator size="large" color="#3985D8" />
         </View>
       </View>
     );
   }
 
+  const completedCount = tasks.filter((t) => t.completed).length;
+
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#0D4A82', '#175DA3', '#347AC0', '#5A9AD5']}
-        style={StyleSheet.absoluteFill}
+        colors={['#104982', '#3985D8']}
+        style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
       />
 
-      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} activeOpacity={0.7}>
-            <Text style={styles.backText}>Back</Text>
+      <SafeAreaView edges={['top']} style={styles.header}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton}>
+            <ArrowLeft size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Waitlist</Text>
-          <View style={styles.backText as any} />
+          <View style={{ width: 24 }} />
         </View>
+        <Text style={styles.headerSubtitle}>
+          Complete tasks to earn XP and move up the queue
+        </Text>
+      </SafeAreaView>
 
-        {/* XP & Rank Card */}
-        <View style={styles.statsCard}>
-          <Text style={styles.xpLabel}>Your XP</Text>
-          <Text style={styles.xpValue}>{xp}</Text>
-          <Text style={styles.rankText}>
-            You are #{rank}. Get more points to rank higher.
-          </Text>
+      {/* Stat cards */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.statsContainer}
+        style={styles.statsScroll}
+      >
+        <View style={styles.statCard}>
+          <View style={styles.statRow}>
+            <View style={styles.statIconCircle}>
+              <Zap size={20} color="#fff" />
+            </View>
+            <View>
+              <Text style={styles.statLabel}>Your XP</Text>
+              <Text style={styles.statValue}>{xp}</Text>
+            </View>
+          </View>
         </View>
+        <View style={styles.statCard}>
+          <View style={styles.statRow}>
+            <View style={styles.statIconCircle}>
+              <Hash size={20} color="#fff" />
+            </View>
+            <View>
+              <Text style={styles.statLabel}>Queue Position</Text>
+              <Text style={styles.statValue}>#{rank}</Text>
+            </View>
+          </View>
+        </View>
+        <View style={styles.statCard}>
+          <View style={styles.statRow}>
+            <View style={styles.statIconCircle}>
+              <Clock size={20} color="#fff" />
+            </View>
+            <View>
+              <Text style={styles.statLabel}>Next Invite Batch</Text>
+              <Text style={styles.statValue}>{countdown}</Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
 
-        {/* Tasks */}
-        <ScrollView
-          style={styles.taskList}
-          contentContainerStyle={styles.taskListContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor="#fff"
-            />
-          }
-        >
+      {/* Task list */}
+      <ScrollView
+        style={styles.taskList}
+        contentContainerStyle={styles.taskListContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#3985D8"
+          />
+        }
+      >
+        <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Tasks</Text>
-          {tasks.map((task) => (
-            <TouchableOpacity
-              key={task.taskId}
-              style={[
-                styles.taskRow,
-                task.completed && styles.taskRowCompleted,
-                task.locked && styles.taskRowLocked,
-              ]}
-              onPress={() => handleTaskPress(task)}
-              disabled={task.completed || task.locked}
-              activeOpacity={0.7}
-            >
-              <View style={styles.taskLeft}>
-                {task.completed ? (
-                  <CheckIcon />
-                ) : task.locked ? (
-                  <LockIcon />
-                ) : (
-                  <View style={styles.taskDot} />
-                )}
-                <View style={styles.taskInfo}>
-                  <Text
-                    style={[
-                      styles.taskTitle,
-                      task.completed && styles.taskTitleCompleted,
-                      task.locked && styles.taskTitleLocked,
-                    ]}
-                  >
-                    {task.title}
-                  </Text>
-                  {task.locked && task.requiresTask && (
-                    <Text style={styles.taskRequires}>
-                      Requires: {tasks.find((t) => t.taskId === task.requiresTask)?.title ?? task.requiresTask}
-                    </Text>
-                  )}
+          <Text style={styles.sectionCount}>{completedCount}/{tasks.length}</Text>
+        </View>
+        {tasks.map((task) => (
+          <TouchableOpacity
+            key={task.taskId}
+            style={[
+              styles.taskRow,
+              task.locked && styles.taskRowLocked,
+            ]}
+            onPress={() => handleTaskPress(task)}
+            disabled={task.completed || task.locked}
+            activeOpacity={0.7}
+          >
+            <View style={styles.taskLeft}>
+              {task.completed ? (
+                <View style={[styles.taskIconCircle, styles.taskIconCompleted]}>
+                  <Check size={14} color="#fff" />
                 </View>
-              </View>
-              <View style={styles.taskRight}>
+              ) : task.locked ? (
+                <View style={[styles.taskIconCircle, styles.taskIconLocked]}>
+                  <Lock size={14} color="#999" />
+                </View>
+              ) : (
+                <View style={styles.taskIconCircle} />
+              )}
+              <View style={styles.taskInfo}>
                 <Text
                   style={[
-                    styles.taskXp,
-                    task.completed && styles.taskXpCompleted,
-                    task.locked && styles.taskXpLocked,
+                    styles.taskTitle,
+                    task.completed && styles.taskTitleCompleted,
+                    task.locked && styles.taskTitleLocked,
                   ]}
                 >
-                  +{task.xpReward} XP
+                  {task.title}
                 </Text>
-                {!task.completed && !task.locked && <ChevronIcon />}
+                {task.locked && task.requiresTask && (
+                  <Text style={styles.taskRequires}>
+                    Requires: {tasks.find((t) => t.taskId === task.requiresTask)?.title ?? task.requiresTask}
+                  </Text>
+                )}
               </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </SafeAreaView>
+            </View>
+            <View style={styles.taskRight}>
+              <Text
+                style={[
+                  styles.taskXp,
+                  task.completed && styles.taskXpCompleted,
+                  task.locked && styles.taskXpLocked,
+                ]}
+              >
+                +{task.xpReward} XP
+              </Text>
+              {!task.completed && !task.locked && (
+                <ChevronRight size={16} color="#CCC" />
+              )}
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
       {publicKey && (
         <ConnectEmailSheet
@@ -264,87 +295,130 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#E8EAF1',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  safeArea: {
-    flex: 1,
+  headerGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 185,
   },
   header: {
+    paddingBottom: 24,
+  },
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
-  backText: {
-    fontSize: 17,
-    color: '#fff',
-    fontWeight: '600',
-    minWidth: 50,
+  backButton: {
+    padding: 4,
   },
   headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.9)',
   },
-  statsCard: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-  },
-  xpLabel: {
+  headerSubtitle: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '600',
-  },
-  xpValue: {
-    fontSize: 48,
-    fontWeight: '800',
-    color: '#fff',
-    marginVertical: 4,
-  },
-  rankText: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
+    paddingHorizontal: 32,
+    marginTop: 4,
+  },
+  statsScroll: {
+    maxHeight: 70,
+    marginBottom: 12,
+  },
+  statsContainer: {
+    paddingHorizontal: 14,
+    gap: 10,
+  },
+  statCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minWidth: 150,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#3985D8',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 13,
+    color: '#6B7B8D',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    fontVariant: ['tabular-nums'],
   },
   taskList: {
     flex: 1,
   },
   taskListContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 100,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.7)',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
+    color: '#1A1A1A',
+  },
+  sectionCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7B8D',
   },
   taskRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
     marginBottom: 8,
-  },
-  taskRowCompleted: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   taskRowLocked: {
-    opacity: 0.5,
+    opacity: 0.55,
   },
   taskLeft: {
     flexDirection: 'row',
@@ -352,12 +426,22 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 12,
   },
-  taskDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  taskIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderColor: '#D0D5DD',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  taskIconCompleted: {
+    backgroundColor: '#22C55E',
+    borderColor: '#22C55E',
+  },
+  taskIconLocked: {
+    backgroundColor: '#F2F4F7',
+    borderColor: '#E4E7EC',
   },
   taskInfo: {
     flex: 1,
@@ -365,17 +449,17 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fff',
+    color: '#1A1A1A',
   },
   taskTitleCompleted: {
     color: '#22C55E',
   },
   taskTitleLocked: {
-    color: 'rgba(255, 255, 255, 0.6)',
+    color: '#999',
   },
   taskRequires: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.4)',
+    color: '#999',
     marginTop: 2,
   },
   taskRight: {
@@ -386,12 +470,12 @@ const styles = StyleSheet.create({
   taskXp: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFD700',
+    color: '#3985D8',
   },
   taskXpCompleted: {
     color: '#22C55E',
   },
   taskXpLocked: {
-    color: 'rgba(255, 255, 255, 0.4)',
+    color: '#999',
   },
 });

@@ -13,6 +13,7 @@ import Svg, { Path } from 'react-native-svg';
 import { createMultisig } from '../services/squadsService';
 import { useWallet } from '../hooks/useWallet';
 import walletService from '../services/walletService';
+import { ArrowLeft } from 'lucide-react-native';
 import { redeemInviteCode } from '../services/onboardingService';
 import authService from '../services/authService';
 import Toast from '../components/Toast';
@@ -120,7 +121,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: Vau
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         {/* Back button */}
         <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7} disabled={loading}>
-          <Text style={styles.backButtonText}>Back</Text>
+          <ArrowLeft size={24} color="#fff" />
         </TouchableOpacity>
 
         <View style={styles.content}>
