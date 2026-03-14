@@ -10,6 +10,7 @@ import { WalletProvider } from './src/hooks/useWallet';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import InviteCodeScreen from './src/screens/InviteCodeScreen';
 import VaultSetupScreen from './src/screens/VaultSetupScreen';
+import WaitlistDashboardScreen from './src/screens/WaitlistDashboardScreen';
 import PinSetupScreen from './src/screens/PinSetupScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import EarnScreen from './src/screens/EarnScreen';
@@ -181,11 +182,13 @@ function App() {
         );
         break;
       case 'waitlist':
-        // TODO: WaitlistDashboardScreen (PR 2)
         onboardingContent = (
-          <OnboardingScreen
-            onHaveInviteCode={() => setOnboardingStep('invite-code')}
-            onJoinWaitlist={() => {}}
+          <WaitlistDashboardScreen
+            onApproved={(code) => {
+              setInviteCode(code);
+              setOnboardingStep('vault-setup');
+            }}
+            onBack={() => setOnboardingStep('carousel')}
           />
         );
         break;
