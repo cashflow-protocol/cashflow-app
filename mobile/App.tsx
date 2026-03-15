@@ -183,7 +183,6 @@ function App() {
           <VaultSetupScreen
             inviteCode={inviteCode}
             onComplete={handleVaultComplete}
-            onBack={() => setOnboardingStep('invite-code')}
           />
         );
         break;

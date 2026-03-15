@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,13 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
+import ConfettiCannon from 'react-native-confetti-cannon';
 import { createMultisig } from '../services/squadsService';
 import { useWallet } from '../hooks/useWallet';
 import walletService from '../services/walletService';
@@ -22,7 +25,7 @@ import { MIN_LAMPORTS_FOR_VAULT } from '../config/constants';
 interface VaultSetupScreenProps {
   inviteCode: string;
   onComplete: () => void;
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 function VaultIcon({ size = 80 }: { size?: number }) {
@@ -56,6 +59,8 @@ function VaultIcon({ size = 80 }: { size?: number }) {
   );
 }
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: VaultSetupScreenProps) {
   const { connect: connectWallet } = useWallet();
   const [loading, setLoading] = useState(false);
@@ -63,6 +68,62 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: Vau
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastDescription, setToastDescription] = useState('');
+
+  // Animations
+  const emojiScale = useRef(new Animated.Value(0)).current;
+  const congratsOpacity = useRef(new Animated.Value(0)).current;
+  const congratsTranslateY = useRef(new Animated.Value(20)).current;
+  const contentOpacity = useRef(new Animated.Value(0)).current;
+  const contentTranslateY = useRef(new Animated.Value(30)).current;
+  const buttonOpacity = useRef(new Animated.Value(0)).current;
+  const confettiRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Staggered entrance animation
+    Animated.sequence([
+      // 1. Emoji bounces in
+      Animated.spring(emojiScale, {
+        toValue: 1,
+        damping: 8,
+        stiffness: 180,
+        useNativeDriver: true,
+      }),
+      // 2. "You're in!" fades up
+      Animated.parallel([
+        Animated.timing(congratsOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(congratsTranslateY, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]),
+      // 3. Rest of content fades up
+      Animated.parallel([
+        Animated.timing(contentOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(contentTranslateY, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(buttonOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+
+    // Fire confetti after a short delay
+    setTimeout(() => confettiRef.current?.start(), 300);
+  }, []);
 
   const handleSetup = useCallback(async () => {
     setLoading(true);
@@ -105,10 +166,10 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: Vau
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#0D4A82', '#175DA3', '#347AC0', '#5A9AD5']}
+        colors={['#1a0533', '#2d1b69', '#4c1d95', '#6d28d9']}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
+        end={{ x: 1, y: 1 }}
       />
       <Toast
         visible={toastVisible}
@@ -118,23 +179,75 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: Vau
         onDismiss={() => setToastVisible(false)}
       />
 
+      <ConfettiCannon
+        ref={confettiRef}
+        count={80}
+        origin={{ x: SCREEN_WIDTH / 2, y: -20 }}
+        autoStart={false}
+        fadeOut
+        explosionSpeed={400}
+        fallSpeed={2500}
+        colors={['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96E6A1', '#DDA0DD', '#F0E68C']}
+      />
+
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {/* Back button */}
-        <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7} disabled={loading}>
-          <ArrowLeft size={24} color="#fff" />
-        </TouchableOpacity>
+        {onBack && (
+          <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7} disabled={loading}>
+            <ArrowLeft size={24} color="#fff" />
+          </TouchableOpacity>
+        )}
 
         <View style={styles.content}>
-          <View style={styles.iconContainer}>
-            <VaultIcon size={100} />
-          </View>
-          <Text style={styles.title}>Create Your Squad Vault</Text>
-          <Text style={styles.description}>
-            Connect your wallet and set up a secure{'\n'}multisig vault to get started.
-          </Text>
+          <Animated.View
+            style={[
+              styles.heroIcon,
+              { transform: [{ scale: emojiScale }] },
+            ]}
+          >
+            <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
+              <Path
+                d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"
+                fill="rgba(255,255,255,0.15)"
+                stroke="#fff"
+                strokeWidth={1.5}
+              />
+              <Path
+                d="M9 12l2 2 4-4"
+                stroke="#fff"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Svg>
+          </Animated.View>
+
+          <Animated.Text
+            style={[
+              styles.congrats,
+              {
+                opacity: congratsOpacity,
+                transform: [{ translateY: congratsTranslateY }],
+              },
+            ]}
+          >
+            You're in!
+          </Animated.Text>
+
+          <Animated.View
+            style={{
+              opacity: contentOpacity,
+              transform: [{ translateY: contentTranslateY }],
+              alignItems: 'center',
+            }}
+          >
+            <Text style={styles.title}>Create Your Vault</Text>
+            <Text style={styles.description}>
+              Connect your wallet and set up a secure{'\n'}multisig vault to get started.
+            </Text>
+          </Animated.View>
         </View>
 
-        <View style={styles.bottomSection}>
+        <Animated.View style={[styles.bottomSection, { opacity: buttonOpacity }]}>
           <TouchableOpacity
             style={[styles.setupButton, loading && styles.buttonDisabled]}
             onPress={handleSetup}
@@ -143,14 +256,14 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: Vau
           >
             {loading ? (
               <View style={styles.loadingRow}>
-                <ActivityIndicator color="#175DA3" />
+                <ActivityIndicator color="#6d28d9" />
                 <Text style={styles.setupButtonText}>{statusText}</Text>
               </View>
             ) : (
               <Text style={styles.setupButtonText}>Set Up Vault</Text>
             )}
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       </SafeAreaView>
     </View>
   );
@@ -168,32 +281,51 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignSelf: 'flex-start',
   },
-  backButtonText: {
-    fontSize: 17,
-    color: '#fff',
-    fontWeight: '600',
-  },
   content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
   },
-  iconContainer: {
+  heroIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  congrats: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#fff',
     marginBottom: 32,
+    letterSpacing: -0.5,
+  },
+  iconContainer: {
+    marginBottom: 24,
+  },
+  iconGlow: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
     color: '#fff',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   description: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 22,
   },
   bottomSection: {
     paddingHorizontal: 24,
@@ -208,7 +340,7 @@ const styles = StyleSheet.create({
   setupButtonText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#175DA3',
+    color: '#6d28d9',
   },
   buttonDisabled: {
     opacity: 0.7,

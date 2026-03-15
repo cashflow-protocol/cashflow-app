@@ -89,15 +89,15 @@ export default function InviteCodesPage() {
               <tr key={c.id}>
                 <td className="mono" style={{ fontWeight: 600 }}>{c.code}</td>
                 <td>
-                  <span className={`badge ${c.useCount >= c.maxUses ? 'badge-green' : 'badge-yellow'}`}>
-                    {c.useCount}/{c.maxUses}
+                  <span className={`badge ${(c.useCount ?? 0) >= (c.maxUses ?? 1) ? 'badge-green' : 'badge-yellow'}`}>
+                    {c.useCount ?? 0}/{c.maxUses ?? 1}
                   </span>
                 </td>
                 <td><span className="badge badge-blue">{c.source}</span></td>
                 <td>{new Date(c.createdAt).toLocaleDateString()}</td>
                 <td>
-                  {c.usedBy.length > 0
-                    ? c.usedBy.map((u, i) => (
+                  {(c.usedBy ?? []).length > 0
+                    ? (c.usedBy ?? []).map((u, i) => (
                         <span key={i} className="truncate mono" title={u.publicKey} style={{ display: 'block' }}>
                           {u.publicKey.slice(0, 6)}...{u.publicKey.slice(-4)}
                         </span>
@@ -154,6 +154,7 @@ function GenerateModal({
 }) {
   const [count, setCount] = useState(10);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -183,7 +184,20 @@ function GenerateModal({
         </div>
         {generatedCodes.length > 0 && (
           <>
-            <p className="success-text">Generated {generatedCodes.length} codes:</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p className="success-text">Generated {generatedCodes.length} codes:</p>
+              <button
+                className="btn-secondary"
+                style={{ fontSize: 12, padding: '4px 10px' }}
+                onClick={() => {
+                  navigator.clipboard.writeText(generatedCodes.join('\n'));
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+              >
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
             <div className="codes-list">{generatedCodes.join('\n')}</div>
           </>
         )}

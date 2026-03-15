@@ -102,7 +102,7 @@ export default function WaitlistUsersPage() {
                 </td>
                 <td>
                   {u.walletAddress
-                    ? <span className="mono truncate" title={u.walletAddress}>{u.walletAddress.slice(0, 6)}...{u.walletAddress.slice(-4)}</span>
+                    ? <a href={`https://solscan.io/account/${u.walletAddress}`} target="_blank" rel="noopener" className="mono truncate" title={u.walletAddress}>{u.walletAddress.slice(0, 6)}...{u.walletAddress.slice(-4)}</a>
                     : <span style={{ color: '#ccc' }}>—</span>
                   }
                 </td>
