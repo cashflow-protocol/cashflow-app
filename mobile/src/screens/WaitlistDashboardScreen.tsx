@@ -49,6 +49,7 @@ interface WaitlistDashboardScreenProps {
 }
 
 export default function WaitlistDashboardScreen({ onApproved, onBack }: WaitlistDashboardScreenProps) {
+  const [gradientHeight, setGradientHeight] = useState(255);
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [tasks, setTasks] = useState<WaitlistTaskItem[]>([]);
   const [xp, setXp] = useState(0);
@@ -207,12 +208,16 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
     <View style={styles.container}>
       <LinearGradient
         colors={['#104982', '#3985D8']}
-        style={styles.headerGradient}
+        style={[styles.headerGradient, { height: gradientHeight }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
       />
 
-      <SafeAreaView edges={['top']} style={styles.header}>
+      <SafeAreaView
+        edges={['top']}
+        style={styles.header}
+        onLayout={(e) => setGradientHeight(e.nativeEvent.layout.height + 34)}
+      >
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton}>
           <ArrowLeft size={24} color="#fff" />
         </TouchableOpacity>
@@ -380,7 +385,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 255,
   },
   header: {
     alignItems: 'center',

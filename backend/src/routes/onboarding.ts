@@ -552,7 +552,9 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
       return;
     }
 
-    const code = message.text.trim();
+    // Handle both raw code and /start CODE (Telegram deep link sends "/start CODE")
+    const rawText = message.text.trim();
+    const code = rawText.startsWith('/start ') ? rawText.slice(7).trim() : rawText;
     const pending = pendingTelegramCodes.get(code);
 
     if (!pending || Date.now() > pending.expiresAt) {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Linking,
 } from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import BottomSheet from './BottomSheet';
 
 interface ConnectTelegramSheetProps {
@@ -16,11 +17,25 @@ interface ConnectTelegramSheetProps {
 }
 
 export default function ConnectTelegramSheet({ visible, onClose, code, botUrl }: ConnectTelegramSheetProps) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    Clipboard.setString(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleOpenBot = () => {
+    // Append ?start=CODE so Telegram auto-sends "/start CODE" to the bot
+    const deepLink = `${botUrl}?start=${code}`;
+    Linking.openURL(deepLink);
+  };
+
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <Text style={styles.title}>Connect Telegram</Text>
       <Text style={styles.subtitle}>
-        Send this code to our Telegram bot to verify your account.
+        Tap the button below to open our Telegram bot. The code will be sent automatically.
       </Text>
 
       <View style={styles.codeBox}>
@@ -28,15 +43,23 @@ export default function ConnectTelegramSheet({ visible, onClose, code, botUrl }:
       </View>
 
       <TouchableOpacity
+        style={styles.copyButton}
+        onPress={handleCopy}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.copyButtonText}>{copied ? 'Copied!' : 'Copy Code'}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
         style={styles.button}
-        onPress={() => Linking.openURL(botUrl)}
+        onPress={handleOpenBot}
         activeOpacity={0.7}
       >
         <Text style={styles.buttonText}>Open Telegram Bot</Text>
       </TouchableOpacity>
 
       <Text style={styles.hint}>
-        After sending the code, return here and pull to refresh.
+        After connecting, return here and pull to refresh.
       </Text>
     </BottomSheet>
   );
@@ -63,6 +86,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 8,
     color: '#175DA3',
+  },
+  copyButton: {
+    backgroundColor: '#F4F6FC',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#175DA3',
+    fontSize: 15,
+    fontWeight: '600',
   },
   button: {
     backgroundColor: '#175DA3',
