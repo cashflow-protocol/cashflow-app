@@ -2,7 +2,7 @@ import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { getBase58Encoder } from '@solana/kit';
 import { createChallenge, consumeChallenge } from '../services/challengeStore';
-import { UserModel, AuthLogModel } from '../models';
+import { UserModel, AuthLogModel, WaitlistUserModel } from '../models';
 
 const router = Router();
 
@@ -92,11 +92,23 @@ router.post('/verify', async (req, res) => {
 
     // Upsert user and log auth event (non-blocking)
     const now = new Date();
-    UserModel.findOneAndUpdate(
-      { vaultAddress },
-      { $set: { lastSeenAt: now, publicKey, ...(inviteCode ? { inviteCode } : {}) }, $setOnInsert: { vaultAddress } },
-      { upsert: true },
-    ).catch((err) => console.error('User upsert error:', err));
+    (async () => {
+      try {
+        // Look up waitlist user to link
+        const waitlistUser = await WaitlistUserModel.findOne({ publicKey }).lean();
+        const extraFields: Record<string, any> = { lastSeenAt: now, publicKey };
+        if (inviteCode) extraFields.inviteCode = inviteCode;
+        if (waitlistUser) extraFields.waitlistUserId = String(waitlistUser._id);
+
+        await UserModel.findOneAndUpdate(
+          { vaultAddress },
+          { $set: extraFields, $setOnInsert: { vaultAddress } },
+          { upsert: true },
+        );
+      } catch (err) {
+        console.error('User upsert error:', err);
+      }
+    })();
 
     AuthLogModel.create({
       publicKey,

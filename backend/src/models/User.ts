@@ -19,6 +19,9 @@ export class User {
 
   @prop()
   public inviteCode?: string;
+
+  @prop()
+  public waitlistUserId?: string;
 }
 
 export const UserModel = getModelForClass(User);
