@@ -51,6 +51,9 @@ export class WaitlistUser {
   @prop()
   public telegramUsername?: string;
 
+  @prop()
+  public walletAddress?: string;
+
   @prop({ default: () => new Date() })
   public lastXpAt!: Date;
 

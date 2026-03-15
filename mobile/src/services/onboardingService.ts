@@ -115,6 +115,23 @@ export async function verifyEmailCode(publicKey: string, email: string, code: st
   return { success: data.success, xpAwarded: data.xpAwarded };
 }
 
+// ─── Wallet connect ───
+
+export async function connectWallet(publicKey: string, walletAddress: string): Promise<{ success: boolean; xpAwarded?: number }> {
+  try {
+    const res = await fetch(`${BASE}/waitlist/connect-wallet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey, walletAddress }),
+    });
+    if (!res.ok) return { success: false };
+    const data = await res.json();
+    return { success: data.success, xpAwarded: data.xpAwarded };
+  } catch {
+    return { success: false };
+  }
+}
+
 // ─── Social OAuth ───
 
 export async function startConnectX(publicKey: string): Promise<{ authUrl: string } | null> {

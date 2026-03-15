@@ -380,6 +380,31 @@ async function awardTaskXp(publicKey: string, taskId: string, extraFields?: Reco
   return { awarded: result !== null, xpReward };
 }
 
+// ─── Wallet connect ───
+
+/**
+ * POST /waitlist/connect-wallet
+ * Save the user's Solana wallet address and award XP.
+ */
+router.post('/waitlist/connect-wallet', async (req, res) => {
+  try {
+    const { publicKey, walletAddress } = req.body;
+    if (!publicKey || !walletAddress) {
+      res.status(400).json({ success: false, error: 'publicKey and walletAddress are required' });
+      return;
+    }
+
+    const { awarded, xpReward } = await awardTaskXp(publicKey, 'connect_wallet', {
+      walletAddress,
+    });
+
+    res.json({ success: true, xpAwarded: awarded ? xpReward : 0 });
+  } catch (error) {
+    console.error('Connect wallet error:', error);
+    res.status(500).json({ success: false, error: 'Failed to connect wallet' });
+  }
+});
+
 // ─── Twitter/X OAuth ───
 
 /**

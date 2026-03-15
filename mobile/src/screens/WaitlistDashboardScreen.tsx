@@ -18,11 +18,13 @@ import {
   getWaitlistTasks,
   checkWaitlistStatus,
   registerWaitlist,
+  connectWallet as connectWalletApi,
   startConnectX,
   startConnectDiscord,
   startConnectTelegram,
   type WaitlistTaskItem,
 } from '../services/onboardingService';
+import { useWallet } from '../hooks/useWallet';
 import { generateAndStoreCloudKeypair, getCloudPublicKey } from '../services/keypairStorage';
 import ConnectEmailSheet from '../components/ConnectEmailSheet';
 import ConnectTelegramSheet from '../components/ConnectTelegramSheet';
@@ -51,6 +53,7 @@ interface WaitlistDashboardScreenProps {
 }
 
 export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInviteCode }: WaitlistDashboardScreenProps) {
+  const { connect: connectWallet } = useWallet();
   const [gradientHeight, setGradientHeight] = useState(255);
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [tasks, setTasks] = useState<WaitlistTaskItem[]>([]);
@@ -146,6 +149,21 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
     if (task.completed || task.locked || !publicKey) return;
 
     switch (task.taskId) {
+      case 'connect_wallet': {
+        try {
+          const account = await connectWallet();
+          if (account) {
+            await connectWalletApi(publicKey, account.publicKey as string);
+            loadTasks(publicKey);
+          }
+        } catch (err: any) {
+          const msg = err?.message || '';
+          if (!msg.includes('CancellationException')) {
+            Alert.alert('Error', msg || 'Failed to connect wallet.');
+          }
+        }
+        break;
+      }
       case 'connect_email':
         setEmailSheetVisible(true);
         break;

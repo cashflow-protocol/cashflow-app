@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,14 @@ const FALLBACK_URLS: Record<string, string> = {
 export default function VerifyActionSheet({ visible, onClose, task, publicKey, onSuccess }: VerifyActionSheetProps) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+
+  // Reset state when sheet opens/closes
+  useEffect(() => {
+    if (!visible) {
+      setLoading(false);
+      setMessage('');
+    }
+  }, [visible]);
 
   const handleOpenAction = useCallback(() => {
     if (!task) return;
