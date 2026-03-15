@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Linking,
   Alert,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
@@ -46,9 +47,10 @@ function getCountdown(): string {
 interface WaitlistDashboardScreenProps {
   onApproved: (inviteCode: string) => void;
   onBack: () => void;
+  onHaveInviteCode: () => void;
 }
 
-export default function WaitlistDashboardScreen({ onApproved, onBack }: WaitlistDashboardScreenProps) {
+export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInviteCode }: WaitlistDashboardScreenProps) {
   const [gradientHeight, setGradientHeight] = useState(255);
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [tasks, setTasks] = useState<WaitlistTaskItem[]>([]);
@@ -121,6 +123,24 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
     const sub = Linking.addEventListener('url', handleDeepLink);
     return () => sub.remove();
   }, [publicKey]);
+
+  // Auto-close Telegram sheet when returning to app after connecting
+  useEffect(() => {
+    if (!telegramSheetVisible || !publicKey) return;
+    const sub = AppState.addEventListener('change', async (state) => {
+      if (state === 'active') {
+        const data = await getWaitlistTasks(publicKey);
+        const tgTask = data.tasks.find((t) => t.taskId === 'connect_telegram');
+        if (tgTask?.completed) {
+          setTelegramSheetVisible(false);
+          setTasks(data.tasks);
+          setXp(data.xp);
+          setRank(data.rank);
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [telegramSheetVisible, publicKey]);
 
   const handleTaskPress = async (task: WaitlistTaskItem) => {
     if (task.completed || task.locked || !publicKey) return;
@@ -341,6 +361,14 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
             </View>
           </TouchableOpacity>
         ))}
+
+        <TouchableOpacity
+          style={styles.inviteCodeButton}
+          onPress={onHaveInviteCode}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.inviteCodeButtonText}>I have an invite code</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {publicKey && (
@@ -551,5 +579,15 @@ const styles = StyleSheet.create({
   },
   taskXpLocked: {
     color: '#999',
+  },
+  inviteCodeButton: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginTop: 8,
+  },
+  inviteCodeButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#3985D8',
   },
 });

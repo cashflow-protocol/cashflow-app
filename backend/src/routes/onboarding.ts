@@ -129,28 +129,42 @@ router.post('/waitlist/tasks', async (req, res) => {
       return;
     }
 
-    const [tasks, user, rank] = await Promise.all([
+    const [tasks, user] = await Promise.all([
       WaitlistTaskModel.find({ active: true }).sort({ sortOrder: 1 }).lean(),
       WaitlistUserModel.findOne({ publicKey }).lean(),
-      WaitlistUserModel.countDocuments({
-        status: 'waiting',
-        xp: { $gt: (await WaitlistUserModel.findOne({ publicKey }).lean())?.xp ?? 0 },
-      }),
     ]);
+
+    const userXp = user?.xp ?? 0;
+    const userLastXpAt = user?.lastXpAt ?? new Date();
+    const rank = await WaitlistUserModel.countDocuments({
+      status: 'waiting',
+      $or: [
+        { xp: { $gt: userXp } },
+        { xp: userXp, lastXpAt: { $lt: userLastXpAt } },
+      ],
+    });
 
     const completedSet = new Set(user?.completedTasks ?? []);
 
-    const taskList = tasks.map((t) => ({
-      taskId: t.taskId,
-      title: t.title,
-      description: t.description,
-      xpReward: t.xpReward,
-      category: t.category,
-      requiresTask: t.requiresTask,
-      metadata: t.metadata,
-      completed: completedSet.has(t.taskId),
-      locked: t.requiresTask ? !completedSet.has(t.requiresTask) : false,
-    }));
+    const taskList = tasks
+      .map((t, i) => ({
+        taskId: t.taskId,
+        title: t.title,
+        description: t.description,
+        xpReward: t.xpReward,
+        category: t.category,
+        requiresTask: t.requiresTask,
+        metadata: t.metadata,
+        completed: completedSet.has(t.taskId),
+        locked: t.requiresTask ? !completedSet.has(t.requiresTask) : false,
+        _sortOrder: i,
+      }))
+      .sort((a, b) => {
+        const group = (t: typeof a) => t.completed ? 0 : t.locked ? 2 : 1;
+        const diff = group(a) - group(b);
+        return diff !== 0 ? diff : a._sortOrder - b._sortOrder;
+      })
+      .map(({ _sortOrder, ...t }) => t);
 
     res.json({
       success: true,
@@ -202,7 +216,7 @@ router.get('/waitlist/leaderboard', async (req, res) => {
     const publicKey = req.query.publicKey as string | undefined;
 
     const top = await WaitlistUserModel.find({ status: 'waiting' })
-      .sort({ xp: -1 })
+      .sort({ xp: -1, lastXpAt: 1 })
       .limit(20)
       .lean();
 
@@ -221,7 +235,10 @@ router.get('/waitlist/leaderboard', async (req, res) => {
         userXp = user.xp;
         const above = await WaitlistUserModel.countDocuments({
           status: 'waiting',
-          xp: { $gt: user.xp },
+          $or: [
+            { xp: { $gt: user.xp } },
+            { xp: user.xp, lastXpAt: { $lt: user.lastXpAt ?? new Date() } },
+          ],
         });
         userRank = above + 1;
       }
@@ -355,7 +372,7 @@ async function awardTaskXp(publicKey: string, taskId: string, extraFields?: Reco
     {
       $addToSet: { completedTasks: taskId },
       $inc: { xp: xpReward },
-      ...(extraFields ? { $set: extraFields } : {}),
+      $set: { lastXpAt: new Date(), ...extraFields },
     },
     { new: true },
   );

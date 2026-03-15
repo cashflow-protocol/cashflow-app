@@ -119,7 +119,7 @@ async function confirmTransactions() {
 async function approveTopWaitlistUsers() {
   try {
     const topUsers = await WaitlistUserModel.find({ status: 'waiting', xp: { $gt: 0 } })
-      .sort({ xp: -1, createdAt: 1 })
+      .sort({ xp: -1, lastXpAt: 1 })
       .limit(5)
       .lean();
 

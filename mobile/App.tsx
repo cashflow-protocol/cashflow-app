@@ -23,7 +23,7 @@ import BiometricLockScreen from './src/components/BiometricLockScreen';
 import TabBar, { type TabName } from './src/components/TabBar';
 import { getVault } from './src/services/vaultStorage';
 import { hasPin } from './src/services/pinStorage';
-import { migrateKeypairsToBiometric } from './src/services/keypairStorage';
+import { migrateKeypairsToBiometric, getCloudPublicKey } from './src/services/keypairStorage';
 import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
 
@@ -40,15 +40,17 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabName>('home');
   const [subScreen, setSubScreen] = useState<SubScreen>(null);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('carousel');
+  const [inviteCodeFrom, setInviteCodeFrom] = useState<'carousel' | 'waitlist'>('carousel');
   const [inviteCode, setInviteCode] = useState('');
   const backgroundedAt = useRef<number | null>(null);
 
   useEffect(() => {
     (async () => {
-      const [vault, config, pinExists] = await Promise.all([
+      const [vault, config, pinExists, cloudPk] = await Promise.all([
         getVault(),
         apiService.getConfig().catch(() => null),
         hasPin(),
+        getCloudPublicKey(),
       ]);
       if (config?.solanaRpcUrl) {
         setSolanaRpcEndpoint(config.solanaRpcUrl);
@@ -59,6 +61,10 @@ function App() {
       setNeedsPinSetup(hasVault && !pinExists);
       // Only require lock if user has completed onboarding and has a PIN
       setLocked(hasVault && pinExists);
+      // If user previously joined the waitlist, go straight to waitlist screen
+      if (!hasVault && cloudPk) {
+        setOnboardingStep('waitlist');
+      }
       setCheckingVault(false);
 
       // Migrate existing keys to biometric protection (one-time, safe to call repeatedly)
@@ -168,7 +174,7 @@ function App() {
               setInviteCode(code);
               setOnboardingStep('vault-setup');
             }}
-            onBack={() => setOnboardingStep('carousel')}
+            onBack={() => setOnboardingStep(inviteCodeFrom)}
           />
         );
         break;
@@ -189,6 +195,7 @@ function App() {
               setOnboardingStep('vault-setup');
             }}
             onBack={() => setOnboardingStep('carousel')}
+            onHaveInviteCode={() => { setInviteCodeFrom('waitlist'); setOnboardingStep('invite-code'); }}
           />
         );
         break;
@@ -196,7 +203,7 @@ function App() {
       default:
         onboardingContent = (
           <OnboardingScreen
-            onHaveInviteCode={() => setOnboardingStep('invite-code')}
+            onHaveInviteCode={() => { setInviteCodeFrom('carousel'); setOnboardingStep('invite-code'); }}
             onJoinWaitlist={() => setOnboardingStep('waitlist')}
           />
         );

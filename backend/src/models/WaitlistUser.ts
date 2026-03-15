@@ -7,7 +7,7 @@ import { prop, getModelForClass, modelOptions, index } from '@typegoose/typegoos
   },
 })
 @index({ publicKey: 1 }, { unique: true })
-@index({ xp: -1 })
+@index({ xp: -1, lastXpAt: 1 })
 export class WaitlistUser {
   @prop({ required: true })
   public publicKey!: string;
@@ -50,6 +50,9 @@ export class WaitlistUser {
 
   @prop()
   public telegramUsername?: string;
+
+  @prop({ default: () => new Date() })
+  public lastXpAt!: Date;
 
   @prop({ type: () => [String], default: [] })
   public completedTasks!: string[];
