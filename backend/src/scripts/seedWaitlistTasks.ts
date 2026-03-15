@@ -38,7 +38,7 @@ const TASKS = [
     sortOrder: 4,
     requiresTask: 'connect_x',
     category: 'social_action',
-    metadata: { handle: '@cashflow_fi' },
+    metadata: { handle: 'cashflow_fi', profileUrl: 'https://x.com/cashflow_fi' },
   },
   {
     taskId: 'follow_heymike_x',
@@ -47,7 +47,7 @@ const TASKS = [
     sortOrder: 5,
     requiresTask: 'connect_x',
     category: 'social_action',
-    metadata: { handle: '@heymike777' },
+    metadata: { handle: 'heymike777', profileUrl: 'https://x.com/heymike777' },
   },
   {
     taskId: 'retweet_announcement',
@@ -56,6 +56,7 @@ const TASKS = [
     sortOrder: 6,
     requiresTask: 'connect_x',
     category: 'social_action',
+    metadata: { tweetUrl: 'https://x.com/cashflow_fi' },
   },
   {
     taskId: 'subscribe_founders_tg',
@@ -64,7 +65,7 @@ const TASKS = [
     sortOrder: 7,
     requiresTask: 'connect_telegram',
     category: 'social_action',
-    metadata: { channel: '@founders_journey' },
+    metadata: { channel: '@founders_journey', channelUrl: 'https://t.me/founders_journey' },
   },
 ];
 

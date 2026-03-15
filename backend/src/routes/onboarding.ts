@@ -1,12 +1,26 @@
+import crypto from 'crypto';
 import { Router } from 'express';
 import { BrevoClient } from '@getbrevo/brevo';
 import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel } from '../models';
+import * as socialAuth from '../services/socialAuth';
 
 const router = Router();
 
 const BREVO_WAITLIST_LIST_ID = 14;
 const CODE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 const pendingEmailCodes = new Map<string, { code: string; expiresAt: number }>();
+
+// OAuth pending states: state → { publicKey, codeVerifier?, provider, expiresAt }
+interface OAuthPendingState {
+  publicKey: string;
+  codeVerifier?: string;
+  provider: 'twitter' | 'discord';
+  expiresAt: number;
+}
+const pendingOAuthStates = new Map<string, OAuthPendingState>();
+
+// Telegram pending codes: code → { publicKey, expiresAt }
+const pendingTelegramCodes = new Map<string, { publicKey: string; expiresAt: number }>();
 
 function getBrevoClient() {
   const apiKey = process.env.BREVO_API_KEY;
@@ -300,9 +314,9 @@ router.post('/waitlist/connect-email/verify', async (req, res) => {
     const task = await WaitlistTaskModel.findOne({ taskId: 'connect_email' }).lean();
     const xpReward = task?.xpReward ?? 100;
 
-    // Update user: save email, mark task complete, award XP
+    // Update user: save email, mark task complete, award XP (only if not already completed)
     await WaitlistUserModel.findOneAndUpdate(
-      { publicKey },
+      { publicKey, completedTasks: { $ne: 'connect_email' } },
       {
         $set: { email: normalizedEmail, emailVerified: true },
         $addToSet: { completedTasks: 'connect_email' },
@@ -326,6 +340,343 @@ router.post('/waitlist/connect-email/verify', async (req, res) => {
     res.json({ success: true, xpAwarded: xpReward });
   } catch (error) {
     console.error('Waitlist verify-email error:', error);
+    res.status(500).json({ success: false, error: 'Verification failed' });
+  }
+});
+
+// ─── Helper: award XP for a task (prevents double award) ───
+
+async function awardTaskXp(publicKey: string, taskId: string, extraFields?: Record<string, any>) {
+  const task = await WaitlistTaskModel.findOne({ taskId }).lean();
+  const xpReward = task?.xpReward ?? 100;
+
+  const result = await WaitlistUserModel.findOneAndUpdate(
+    { publicKey, completedTasks: { $ne: taskId } },
+    {
+      $addToSet: { completedTasks: taskId },
+      $inc: { xp: xpReward },
+      ...(extraFields ? { $set: extraFields } : {}),
+    },
+    { new: true },
+  );
+
+  return { awarded: result !== null, xpReward };
+}
+
+// ─── Twitter/X OAuth ───
+
+/**
+ * POST /waitlist/connect-x/start
+ * Generate Twitter OAuth URL for the user.
+ */
+router.post('/waitlist/connect-x/start', async (req, res) => {
+  try {
+    const { publicKey } = req.body;
+    if (!publicKey) {
+      res.status(400).json({ success: false, error: 'publicKey is required' });
+      return;
+    }
+
+    const state = crypto.randomBytes(16).toString('hex');
+    const codeVerifier = socialAuth.generateCodeVerifier();
+    const authUrl = socialAuth.generateTwitterOAuthUrl(state, codeVerifier);
+
+    if (!authUrl) {
+      res.status(503).json({ success: false, error: 'Twitter integration not configured' });
+      return;
+    }
+
+    pendingOAuthStates.set(state, {
+      publicKey,
+      codeVerifier,
+      provider: 'twitter',
+      expiresAt: Date.now() + CODE_EXPIRY_MS,
+    });
+
+    res.json({ success: true, authUrl });
+  } catch (error) {
+    console.error('Connect X start error:', error);
+    res.status(500).json({ success: false, error: 'Failed to start Twitter auth' });
+  }
+});
+
+/**
+ * GET /waitlist/connect-x/callback
+ * Twitter OAuth callback — browser redirect.
+ */
+router.get('/waitlist/connect-x/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query as { code?: string; state?: string };
+    if (!code || !state) {
+      res.status(400).send('Missing code or state');
+      return;
+    }
+
+    const pending = pendingOAuthStates.get(state);
+    if (!pending || pending.provider !== 'twitter' || Date.now() > pending.expiresAt) {
+      res.status(400).send('Invalid or expired OAuth state');
+      return;
+    }
+    pendingOAuthStates.delete(state);
+
+    const twitterUser = await socialAuth.exchangeTwitterCode(code, pending.codeVerifier!);
+    if (!twitterUser) {
+      res.status(500).send('Failed to exchange Twitter code');
+      return;
+    }
+
+    await awardTaskXp(pending.publicKey, 'connect_x', {
+      twitterId: twitterUser.id,
+      twitterHandle: twitterUser.username,
+      twitterAccessToken: twitterUser.accessToken,
+    });
+
+    res.redirect('cashflow://oauth/callback?provider=x&success=true');
+  } catch (error) {
+    console.error('Connect X callback error:', error);
+    res.redirect('cashflow://oauth/callback?provider=x&success=false');
+  }
+});
+
+// ─── Discord OAuth ───
+
+/**
+ * POST /waitlist/connect-discord/start
+ * Generate Discord OAuth URL for the user.
+ */
+router.post('/waitlist/connect-discord/start', async (req, res) => {
+  try {
+    const { publicKey } = req.body;
+    if (!publicKey) {
+      res.status(400).json({ success: false, error: 'publicKey is required' });
+      return;
+    }
+
+    const state = crypto.randomBytes(16).toString('hex');
+    const authUrl = socialAuth.generateDiscordOAuthUrl(state);
+
+    if (!authUrl) {
+      res.status(503).json({ success: false, error: 'Discord integration not configured' });
+      return;
+    }
+
+    pendingOAuthStates.set(state, {
+      publicKey,
+      provider: 'discord',
+      expiresAt: Date.now() + CODE_EXPIRY_MS,
+    });
+
+    res.json({ success: true, authUrl });
+  } catch (error) {
+    console.error('Connect Discord start error:', error);
+    res.status(500).json({ success: false, error: 'Failed to start Discord auth' });
+  }
+});
+
+/**
+ * GET /waitlist/connect-discord/callback
+ * Discord OAuth callback — browser redirect.
+ */
+router.get('/waitlist/connect-discord/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query as { code?: string; state?: string };
+    if (!code || !state) {
+      res.status(400).send('Missing code or state');
+      return;
+    }
+
+    const pending = pendingOAuthStates.get(state);
+    if (!pending || pending.provider !== 'discord' || Date.now() > pending.expiresAt) {
+      res.status(400).send('Invalid or expired OAuth state');
+      return;
+    }
+    pendingOAuthStates.delete(state);
+
+    const discordUser = await socialAuth.exchangeDiscordCode(code);
+    if (!discordUser) {
+      res.status(500).send('Failed to exchange Discord code');
+      return;
+    }
+
+    await awardTaskXp(pending.publicKey, 'connect_discord', {
+      discordId: discordUser.id,
+      discordUsername: discordUser.username,
+    });
+
+    res.redirect('cashflow://oauth/callback?provider=discord&success=true');
+  } catch (error) {
+    console.error('Connect Discord callback error:', error);
+    res.redirect('cashflow://oauth/callback?provider=discord&success=false');
+  }
+});
+
+// ─── Telegram (bot-code approach) ───
+
+/**
+ * POST /waitlist/connect-telegram/start
+ * Generate a code for the user to send to the Telegram bot.
+ */
+router.post('/waitlist/connect-telegram/start', async (req, res) => {
+  try {
+    const { publicKey } = req.body;
+    if (!publicKey) {
+      res.status(400).json({ success: false, error: 'publicKey is required' });
+      return;
+    }
+
+    if (!process.env.TELEGRAM_BOT_TOKEN) {
+      res.status(503).json({ success: false, error: 'Telegram integration not configured' });
+      return;
+    }
+
+    const code = generateCode();
+    pendingTelegramCodes.set(code, { publicKey, expiresAt: Date.now() + CODE_EXPIRY_MS });
+
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'CashflowBot';
+    res.json({ success: true, code, botUrl: `https://t.me/${botUsername}` });
+  } catch (error) {
+    console.error('Connect Telegram start error:', error);
+    res.status(500).json({ success: false, error: 'Failed to start Telegram connection' });
+  }
+});
+
+/**
+ * POST /waitlist/telegram-webhook
+ * Telegram bot webhook — receives messages from users.
+ */
+router.post('/waitlist/telegram-webhook', async (req, res) => {
+  try {
+    const message = req.body?.message;
+    if (!message?.text || !message?.from) {
+      res.json({ ok: true });
+      return;
+    }
+
+    const code = message.text.trim();
+    const pending = pendingTelegramCodes.get(code);
+
+    if (!pending || Date.now() > pending.expiresAt) {
+      await socialAuth.sendTelegramMessage(
+        message.from.id.toString(),
+        pending ? 'This code has expired. Please request a new one in the app.' : 'Invalid code. Please get a code from the Cashflow app first.',
+      );
+      res.json({ ok: true });
+      return;
+    }
+
+    pendingTelegramCodes.delete(code);
+
+    await awardTaskXp(pending.publicKey, 'connect_telegram', {
+      telegramId: message.from.id.toString(),
+      telegramUsername: message.from.username || '',
+    });
+
+    await socialAuth.sendTelegramMessage(
+      message.from.id.toString(),
+      'Telegram connected! You can now return to the Cashflow app.',
+    );
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Telegram webhook error:', error);
+    res.json({ ok: true }); // Always 200 for Telegram
+  }
+});
+
+// ─── Action verification ───
+
+/**
+ * POST /waitlist/verify-action
+ * Verify a social action (follow, retweet, subscribe) and award XP.
+ */
+router.post('/waitlist/verify-action', async (req, res) => {
+  try {
+    const { publicKey, taskId } = req.body;
+    if (!publicKey || !taskId) {
+      res.status(400).json({ success: false, error: 'publicKey and taskId are required' });
+      return;
+    }
+
+    const user = await WaitlistUserModel.findOne({ publicKey }).lean();
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    // Check if already completed
+    if (user.completedTasks?.includes(taskId)) {
+      res.json({ success: true, verified: true, message: 'Already completed' });
+      return;
+    }
+
+    // Check prerequisite
+    const task = await WaitlistTaskModel.findOne({ taskId }).lean();
+    if (!task) {
+      res.status(400).json({ success: false, error: 'Unknown task' });
+      return;
+    }
+    if (task.requiresTask && !user.completedTasks?.includes(task.requiresTask)) {
+      res.status(400).json({ success: false, error: `Complete "${task.requiresTask}" first` });
+      return;
+    }
+
+    let verified = false;
+
+    switch (taskId) {
+      case 'follow_cashflow_x':
+      case 'follow_heymike_x': {
+        if (!user.twitterId || !user.twitterAccessToken) {
+          res.json({ success: true, verified: false, message: 'Connect your X account first.' });
+          return;
+        }
+        const targetHandle = taskId === 'follow_cashflow_x' ? 'cashflow_fi' : 'heymike777';
+        verified = await socialAuth.checkTwitterFollow(user.twitterAccessToken, user.twitterId, targetHandle);
+        break;
+      }
+      case 'retweet_announcement': {
+        if (!user.twitterId) {
+          res.json({ success: true, verified: false, message: 'Connect your X account first.' });
+          return;
+        }
+        const tweetId = task.metadata?.tweetId;
+        if (!tweetId) {
+          res.json({ success: true, verified: false, message: 'Announcement tweet not configured.' });
+          return;
+        }
+        verified = await socialAuth.checkTwitterRetweet(tweetId, user.twitterId);
+        break;
+      }
+      case 'subscribe_founders_tg': {
+        if (!user.telegramId) {
+          res.json({ success: true, verified: false, message: 'Connect your Telegram first.' });
+          return;
+        }
+        verified = await socialAuth.checkTelegramChannelMember(user.telegramId, '@founders_journey');
+        break;
+      }
+      default:
+        res.status(400).json({ success: false, error: 'This task cannot be verified this way' });
+        return;
+    }
+
+    if (!verified) {
+      res.json({
+        success: true,
+        verified: false,
+        message: `We couldn't verify this action. Make sure you've completed it and try again.`,
+      });
+      return;
+    }
+
+    const { xpReward } = await awardTaskXp(publicKey, taskId);
+    res.json({ success: true, verified: true, xpAwarded: xpReward });
+  } catch (error: any) {
+    // Handle Twitter rate limits
+    if (error?.response?.status === 429) {
+      res.json({ success: true, verified: false, message: 'Rate limited. Please try again in a few minutes.' });
+      return;
+    }
+    console.error('Verify action error:', error);
     res.status(500).json({ success: false, error: 'Verification failed' });
   }
 });

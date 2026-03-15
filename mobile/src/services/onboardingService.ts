@@ -114,3 +114,68 @@ export async function verifyEmailCode(publicKey: string, email: string, code: st
   const data = await res.json();
   return { success: data.success, xpAwarded: data.xpAwarded };
 }
+
+// ─── Social OAuth ───
+
+export async function startConnectX(publicKey: string): Promise<{ authUrl: string } | null> {
+  try {
+    const res = await fetch(`${BASE}/waitlist/connect-x/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.success) return null;
+    return { authUrl: data.authUrl };
+  } catch {
+    return null;
+  }
+}
+
+export async function startConnectDiscord(publicKey: string): Promise<{ authUrl: string } | null> {
+  try {
+    const res = await fetch(`${BASE}/waitlist/connect-discord/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.success) return null;
+    return { authUrl: data.authUrl };
+  } catch {
+    return null;
+  }
+}
+
+export async function startConnectTelegram(publicKey: string): Promise<{ code: string; botUrl: string } | null> {
+  try {
+    const res = await fetch(`${BASE}/waitlist/connect-telegram/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.success) return null;
+    return { code: data.code, botUrl: data.botUrl };
+  } catch {
+    return null;
+  }
+}
+
+// ─── Action verification ───
+
+export async function verifyWaitlistAction(
+  publicKey: string,
+  taskId: string,
+): Promise<{ verified: boolean; xpAwarded?: number; message?: string }> {
+  const res = await fetch(`${BASE}/waitlist/verify-action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publicKey, taskId }),
+  });
+  const data = await res.json();
+  return { verified: data.verified ?? false, xpAwarded: data.xpAwarded, message: data.message };
+}

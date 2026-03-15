@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   ScrollView,
   RefreshControl,
+  Linking,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
@@ -15,10 +17,15 @@ import {
   getWaitlistTasks,
   checkWaitlistStatus,
   registerWaitlist,
+  startConnectX,
+  startConnectDiscord,
+  startConnectTelegram,
   type WaitlistTaskItem,
 } from '../services/onboardingService';
 import { generateAndStoreCloudKeypair, getCloudPublicKey } from '../services/keypairStorage';
 import ConnectEmailSheet from '../components/ConnectEmailSheet';
+import ConnectTelegramSheet from '../components/ConnectTelegramSheet';
+import VerifyActionSheet from '../components/VerifyActionSheet';
 
 function getCountdown(): string {
   const now = new Date();
@@ -49,6 +56,11 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [emailSheetVisible, setEmailSheetVisible] = useState(false);
+  const [telegramSheetVisible, setTelegramSheetVisible] = useState(false);
+  const [telegramCode, setTelegramCode] = useState('');
+  const [telegramBotUrl, setTelegramBotUrl] = useState('');
+  const [verifySheetVisible, setVerifySheetVisible] = useState(false);
+  const [verifyTask, setVerifyTask] = useState<WaitlistTaskItem | null>(null);
   const [countdown, setCountdown] = useState(getCountdown());
   useEffect(() => {
     const id = setInterval(() => setCountdown(getCountdown()), 1_000);
@@ -98,21 +110,59 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
     }
   }, [publicKey]);
 
-  const handleTaskPress = (task: WaitlistTaskItem) => {
-    if (task.completed || task.locked) return;
+  // Deep link listener for OAuth callbacks
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      if (event.url.startsWith('cashflow://oauth/callback') && publicKey) {
+        loadTasks(publicKey);
+      }
+    };
+    const sub = Linking.addEventListener('url', handleDeepLink);
+    return () => sub.remove();
+  }, [publicKey]);
+
+  const handleTaskPress = async (task: WaitlistTaskItem) => {
+    if (task.completed || task.locked || !publicKey) return;
 
     switch (task.taskId) {
       case 'connect_email':
         setEmailSheetVisible(true);
         break;
-      case 'connect_x':
-      case 'connect_discord':
-      case 'connect_telegram':
+      case 'connect_x': {
+        const xResult = await startConnectX(publicKey);
+        if (xResult?.authUrl) {
+          Linking.openURL(xResult.authUrl);
+        } else {
+          Alert.alert('Not Available', 'Twitter integration is not configured yet.');
+        }
+        break;
+      }
+      case 'connect_discord': {
+        const dResult = await startConnectDiscord(publicKey);
+        if (dResult?.authUrl) {
+          Linking.openURL(dResult.authUrl);
+        } else {
+          Alert.alert('Not Available', 'Discord integration is not configured yet.');
+        }
+        break;
+      }
+      case 'connect_telegram': {
+        const tResult = await startConnectTelegram(publicKey);
+        if (tResult) {
+          setTelegramCode(tResult.code);
+          setTelegramBotUrl(tResult.botUrl);
+          setTelegramSheetVisible(true);
+        } else {
+          Alert.alert('Not Available', 'Telegram integration is not configured yet.');
+        }
+        break;
+      }
       case 'follow_cashflow_x':
       case 'follow_heymike_x':
       case 'retweet_announcement':
       case 'subscribe_founders_tg':
-        // TODO: PR 3 — OAuth flows and action verification
+        setVerifyTask(task);
+        setVerifySheetVisible(true);
         break;
     }
   };
@@ -122,6 +172,17 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
     if (publicKey) {
       loadTasks(publicKey);
     }
+  }, [publicKey]);
+
+  const handleTelegramClose = useCallback(() => {
+    setTelegramSheetVisible(false);
+    if (publicKey) loadTasks(publicKey);
+  }, [publicKey]);
+
+  const handleVerifySuccess = useCallback(() => {
+    setVerifySheetVisible(false);
+    setVerifyTask(null);
+    if (publicKey) loadTasks(publicKey);
   }, [publicKey]);
 
   if (loading) {
@@ -278,12 +339,27 @@ export default function WaitlistDashboardScreen({ onApproved, onBack }: Waitlist
       </ScrollView>
 
       {publicKey && (
-        <ConnectEmailSheet
-          visible={emailSheetVisible}
-          onClose={() => setEmailSheetVisible(false)}
-          publicKey={publicKey}
-          onSuccess={handleEmailSuccess}
-        />
+        <>
+          <ConnectEmailSheet
+            visible={emailSheetVisible}
+            onClose={() => setEmailSheetVisible(false)}
+            publicKey={publicKey}
+            onSuccess={handleEmailSuccess}
+          />
+          <ConnectTelegramSheet
+            visible={telegramSheetVisible}
+            onClose={handleTelegramClose}
+            code={telegramCode}
+            botUrl={telegramBotUrl}
+          />
+          <VerifyActionSheet
+            visible={verifySheetVisible}
+            onClose={() => { setVerifySheetVisible(false); setVerifyTask(null); }}
+            task={verifyTask}
+            publicKey={publicKey}
+            onSuccess={handleVerifySuccess}
+          />
+        </>
       )}
     </View>
   );

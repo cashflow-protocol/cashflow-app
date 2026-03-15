@@ -1,8 +1,9 @@
+import crypto from 'crypto';
 import cron from 'node-cron';
 import { createSolanaRpc } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
 import { JupiterManager, KaminoManager, DriftManager, DBManager, PriceManager, TokenManager } from '../managers';
-import { TransactionStatus } from '../models';
+import { TransactionStatus, InviteCodeModel, WaitlistUserModel } from '../models';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
@@ -112,6 +113,56 @@ async function confirmTransactions() {
 }
 
 /**
+ * Approve top 5 waitlist users by XP every 12 hours.
+ * Generates invite codes and updates their status.
+ */
+async function approveTopWaitlistUsers() {
+  try {
+    const topUsers = await WaitlistUserModel.find({ status: 'waiting', xp: { $gt: 0 } })
+      .sort({ xp: -1, createdAt: 1 })
+      .limit(5)
+      .lean();
+
+    if (topUsers.length === 0) {
+      console.log('[Cron] No waitlist users to approve');
+      return;
+    }
+
+    console.log(`[Cron] Approving ${topUsers.length} waitlist user(s)...`);
+
+    for (const user of topUsers) {
+      // Generate unique 8-char invite code
+      let code: string;
+      let attempts = 0;
+      while (true) {
+        code = crypto.randomBytes(4).toString('hex').toUpperCase();
+        try {
+          await InviteCodeModel.create({ code, used: false, source: 'waitlist_batch' });
+          break;
+        } catch (err: any) {
+          if (err.code === 11000 && attempts < 5) {
+            attempts++;
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      await WaitlistUserModel.findOneAndUpdate(
+        { publicKey: user.publicKey, status: 'waiting' },
+        { $set: { status: 'approved', inviteCode: code, approvedAt: new Date() } },
+      );
+
+      console.log(`  Approved ${user.publicKey.slice(0, 8)}... (${user.xp} XP) → code: ${code}`);
+    }
+
+    console.log(`[Cron] Waitlist approval batch complete`);
+  } catch (error) {
+    console.error('[Cron] Failed to approve waitlist users:', error);
+  }
+}
+
+/**
  * Initialize all scheduled tasks
  */
 export async function initializeScheduler() {
@@ -159,6 +210,11 @@ export async function initializeScheduler() {
     timezone: 'UTC',
   });
 
+  // Approve top 5 waitlist users every 12 hours (00:00 and 12:00 UTC)
+  cron.schedule('0 0,12 * * *', approveTopWaitlistUsers, {
+    timezone: 'UTC',
+  });
+
   console.log('✅ Cron scheduler initialized');
   console.log('📋 Scheduled tasks:');
   console.log('  - Token prices: Every minute');
@@ -169,6 +225,7 @@ export async function initializeScheduler() {
   }
   console.log('  - Confirm transactions: Every 30 seconds');
   console.log('  - Cached token cleanup: Every 5 minutes');
+  console.log('  - Waitlist approval batch: Every 12 hours (00:00, 12:00 UTC)');
 
   // Run immediately on startup
   updatePrices();
