@@ -137,7 +137,7 @@ async function approveTopWaitlistUsers() {
       while (true) {
         code = crypto.randomBytes(4).toString('hex').toUpperCase();
         try {
-          await InviteCodeModel.create({ code, used: false, source: 'waitlist_batch' });
+          await InviteCodeModel.create({ code, maxUses: 1, useCount: 0, source: 'waitlist_batch' });
           break;
         } catch (err: any) {
           if (err.code === 11000 && attempts < 5) {

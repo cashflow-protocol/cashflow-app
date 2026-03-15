@@ -10,6 +10,7 @@ import proxyRouter from './routes/proxy';
 import waitlistRouter from './routes/waitlist';
 import authRouter from './routes/auth';
 import onboardingRouter from './routes/onboarding';
+import adminRouter from './routes/admin';
 import { requireAuth } from './middleware/auth';
 import { signResponseMiddleware } from './middleware/signResponse';
 import { initializeScheduler } from './services';
@@ -21,7 +22,7 @@ const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI;
 
 // Middleware
-app.use(cors({ origin: ['https://cashflow.fun', 'https://www.cashflow.fun', 'http://localhost:3000'] }));
+app.use(cors({ origin: ['https://cashflow.fun', 'https://www.cashflow.fun', 'https://admin.cashflow.fun', 'http://localhost:3000', 'http://localhost:5173'] }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -37,6 +38,9 @@ app.use('/auth/v2', authRouter);
 
 // Onboarding routes (no auth required — pre-wallet users)
 app.use('/onboarding/v1', onboardingRouter);
+
+// Admin routes (password-protected)
+app.use('/admin/v1', adminRouter);
 
 // v2 routes (JWT auth required, response signing for transaction routes)
 app.use('/earn/v2', requireAuth, signResponseMiddleware, earnRouter);

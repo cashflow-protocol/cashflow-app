@@ -46,7 +46,7 @@ router.post('/validate-invite', async (req, res) => {
     }
 
     const invite = await InviteCodeModel.findOne({ code: code.toUpperCase() });
-    const valid = invite !== null && !invite.used;
+    const valid = invite !== null && invite.useCount < invite.maxUses;
 
     res.json({ success: true, valid });
   } catch (error) {
@@ -73,8 +73,8 @@ router.post('/redeem-invite', async (req, res) => {
     }
 
     const invite = await InviteCodeModel.findOneAndUpdate(
-      { code: code.toUpperCase(), used: false },
-      { $set: { used: true, usedBy: publicKey, usedAt: new Date() } },
+      { code: code.toUpperCase(), $expr: { $lt: ['$useCount', '$maxUses'] } },
+      { $inc: { useCount: 1 }, $push: { usedBy: { publicKey, usedAt: new Date() } } },
       { new: true },
     );
 

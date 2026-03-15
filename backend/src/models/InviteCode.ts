@@ -1,5 +1,13 @@
 import { prop, getModelForClass, modelOptions, index } from '@typegoose/typegoose';
 
+class InviteCodeUsage {
+  @prop({ required: true })
+  public publicKey!: string;
+
+  @prop({ required: true, default: () => new Date() })
+  public usedAt!: Date;
+}
+
 @modelOptions({
   schemaOptions: {
     timestamps: true,
@@ -11,14 +19,14 @@ export class InviteCode {
   @prop({ required: true })
   public code!: string;
 
-  @prop({ required: true, default: false })
-  public used!: boolean;
+  @prop({ required: true, default: 1 })
+  public maxUses!: number;
 
-  @prop()
-  public usedBy?: string;
+  @prop({ required: true, default: 0 })
+  public useCount!: number;
 
-  @prop()
-  public usedAt?: Date;
+  @prop({ type: () => [InviteCodeUsage], default: [] })
+  public usedBy!: InviteCodeUsage[];
 
   @prop({ required: true })
   public source!: string;
