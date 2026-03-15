@@ -28,9 +28,9 @@ export default function InviteCodesPage() {
     setLoading(true);
     try {
       const data = await getInviteCodes(page, search);
-      setCodes(data.codes);
-      setTotal(data.total);
-      setPages(data.pages);
+      setCodes(data.codes || []);
+      setTotal(data.total || 0);
+      setPages(data.pages || 1);
     } catch (err) {
       console.error(err);
     } finally {
