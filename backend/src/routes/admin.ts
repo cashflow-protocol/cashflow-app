@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
-import { InviteCodeModel, WaitlistUserModel } from '../models';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel } from '../models';
 
 const router = Router();
 
@@ -230,6 +230,125 @@ router.get('/waitlist-users', async (req, res) => {
   } catch (error) {
     console.error('Admin list waitlist users error:', error);
     res.status(500).json({ success: false, error: 'Failed to list users' });
+  }
+});
+
+// ─── Waitlist Tasks ───
+
+/**
+ * GET /waitlist-tasks
+ * List all waitlist tasks.
+ */
+router.get('/waitlist-tasks', async (req, res) => {
+  try {
+    const tasks = await WaitlistTaskModel.find().sort({ sortOrder: 1 }).lean();
+    res.json({
+      success: true,
+      tasks: tasks.map((t) => ({
+        id: t._id,
+        taskId: t.taskId,
+        title: t.title,
+        description: t.description || '',
+        xpReward: t.xpReward,
+        active: t.active,
+        sortOrder: t.sortOrder,
+        requiresTask: t.requiresTask || null,
+        category: t.category,
+        metadata: t.metadata || {},
+        createdAt: (t as any).createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error('Admin list waitlist tasks error:', error);
+    res.status(500).json({ success: false, error: 'Failed to list tasks' });
+  }
+});
+
+/**
+ * POST /waitlist-tasks
+ * Create a new waitlist task.
+ */
+router.post('/waitlist-tasks', async (req, res) => {
+  try {
+    const { taskId, title, description, xpReward, active, sortOrder, requiresTask, category, metadata } = req.body;
+    if (!taskId || !title || xpReward == null || !category) {
+      res.status(400).json({ success: false, error: 'taskId, title, xpReward, and category are required' });
+      return;
+    }
+
+    try {
+      const task = await WaitlistTaskModel.create({
+        taskId,
+        title,
+        description: description || '',
+        xpReward: Number(xpReward),
+        active: active !== false,
+        sortOrder: Number(sortOrder) || 0,
+        requiresTask: requiresTask || undefined,
+        category,
+        metadata: metadata || {},
+      });
+
+      res.json({ success: true, task: { id: task._id, taskId: task.taskId } });
+    } catch (err: any) {
+      if (err.code === 11000) {
+        res.status(409).json({ success: false, error: 'Task ID already exists' });
+        return;
+      }
+      throw err;
+    }
+  } catch (error) {
+    console.error('Admin create waitlist task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create task' });
+  }
+});
+
+/**
+ * PUT /waitlist-tasks/:id
+ * Update a waitlist task.
+ */
+router.put('/waitlist-tasks/:id', async (req, res) => {
+  try {
+    const { title, description, xpReward, active, sortOrder, requiresTask, category, metadata } = req.body;
+
+    const update: any = {};
+    if (title !== undefined) update.title = title;
+    if (description !== undefined) update.description = description;
+    if (xpReward !== undefined) update.xpReward = Number(xpReward);
+    if (active !== undefined) update.active = active;
+    if (sortOrder !== undefined) update.sortOrder = Number(sortOrder);
+    if (requiresTask !== undefined) update.requiresTask = requiresTask || undefined;
+    if (category !== undefined) update.category = category;
+    if (metadata !== undefined) update.metadata = metadata;
+
+    const task = await WaitlistTaskModel.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin update waitlist task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update task' });
+  }
+});
+
+/**
+ * DELETE /waitlist-tasks/:id
+ * Delete a waitlist task.
+ */
+router.delete('/waitlist-tasks/:id', async (req, res) => {
+  try {
+    const result = await WaitlistTaskModel.findByIdAndDelete(req.params.id);
+    if (!result) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin delete waitlist task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete task' });
   }
 });
 

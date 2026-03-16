@@ -78,6 +78,39 @@ export async function deleteInviteCode(id: string) {
   return apiFetch(`/invite-codes/${id}`, { method: 'DELETE' });
 }
 
+// Waitlist tasks
+export async function getWaitlistTasks() {
+  return apiFetch('/waitlist-tasks');
+}
+
+export async function createWaitlistTask(task: {
+  taskId: string;
+  title: string;
+  description?: string;
+  xpReward: number;
+  active?: boolean;
+  sortOrder?: number;
+  requiresTask?: string;
+  category: string;
+  metadata?: Record<string, any>;
+}) {
+  return apiFetch('/waitlist-tasks', {
+    method: 'POST',
+    body: JSON.stringify(task),
+  });
+}
+
+export async function updateWaitlistTask(id: string, updates: Record<string, any>) {
+  return apiFetch(`/waitlist-tasks/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteWaitlistTask(id: string) {
+  return apiFetch(`/waitlist-tasks/${id}`, { method: 'DELETE' });
+}
+
 // Waitlist users
 export async function getWaitlistUsers(page = 1, search = '', sortBy = 'xp', sortDir = 'desc') {
   const params = new URLSearchParams({ page: String(page), limit: '50', sortBy, sortDir });
