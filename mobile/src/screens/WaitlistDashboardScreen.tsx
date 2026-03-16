@@ -254,7 +254,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
       <SafeAreaView
         edges={['top']}
         style={styles.header}
-        onLayout={(e) => setGradientHeight(e.nativeEvent.layout.height + 34)}
+        onLayout={(e) => setGradientHeight(Math.max(255, e.nativeEvent.layout.height + 34))}
       >
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton}>
           <ArrowLeft size={24} color="#fff" />
@@ -431,6 +431,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
+    height: 255,
   },
   header: {
     alignItems: 'center',

@@ -12,7 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { ArrowLeft } from 'lucide-react-native';
-import { validateInviteCode } from '../services/onboardingService';
+import { validateInviteCode, redeemInviteCode } from '../services/onboardingService';
+import { getCloudPublicKey, generateAndStoreCloudKeypair } from '../services/keypairStorage';
 import Toast from '../components/Toast';
 
 interface InviteCodeScreenProps {
@@ -32,7 +33,19 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
     setLoading(true);
     try {
       const valid = await validateInviteCode(trimmed);
-      if (valid) {
+      if (!valid) {
+        setToastVisible(true);
+        return;
+      }
+
+      // Get or generate cloud keypair to redeem against
+      let pk = await getCloudPublicKey();
+      if (!pk) {
+        pk = await generateAndStoreCloudKeypair();
+      }
+
+      const redeemed = await redeemInviteCode(trimmed, pk);
+      if (redeemed) {
         onValidCode(trimmed);
       } else {
         setToastVisible(true);
@@ -84,7 +97,7 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
               placeholderTextColor="rgba(255, 255, 255, 0.3)"
               autoCapitalize="characters"
               autoCorrect={false}
-              maxLength={8}
+              maxLength={16}
               returnKeyType="done"
               onSubmitEditing={handleSubmit}
             />

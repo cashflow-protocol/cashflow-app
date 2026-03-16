@@ -17,7 +17,6 @@ import { createMultisig } from '../services/squadsService';
 import { useWallet } from '../hooks/useWallet';
 import walletService from '../services/walletService';
 import { ArrowLeft } from 'lucide-react-native';
-import { redeemInviteCode } from '../services/onboardingService';
 import authService from '../services/authService';
 import Toast from '../components/Toast';
 import { MIN_LAMPORTS_FOR_VAULT } from '../config/constants';
@@ -26,42 +25,12 @@ interface VaultSetupScreenProps {
   inviteCode: string;
   onComplete: () => void;
   onBack?: () => void;
-}
-
-function VaultIcon({ size = 80 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <Path
-        d="M21 17C21.5523 17 22 16.5523 22 16C22 15.4477 21.5523 15 21 15C20.4477 15 20 15.4477 20 16C20 16.5523 20.4477 17 21 17Z"
-        fill="#fff"
-      />
-      <Path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M21 21C23.7614 21 26 18.7614 26 16C26 13.2386 23.7614 11 21 11C18.2386 11 16 13.2386 16 16C16 18.7614 18.2386 21 21 21ZM21 19C22.6569 19 24 17.6569 24 16C24 14.3431 22.6569 13 21 13C19.3431 13 18 14.3431 18 16C18 17.6569 19.3431 19 21 19Z"
-        fill="#fff"
-      />
-      <Path
-        d="M7 22C7.55228 22 8 21.5523 8 21C8 20.4477 7.55228 20 7 20C6.44772 20 6 20.4477 6 21C6 21.5523 6.44772 22 7 22Z"
-        fill="#fff"
-      />
-      <Path
-        d="M8 12C8 12.5523 7.55228 13 7 13C6.44772 13 6 12.5523 6 12C6 11.4477 6.44772 11 7 11C7.55228 11 8 11.4477 8 12Z"
-        fill="#fff"
-      />
-      <Path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M2.32698 5.63803C2 6.27976 2 7.11984 2 8.8V23.2C2 24.8802 2 25.7202 2.32698 26.362C2.6146 26.9265 3.07354 27.3854 3.63803 27.673C4.27976 28 5.11984 28 6.8 28H25.2C26.8802 28 27.7202 28 28.362 27.673C28.9265 27.3854 29.3854 26.9265 29.673 26.362C30 25.7202 30 24.8802 30 23.2V8.8C30 7.11984 30 6.27976 29.673 5.63803C29.3854 5.07354 28.9265 4.6146 28.362 4.32698C27.7202 4 26.8802 4 25.2 4H6.8C5.11984 4 4.27976 4 3.63803 4.32698C3.07354 4.6146 2.6146 5.07354 2.32698 5.63803ZM25.2 6H6.8C5.92692 6 5.39239 6.00156 4.99247 6.03423C4.80617 6.04945 4.69345 6.06857 4.625 6.08469C4.59244 6.09236 4.57241 6.09879 4.56158 6.10265C4.55118 6.10636 4.54601 6.10899 4.54601 6.10899C4.35785 6.20487 4.20487 6.35785 4.10899 6.54601C4.10899 6.54601 4.10636 6.55118 4.10265 6.56158C4.09879 6.57241 4.09236 6.59244 4.08469 6.625C4.06857 6.69345 4.04945 6.80617 4.03423 6.99247C4.00156 7.39239 4 7.92692 4 8.8V23.2C4 24.0731 4.00156 24.6076 4.03423 25.0075C4.04945 25.1938 4.06857 25.3065 4.08469 25.375C4.09236 25.4076 4.09879 25.4276 4.10265 25.4384C4.10636 25.4488 4.10899 25.454 4.10899 25.454C4.20487 25.6422 4.35785 25.7951 4.54601 25.891C4.54601 25.891 4.55118 25.8936 4.56158 25.8973C4.57241 25.9012 4.59244 25.9076 4.625 25.9153C4.69345 25.9314 4.80617 25.9505 4.99247 25.9658C5.39239 25.9984 5.92692 26 6.8 26H25.2C26.0731 26 26.6076 25.9984 27.0075 25.9658C27.1938 25.9505 27.3065 25.9314 27.375 25.9153C27.4076 25.9076 27.4276 25.9012 27.4384 25.8973C27.4488 25.8936 27.454 25.891 27.454 25.891C27.6422 25.7951 27.7951 25.6422 27.891 25.454C27.891 25.454 27.8936 25.4488 27.8973 25.4384C27.9012 25.4276 27.9076 25.4076 27.9153 25.375C27.9314 25.3065 27.9505 25.1938 27.9658 25.0075C27.9984 24.6076 28 24.0731 28 23.2V8.8C28 7.92692 27.9984 7.39239 27.9658 6.99247C27.9505 6.80617 27.9314 6.69345 27.9153 6.625C27.9076 6.59244 27.9012 6.57241 27.8973 6.56158C27.8936 6.55118 27.891 6.54601 27.891 6.54601C27.7951 6.35785 27.6422 6.20487 27.454 6.10899C27.454 6.10899 27.4488 6.10636 27.4384 6.10265C27.4276 6.09879 27.4076 6.09236 27.375 6.08469C27.3065 6.06857 27.1938 6.04945 27.0075 6.03423C26.6076 6.00156 26.0731 6 25.2 6Z"
-        fill="#fff"
-      />
-    </Svg>
-  );
+  onReset?: () => void;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: VaultSetupScreenProps) {
+export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onReset }: VaultSetupScreenProps) {
   const { connect: connectWallet } = useWallet();
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
@@ -80,46 +49,28 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: Vau
 
   useEffect(() => {
     // Staggered entrance animation
-    Animated.sequence([
-      // 1. Emoji bounces in
-      Animated.spring(emojiScale, {
-        toValue: 1,
-        damping: 8,
-        stiffness: 180,
-        useNativeDriver: true,
-      }),
-      // 2. "You're in!" fades up
+    // All animations run together with staggered delays
+    Animated.spring(emojiScale, {
+      toValue: 1,
+      damping: 10,
+      stiffness: 200,
+      useNativeDriver: true,
+    }).start();
+
+    setTimeout(() => {
       Animated.parallel([
-        Animated.timing(congratsOpacity, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(congratsTranslateY, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]),
-      // 3. Rest of content fades up
+        Animated.timing(congratsOpacity, { toValue: 1, duration: 250, useNativeDriver: true }),
+        Animated.timing(congratsTranslateY, { toValue: 0, duration: 250, useNativeDriver: true }),
+      ]).start();
+    }, 150);
+
+    setTimeout(() => {
       Animated.parallel([
-        Animated.timing(contentOpacity, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(contentTranslateY, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(buttonOpacity, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
+        Animated.timing(contentOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(contentTranslateY, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]).start();
+    }, 300);
 
     // Fire confetti after a short delay
     setTimeout(() => confettiRef.current?.start(), 300);
@@ -144,9 +95,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: Vau
         return;
       }
 
-      // Redeem invite code and set it for auth
-      setStatusText('Redeeming invite code...');
-      await redeemInviteCode(inviteCode, account.publicKey as string);
+      // Code already redeemed in InviteCodeScreen — just set for auth
       authService.setInviteCode(inviteCode);
 
       setStatusText('Creating vault...');
@@ -204,20 +153,12 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: Vau
               { transform: [{ scale: emojiScale }] },
             ]}
           >
-            <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"
-                fill="rgba(255,255,255,0.15)"
-                stroke="#fff"
-                strokeWidth={1.5}
-              />
-              <Path
-                d="M9 12l2 2 4-4"
-                stroke="#fff"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+            <Svg width={64} height={64} viewBox="0 0 32 32" fill="none">
+              <Path d="M21 17C21.5523 17 22 16.5523 22 16C22 15.4477 21.5523 15 21 15C20.4477 15 20 15.4477 20 16C20 16.5523 20.4477 17 21 17Z" fill="#fff" />
+              <Path fillRule="evenodd" clipRule="evenodd" d="M21 21C23.7614 21 26 18.7614 26 16C26 13.2386 23.7614 11 21 11C18.2386 11 16 13.2386 16 16C16 18.7614 18.2386 21 21 21ZM21 19C22.6569 19 24 17.6569 24 16C24 14.3431 22.6569 13 21 13C19.3431 13 18 14.3431 18 16C18 17.6569 19.3431 19 21 19Z" fill="#fff" />
+              <Path d="M7 22C7.55228 22 8 21.5523 8 21C8 20.4477 7.55228 20 7 20C6.44772 20 6 20.4477 6 21C6 21.5523 6.44772 22 7 22Z" fill="#fff" />
+              <Path d="M8 12C8 12.5523 7.55228 13 7 13C6.44772 13 6 12.5523 6 12C6 11.4477 6.44772 11 7 11C7.55228 11 8 11.4477 8 12Z" fill="#fff" />
+              <Path fillRule="evenodd" clipRule="evenodd" d="M2.32698 5.63803C2 6.27976 2 7.11984 2 8.8V23.2C2 24.8802 2 25.7202 2.32698 26.362C2.6146 26.9265 3.07354 27.3854 3.63803 27.673C4.27976 28 5.11984 28 6.8 28H25.2C26.8802 28 27.7202 28 28.362 27.673C28.9265 27.3854 29.3854 26.9265 29.673 26.362C30 25.7202 30 24.8802 30 23.2V8.8C30 7.11984 30 6.27976 29.673 5.63803C29.3854 5.07354 28.9265 4.6146 28.362 4.32698C27.7202 4 26.8802 4 25.2 4H6.8C5.11984 4 4.27976 4 3.63803 4.32698C3.07354 4.6146 2.6146 5.07354 2.32698 5.63803ZM25.2 6H6.8C5.92692 6 5.39239 6.00156 4.99247 6.03423C4.80617 6.04945 4.69345 6.06857 4.625 6.08469C4.59244 6.09236 4.57241 6.09879 4.56158 6.10265C4.55118 6.10636 4.54601 6.10899 4.54601 6.10899C4.35785 6.20487 4.20487 6.35785 4.10899 6.54601C4.10899 6.54601 4.10636 6.55118 4.10265 6.56158C4.09879 6.57241 4.09236 6.59244 4.08469 6.625C4.06857 6.69345 4.04945 6.80617 4.03423 6.99247C4.00156 7.39239 4 7.92692 4 8.8V23.2C4 24.0731 4.00156 24.6076 4.03423 25.0075C4.04945 25.1938 4.06857 25.3065 4.08469 25.375C4.09236 25.4076 4.09879 25.4276 4.10265 25.4384C4.10636 25.4488 4.10899 25.454 4.10899 25.454C4.20487 25.6422 4.35785 25.7951 4.54601 25.891C4.54601 25.891 4.55118 25.8936 4.56158 25.8973C4.57241 25.9012 4.59244 25.9076 4.625 25.9153C4.69345 25.9314 4.80617 25.9505 4.99247 25.9658C5.39239 25.9984 5.92692 26 6.8 26H25.2C26.0731 26 26.6076 25.9984 27.0075 25.9658C27.1938 25.9505 27.3065 25.9314 27.375 25.9153C27.4076 25.9076 27.4276 25.9012 27.4384 25.8973C27.4488 25.8936 27.454 25.891 27.454 25.891C27.6422 25.7951 27.7951 25.6422 27.891 25.454C27.891 25.454 27.8936 25.4488 27.8973 25.4384C27.9012 25.4276 27.9076 25.4076 27.9153 25.375C27.9314 25.3065 27.9505 25.1938 27.9658 25.0075C27.9984 24.6076 28 24.0731 28 23.2V8.8C28 7.92692 27.9984 7.39239 27.9658 6.99247C27.9505 6.80617 27.9314 6.69345 27.9153 6.625C27.9076 6.59244 27.9012 6.57241 27.8973 6.56158C27.8936 6.55118 27.891 6.54601 27.891 6.54601C27.7951 6.35785 27.6422 6.20487 27.454 6.10899C27.454 6.10899 27.4488 6.10636 27.4384 6.10265C27.4276 6.09879 27.4076 6.09236 27.375 6.08469C27.3065 6.06857 27.1938 6.04945 27.0075 6.03423C26.6076 6.00156 26.0731 6 25.2 6Z" fill="#fff" />
             </Svg>
           </Animated.View>
 
@@ -263,6 +204,15 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: Vau
               <Text style={styles.setupButtonText}>Set Up Vault</Text>
             )}
           </TouchableOpacity>
+          {onReset && (
+            <TouchableOpacity
+              onPress={() => { authService.setInviteCode(''); onReset(); }}
+              activeOpacity={0.7}
+              style={{ alignItems: 'center', marginTop: 12 }}
+            >
+              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Reset (test)</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </SafeAreaView>
     </View>
@@ -288,12 +238,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   heroIcon: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 16,
   },
   congrats: {

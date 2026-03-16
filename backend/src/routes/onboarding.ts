@@ -594,8 +594,18 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
       return;
     }
 
-    // Handle both raw code and /start CODE (Telegram deep link sends "/start CODE")
+    // Handle /start without code — welcome message
     const rawText = message.text.trim();
+    if (rawText === '/start') {
+      await socialAuth.sendTelegramMessage(
+        message.from.id.toString(),
+        '👋 Welcome to cashflow.fun bot!\n\nTo link your Telegram account just send the verification code here.\n\nThat\'s it!',
+      );
+      res.json({ ok: true });
+      return;
+    }
+
+    // Handle both raw code and /start CODE (Telegram deep link sends "/start CODE")
     const code = rawText.startsWith('/start ') ? rawText.slice(7).trim() : rawText;
     const pending = pendingTelegramCodes.get(code);
 
