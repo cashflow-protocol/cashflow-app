@@ -1,4 +1,5 @@
 import { API_CONFIG } from '../config/api';
+import { logError } from './analyticsService';
 
 const BASE = `${API_CONFIG.baseUrl}/onboarding/v1`;
 
@@ -127,7 +128,8 @@ export async function connectWallet(publicKey: string, walletAddress: string): P
     if (!res.ok) return { success: false };
     const data = await res.json();
     return { success: data.success, xpAwarded: data.xpAwarded };
-  } catch {
+  } catch (err: any) {
+    logError('onboarding_connect_wallet', err?.message || 'unknown');
     return { success: false };
   }
 }
@@ -145,7 +147,8 @@ export async function startConnectX(publicKey: string): Promise<{ authUrl: strin
     const data = await res.json();
     if (!data.success) return null;
     return { authUrl: data.authUrl };
-  } catch {
+  } catch (err: any) {
+    logError('onboarding_connect_x', err?.message || 'unknown');
     return null;
   }
 }
@@ -161,7 +164,8 @@ export async function startConnectDiscord(publicKey: string): Promise<{ authUrl:
     const data = await res.json();
     if (!data.success) return null;
     return { authUrl: data.authUrl };
-  } catch {
+  } catch (err: any) {
+    logError('onboarding_connect_discord', err?.message || 'unknown');
     return null;
   }
 }
@@ -177,7 +181,8 @@ export async function startConnectTelegram(publicKey: string): Promise<{ code: s
     const data = await res.json();
     if (!data.success) return null;
     return { code: data.code, botUrl: data.botUrl };
-  } catch {
+  } catch (err: any) {
+    logError('onboarding_connect_telegram', err?.message || 'unknown');
     return null;
   }
 }
@@ -221,7 +226,8 @@ export async function uploadScreenshot(
     if (!res.ok) return { success: false };
     const data = await res.json();
     return { success: data.success, xpAwarded: data.xpAwarded };
-  } catch {
+  } catch (err: any) {
+    logError('onboarding_upload_screenshot', err?.message || 'unknown');
     return { success: false };
   }
 }

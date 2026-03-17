@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { Address } from '@solana/kit';
 import walletService, { WalletAccount } from '../services/walletService';
+import { logError } from '../services/analyticsService';
 
 interface WalletContextType {
   wallet: WalletAccount | null;
@@ -36,7 +37,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return account;
       }
       return null;
-    } catch (error) {
+    } catch (error: any) {
+      logError('wallet_hook_connect', error?.message || 'unknown');
       console.error('Connection error:', error);
       return null;
     } finally {
@@ -49,7 +51,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       await walletService.disconnect();
       setWallet(null);
       setBalance(0);
-    } catch (error) {
+    } catch (error: any) {
+      logError('wallet_hook_disconnect', error?.message || 'unknown');
       console.error('Disconnect error:', error);
     }
   }, []);

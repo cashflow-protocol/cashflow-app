@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import apiService from '../services/apiService';
 import { getVault } from '../services/vaultStorage';
 import type { EarnToken, EarnPosition } from '../types/earn';
+import { logError } from '../services/analyticsService';
 
 export interface EarnTokenWithPosition extends EarnToken {
   position?: EarnPosition;
@@ -58,6 +59,7 @@ export function useEarnTokens() {
       cachedTokens = merged;
       setTokens(merged);
     } catch (err: any) {
+      logError('earn_tokens_fetch', err.message ?? 'unknown');
       setError(err.message ?? 'Failed to fetch earn tokens');
     } finally {
       setLoading(false);

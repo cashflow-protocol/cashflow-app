@@ -2,6 +2,7 @@ import { address, Address, createSolanaRpc, getBase58Decoder, getBase64Encoder }
 import { Buffer } from 'buffer';
 import { SOLANA_CONFIG } from '../config/solana';
 import { IS_SOLANA_MOBILE } from '../config/constants';
+import { logError } from './analyticsService';
 
 // Lazy-load MWA to avoid crashing on iOS (native module doesn't exist there)
 let _transact: typeof import('@solana-mobile/mobile-wallet-adapter-protocol').transact | null = null;
@@ -57,7 +58,8 @@ class WalletService {
       });
 
       return result;
-    } catch (error) {
+    } catch (error: any) {
+      logError('wallet_connect', error?.message || 'unknown');
       console.error('Failed to connect wallet:', error);
       return null;
     }
@@ -96,6 +98,7 @@ class WalletService {
           new Uint8Array(Buffer.from(sig, 'base64')),
         );
       } catch (err: any) {
+        logError('wallet_sign_send', err?.message || 'unknown');
         console.error('[MWA] signAndSendTransactions FAILED:', err?.message || err);
         throw err;
       }
@@ -132,6 +135,7 @@ class WalletService {
           new Uint8Array(Buffer.from(payload, 'base64')),
         );
       } catch (err: any) {
+        logError('wallet_sign', err?.message || 'unknown');
         console.error('[MWA] signTransactions FAILED:', err?.message || err);
         throw err;
       }
@@ -146,7 +150,8 @@ class WalletService {
         }
       });
       this.authToken = null;
-    } catch (error) {
+    } catch (error: any) {
+      logError('wallet_disconnect', error?.message || 'unknown');
       console.error('Failed to disconnect wallet:', error);
     }
   }
@@ -159,7 +164,8 @@ class WalletService {
     try {
       const balanceResponse = await this.rpc.getBalance(publicKey).send();
       return Number(balanceResponse.value) / 1e9; // Convert lamports to SOL
-    } catch (error) {
+    } catch (error: any) {
+      logError('wallet_get_balance', error?.message || 'unknown');
       console.error('Failed to get balance:', error);
       return 0;
     }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import apiService from '../services/apiService';
 import type { AppNotification } from '../types/notification';
+import { logError } from '../services/analyticsService';
 
 // Module-level cache — persists across tab switches
 let cachedNotifications: AppNotification[] | null = null;
@@ -25,7 +26,8 @@ export function useNotifications() {
       setNotifications(historyRes.notifications);
       setUnreadCount(count);
       setHasMore(historyRes.hasMore);
-    } catch (err) {
+    } catch (err: any) {
+      logError('notifications_fetch', err?.message || 'unknown');
       console.error('Failed to fetch notifications:', err);
     } finally {
       setLoading(false);
@@ -50,7 +52,8 @@ export function useNotifications() {
       cachedNotifications = combined;
       setNotifications(combined);
       setHasMore(res.hasMore);
-    } catch (err) {
+    } catch (err: any) {
+      logError('notifications_load_more', err?.message || 'unknown');
       console.error('Failed to load more notifications:', err);
     }
   }, [hasMore, notifications]);
@@ -68,7 +71,8 @@ export function useNotifications() {
       const newUnread = Math.max(0, unreadCount - notificationIds.length);
       cachedUnreadCount = newUnread;
       setUnreadCount(newUnread);
-    } catch (err) {
+    } catch (err: any) {
+      logError('notifications_mark_read', err?.message || 'unknown');
       console.error('Failed to mark notifications as read:', err);
     }
   }, [notifications, unreadCount]);
@@ -78,7 +82,8 @@ export function useNotifications() {
       const count = await apiService.getUnreadNotificationCount();
       cachedUnreadCount = count;
       setUnreadCount(count);
-    } catch (err) {
+    } catch (err: any) {
+      logError('notifications_unread_count', err?.message || 'unknown');
       console.error('Failed to fetch unread count:', err);
     }
   }, []);

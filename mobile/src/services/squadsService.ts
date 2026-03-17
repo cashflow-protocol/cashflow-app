@@ -26,6 +26,7 @@ import {
 import { createWithdrawInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
 import { IS_SOLANA_MOBILE, TARGET_CLOUD_BALANCE } from '../config/constants';
+import { logError } from './analyticsService';
 
 const { Permission, Permissions } = multisig.types;
 
@@ -218,6 +219,7 @@ async function signTransactionNatively(
     const accountKeys = tx.message.staticAccountKeys;
     const index = accountKeys.findIndex((k: PublicKey) => k.equals(pubkey));
     if (index === -1) {
+      logError('squads_sign_native', `signer_not_found: ${pubkey.toBase58()}`);
       throw new Error(`Signer ${pubkey.toBase58()} not found in transaction`);
     }
 
@@ -248,12 +250,14 @@ async function signTransactionsWithWallet(
     const accountKeys = originalTx.message.staticAccountKeys;
     const walletIndex = accountKeys.findIndex((k: PublicKey) => k.equals(walletPubkey));
     if (walletIndex === -1) {
+      logError('squads_sign_wallet', `wallet_not_in_tx: ${walletPubkey.toBase58()}`);
       throw new Error(`Wallet ${walletPubkey.toBase58()} not found in transaction`);
     }
 
     const walletSig = signedTx.signatures[walletIndex];
     const isZero = walletSig.every((b: number) => b === 0);
     if (isZero) {
+      logError('squads_sign_wallet', 'mwa_signature_empty');
       console.error(`[signWallet] wallet signature at index ${walletIndex} is all zeros! MWA may have signed with a different key.`);
       console.error(`[signWallet] expected wallet: ${walletPubkey.toBase58()}`);
       console.error(`[signWallet] tx signers:`, accountKeys.map((k: PublicKey, i: number) => {
@@ -449,6 +453,7 @@ export async function addMember(
   const cloudPubBase58 = await getCloudPublicKey();
   const devicePubBase58 = await getDevicePublicKey();
   if (!cloudPubBase58 || !devicePubBase58) {
+    logError('squads_add_member', 'keypairs_not_found');
     throw new Error('Signing keypairs not found. Please recreate your vault.');
   }
   const cloudPubkey = new PublicKey(cloudPubBase58);
@@ -459,6 +464,7 @@ export async function addMember(
   if (IS_SOLANA_MOBILE) {
     const vaultData = await getVault();
     if (!vaultData?.walletAddress) {
+      logError('squads_add_member', 'wallet_address_not_found');
       throw new Error('Wallet address not found. Please recreate your vault.');
     }
     walletPubkey = new PublicKey(vaultData.walletAddress);
@@ -608,6 +614,7 @@ export async function executeVaultTransaction(
   const cloudPubBase58 = await getCloudPublicKey();
   const devicePubBase58 = await getDevicePublicKey();
   if (!cloudPubBase58 || !devicePubBase58) {
+    logError('squads_vault_tx', 'keypairs_not_found');
     throw new Error('Signing keypairs not found. Please recreate your vault.');
   }
   const cloudPubkey = new PublicKey(cloudPubBase58);
@@ -618,6 +625,7 @@ export async function executeVaultTransaction(
   if (IS_SOLANA_MOBILE) {
     const vaultData = await getVault();
     if (!vaultData?.walletAddress) {
+      logError('squads_vault_tx', 'wallet_address_not_found');
       throw new Error('Wallet address not found. Please recreate your vault.');
     }
     walletPubkey = new PublicKey(vaultData.walletAddress);
@@ -638,6 +646,7 @@ export async function executeVaultTransaction(
 
   // Guard: never create an empty vault transaction
   if (!instructions || instructions.length === 0) {
+    logError('squads_vault_tx', 'empty_instructions');
     throw new Error('No instructions provided for vault transaction');
   }
 
@@ -864,6 +873,7 @@ export async function executeVaultTransaction(
     console.log(`[VaultTx] signature: ${signature}`);
     return { signature };
   } catch (err: any) {
+    logError('squads_vault_tx', err.message || 'unknown');
     debugLines.push(`ERROR: ${err.message}`);
     // Await so the logs arrive before we re-throw
     await apiService.debugLog('VaultTx', debugLines).catch(() => {});
@@ -986,6 +996,7 @@ export async function reclaimRent(
   const cloudPubBase58 = await getCloudPublicKey();
   const devicePubBase58 = await getDevicePublicKey();
   if (!cloudPubBase58 || !devicePubBase58) {
+    logError('squads_reclaim_rent', 'keypairs_not_found');
     throw new Error('Signing keypairs not found.');
   }
   const cloudPubkey = new PublicKey(cloudPubBase58);
@@ -1015,6 +1026,7 @@ export async function reclaimRent(
     // Re-fetch after setting
     acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
     if (!acct.rentCollector) {
+      logError('squads_reclaim_rent', 'set_rent_collector_failed');
       throw new Error('Failed to set rent collector');
     }
   }
@@ -1123,6 +1135,7 @@ export async function reclaimRent(
       await apiService.sendBundle(serializedTxs);
       closed += batch.length;
     } catch (err: any) {
+      logError('squads_reclaim_rent', `batch_failed: ${err.message || 'unknown'}`);
       console.warn(`Failed to build batch:`, err.message || err);
       failed += batch.length;
     }

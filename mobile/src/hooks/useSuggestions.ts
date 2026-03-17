@@ -5,6 +5,7 @@ import apiService from '../services/apiService';
 import { getVault } from '../services/vaultStorage';
 import { APP_VERSION, BUILD_NUMBER } from '../config/version';
 import type { Suggestion } from '../types/earn';
+import { logError } from '../services/analyticsService';
 
 let cachedSuggestions: Suggestion[] | null = null;
 
@@ -30,6 +31,7 @@ export function useSuggestions() {
       cachedSuggestions = data;
       setSuggestions(data);
     } catch (err: any) {
+      logError('suggestions_fetch', err.message || 'unknown');
       console.error('Failed to fetch suggestions:', err.message);
     } finally {
       setLoading(false);
