@@ -367,7 +367,7 @@ router.post('/waitlist/connect-email/verify', async (req, res) => {
 
 // ─── Helper: award XP for a task (prevents double award) ───
 
-async function awardTaskXp(publicKey: string, taskId: string, extraFields?: Record<string, any>) {
+async function awardTaskXp(publicKey: string, taskId: string, extraFields?: Record<string, any>, screenshotUrl?: string) {
   const task = await WaitlistTaskModel.findOne({ taskId }).lean();
   const xpReward = task?.xpReward ?? 100;
 
@@ -390,7 +390,17 @@ async function awardTaskXp(publicKey: string, taskId: string, extraFields?: Reco
     if (result.discordUsername) parts.push(`Discord: ${result.discordUsername}`);
     if (result.telegramUsername) parts.push(`Telegram: @${result.telegramUsername}`);
     if (result.walletAddress) parts.push(`Solana: <code>${result.walletAddress.slice(0, 6)}...${result.walletAddress.slice(-4)}</code>`);
-    telegram.notifyAdmin(parts.join('\n'));
+
+    if (screenshotUrl) {
+      telegram.notifyAdminWithPhoto(screenshotUrl, parts.join('\n'), [
+        [
+          { text: '✅ Approve', callback_data: `approve:${publicKey}:${taskId}` },
+          { text: '❌ Reject', callback_data: `reject:${publicKey}:${taskId}` },
+        ],
+      ]);
+    } else {
+      telegram.notifyAdmin(parts.join('\n'));
+    }
   }
 
   return { awarded: result !== null, xpReward };
@@ -604,6 +614,45 @@ router.post('/waitlist/connect-telegram/start', async (req, res) => {
  */
 router.post('/waitlist/telegram-webhook', async (req, res) => {
   try {
+    // Handle inline button callbacks (Approve/Reject screenshots)
+    const callbackQuery = req.body?.callback_query;
+    if (callbackQuery?.data) {
+      if (!telegram.isAdmin(callbackQuery.from.id)) {
+        await telegram.answerCallbackQuery(callbackQuery.id, '⛔ Unauthorized');
+        res.json({ ok: true });
+        return;
+      }
+      const [action, publicKey, taskId] = callbackQuery.data.split(':');
+      if (action === 'reject' && publicKey && taskId) {
+        // Revoke task: remove from completedTasks, deduct XP
+        const task = await WaitlistTaskModel.findOne({ taskId }).lean();
+        const xpReward = task?.xpReward ?? 0;
+        await WaitlistUserModel.findOneAndUpdate(
+          { publicKey },
+          {
+            $pull: { completedTasks: taskId },
+            $inc: { xp: -xpReward },
+            $set: { lastXpAt: new Date() },
+          },
+        );
+        await telegram.answerCallbackQuery(callbackQuery.id, `❌ Rejected. Deducted ${xpReward} XP.`);
+        await telegram.editMessageCaption(
+          callbackQuery.message.chat.id,
+          callbackQuery.message.message_id,
+          callbackQuery.message.caption + '\n\n❌ <b>REJECTED</b>',
+        );
+      } else if (action === 'approve') {
+        await telegram.answerCallbackQuery(callbackQuery.id, '✅ Approved!');
+        await telegram.editMessageCaption(
+          callbackQuery.message.chat.id,
+          callbackQuery.message.message_id,
+          callbackQuery.message.caption + '\n\n✅ <b>APPROVED</b>',
+        );
+      }
+      res.json({ ok: true });
+      return;
+    }
+
     const message = req.body?.message;
     if (!message?.text || !message?.from) {
       res.json({ ok: true });
@@ -696,8 +745,8 @@ router.post('/waitlist/upload-screenshot', upload.single('image'), async (req, r
       { $push: { proofScreenshots: { taskId, imageUrl, uploadedAt: new Date() } } },
     );
 
-    // Auto-approve: award XP
-    const { awarded, xpReward } = await awardTaskXp(publicKey, taskId);
+    // Auto-approve: award XP (pass screenshot URL for admin notification)
+    const { awarded, xpReward } = await awardTaskXp(publicKey, taskId, undefined, imageUrl);
 
     res.json({ success: true, xpAwarded: awarded ? xpReward : 0, imageUrl });
   } catch (error: any) {
