@@ -74,6 +74,14 @@ const TASKS = [
     category: 'social_action',
     metadata: { channel: '@founders_journey', channelUrl: 'https://t.me/founders_journey' },
   },
+  {
+    taskId: 'rate_dapp_store',
+    title: 'Rate us on dApp Store',
+    xpReward: 300,
+    sortOrder: 9,
+    category: 'action',
+    metadata: { storeUrl: 'https://cashflow.fun/download', requiresScreenshot: true },
+  },
 ];
 
 async function seed() {

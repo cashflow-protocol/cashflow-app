@@ -2,8 +2,10 @@ import crypto from 'crypto';
 import { Router } from 'express';
 import { BrevoClient } from '@getbrevo/brevo';
 import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel } from '../models';
+import multer from 'multer';
 import * as socialAuth from '../services/socialAuth';
 import * as telegram from '../services/telegramManager';
+import * as storage from '../services/storageManager';
 
 const router = Router();
 
@@ -648,6 +650,63 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
   } catch (error) {
     console.error('Telegram webhook error:', error);
     res.json({ ok: true }); // Always 200 for Telegram
+  }
+});
+
+// ─── Screenshot upload (dApp Store rating proof) ───
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (_req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPEG, PNG, and WebP images are allowed'));
+    }
+  },
+});
+
+router.post('/waitlist/upload-screenshot', upload.single('image'), async (req, res) => {
+  try {
+    const { publicKey, taskId } = req.body;
+    if (!publicKey || !taskId) {
+      res.status(400).json({ success: false, error: 'publicKey and taskId are required' });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ success: false, error: 'Image file is required' });
+      return;
+    }
+
+    if (!storage.isConfigured()) {
+      res.status(500).json({ success: false, error: 'Storage is not configured' });
+      return;
+    }
+
+    // Upload to DO Spaces
+    const ext = req.file.mimetype === 'image/png' ? 'png' : req.file.mimetype === 'image/webp' ? 'webp' : 'jpg';
+    const key = `screenshots/${publicKey}/${taskId}_${Date.now()}.${ext}`;
+    const imageUrl = await storage.uploadFile(req.file.buffer, key, req.file.mimetype);
+
+    // Save screenshot reference
+    await WaitlistUserModel.findOneAndUpdate(
+      { publicKey },
+      { $push: { proofScreenshots: { taskId, imageUrl, uploadedAt: new Date() } } },
+    );
+
+    // Auto-approve: award XP
+    const { awarded, xpReward } = await awardTaskXp(publicKey, taskId);
+
+    res.json({ success: true, xpAwarded: awarded ? xpReward : 0, imageUrl });
+  } catch (error: any) {
+    if (error.message?.includes('Only JPEG')) {
+      res.status(400).json({ success: false, error: error.message });
+      return;
+    }
+    console.error('Screenshot upload error:', error);
+    res.status(500).json({ success: false, error: 'Failed to upload screenshot' });
   }
 });
 

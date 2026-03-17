@@ -1,4 +1,4 @@
-import { prop, getModelForClass, modelOptions, index } from '@typegoose/typegoose';
+import { prop, getModelForClass, modelOptions, index, Severity } from '@typegoose/typegoose';
 
 @modelOptions({
   schemaOptions: {
@@ -59,6 +59,9 @@ export class WaitlistUser {
 
   @prop({ type: () => [String], default: [] })
   public completedTasks!: string[];
+
+  @prop({ type: () => [Object], default: [], allowMixed: Severity.ALLOW })
+  public proofScreenshots!: { taskId: string; imageUrl: string; uploadedAt: Date }[];
 }
 
 export const WaitlistUserModel = getModelForClass(WaitlistUser);

@@ -196,3 +196,32 @@ export async function verifyWaitlistAction(
   const data = await res.json();
   return { verified: data.verified ?? false, xpAwarded: data.xpAwarded, message: data.message };
 }
+
+// ─── Screenshot upload ───
+
+export async function uploadScreenshot(
+  publicKey: string,
+  taskId: string,
+  image: { uri: string; type: string; name: string },
+): Promise<{ success: boolean; xpAwarded?: number }> {
+  try {
+    const formData = new FormData();
+    formData.append('publicKey', publicKey);
+    formData.append('taskId', taskId);
+    formData.append('image', {
+      uri: image.uri,
+      type: image.type,
+      name: image.name,
+    } as any);
+
+    const res = await fetch(`${BASE}/waitlist/upload-screenshot`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) return { success: false };
+    const data = await res.json();
+    return { success: data.success, xpAwarded: data.xpAwarded };
+  } catch {
+    return { success: false };
+  }
+}

@@ -18,6 +18,7 @@ import { useWallet } from '../hooks/useWallet';
 import walletService from '../services/walletService';
 import { ArrowLeft } from 'lucide-react-native';
 import authService from '../services/authService';
+import { deleteAllKeypairs } from '../services/keypairStorage';
 import Toast from '../components/Toast';
 import { MIN_LAMPORTS_FOR_VAULT } from '../config/constants';
 
@@ -25,11 +26,12 @@ interface VaultSetupScreenProps {
   inviteCode: string;
   onComplete: () => void;
   onBack?: () => void;
+  onReset?: () => void;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: VaultSetupScreenProps) {
+export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onReset }: VaultSetupScreenProps) {
   const { connect: connectWallet } = useWallet();
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
@@ -203,6 +205,15 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: Vau
               <Text style={styles.setupButtonText}>Set Up Vault</Text>
             )}
           </TouchableOpacity>
+          {onReset && __DEV__ && (
+            <TouchableOpacity
+              onPress={async () => { authService.setInviteCode(''); await deleteAllKeypairs(); onReset(); }}
+              activeOpacity={0.7}
+              style={{ alignItems: 'center', marginTop: 12 }}
+            >
+              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Reset (test)</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </SafeAreaView>
     </View>

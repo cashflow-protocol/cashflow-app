@@ -352,4 +352,64 @@ router.delete('/waitlist-tasks/:id', async (req, res) => {
   }
 });
 
+// ─── Waitlist User Actions ───
+
+/**
+ * GET /waitlist-users/:id/screenshots
+ * Get all proof screenshots for a user.
+ */
+router.get('/waitlist-users/:id/screenshots', async (req, res) => {
+  try {
+    const user = await WaitlistUserModel.findById(req.params.id).lean();
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+    res.json({ success: true, screenshots: user.proofScreenshots || [] });
+  } catch (error) {
+    console.error('Admin get screenshots error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get screenshots' });
+  }
+});
+
+/**
+ * POST /waitlist-users/:id/revoke-task
+ * Revoke a completed task: remove from completedTasks, deduct XP.
+ */
+router.post('/waitlist-users/:id/revoke-task', async (req, res) => {
+  try {
+    const { taskId } = req.body;
+    if (!taskId) {
+      res.status(400).json({ success: false, error: 'taskId is required' });
+      return;
+    }
+
+    const user = await WaitlistUserModel.findById(req.params.id);
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    if (!user.completedTasks.includes(taskId)) {
+      res.status(400).json({ success: false, error: 'Task is not completed' });
+      return;
+    }
+
+    // Look up XP reward
+    const task = await WaitlistTaskModel.findOne({ taskId }).lean();
+    const xpToDeduct = task?.xpReward ?? 0;
+
+    await WaitlistUserModel.findByIdAndUpdate(req.params.id, {
+      $pull: { completedTasks: taskId },
+      $inc: { xp: -xpToDeduct },
+      $set: { lastXpAt: new Date() },
+    });
+
+    res.json({ success: true, xpDeducted: xpToDeduct });
+  } catch (error) {
+    console.error('Admin revoke task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to revoke task' });
+  }
+});
+
 export default router;

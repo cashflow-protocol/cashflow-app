@@ -29,6 +29,7 @@ import { generateAndStoreCloudKeypair, getCloudPublicKey } from '../services/key
 import ConnectEmailSheet from '../components/ConnectEmailSheet';
 import ConnectTelegramSheet from '../components/ConnectTelegramSheet';
 import VerifyActionSheet from '../components/VerifyActionSheet';
+import UploadScreenshotSheet from '../components/UploadScreenshotSheet';
 
 function getCountdown(): string {
   const now = new Date();
@@ -66,6 +67,9 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
   const [telegramCode, setTelegramCode] = useState('');
   const [telegramBotUrl, setTelegramBotUrl] = useState('');
   const [verifySheetVisible, setVerifySheetVisible] = useState(false);
+  const [screenshotSheetVisible, setScreenshotSheetVisible] = useState(false);
+  const [screenshotStoreUrl, setScreenshotStoreUrl] = useState('');
+  const [screenshotTaskId, setScreenshotTaskId] = useState('');
   const [verifyTask, setVerifyTask] = useState<WaitlistTaskItem | null>(null);
   const [countdown, setCountdown] = useState(getCountdown());
   useEffect(() => {
@@ -202,6 +206,14 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
       case 'subscribe_founders_tg':
         setVerifyTask(task);
         setVerifySheetVisible(true);
+        break;
+      default:
+        // Screenshot-based tasks (e.g. rate_dapp_store)
+        if (task.metadata?.requiresScreenshot) {
+          setScreenshotTaskId(task.taskId);
+          setScreenshotStoreUrl(task.metadata.storeUrl || 'https://cashflow.fun/download');
+          setScreenshotSheetVisible(true);
+        }
         break;
     }
   };
@@ -409,6 +421,18 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
             task={verifyTask}
             publicKey={publicKey}
             onSuccess={handleVerifySuccess}
+          />
+          <UploadScreenshotSheet
+            visible={screenshotSheetVisible}
+            onClose={() => { setScreenshotSheetVisible(false); setScreenshotTaskId(''); }}
+            publicKey={publicKey}
+            taskId={screenshotTaskId}
+            storeUrl={screenshotStoreUrl}
+            onSuccess={() => {
+              setScreenshotSheetVisible(false);
+              setScreenshotTaskId('');
+              loadTasks(publicKey);
+            }}
           />
         </>
       )}

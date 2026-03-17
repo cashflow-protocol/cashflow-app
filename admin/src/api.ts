@@ -111,6 +111,18 @@ export async function deleteWaitlistTask(id: string) {
   return apiFetch(`/waitlist-tasks/${id}`, { method: 'DELETE' });
 }
 
+// Waitlist user actions
+export async function getUserScreenshots(id: string) {
+  return apiFetch(`/waitlist-users/${id}/screenshots`);
+}
+
+export async function revokeUserTask(id: string, taskId: string) {
+  return apiFetch(`/waitlist-users/${id}/revoke-task`, {
+    method: 'POST',
+    body: JSON.stringify({ taskId }),
+  });
+}
+
 // Waitlist users
 export async function getWaitlistUsers(page = 1, search = '', sortBy = 'xp', sortDir = 'desc') {
   const params = new URLSearchParams({ page: String(page), limit: '50', sortBy, sortDir });
