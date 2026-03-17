@@ -183,7 +183,6 @@ function App() {
           <VaultSetupScreen
             inviteCode={inviteCode}
             onComplete={handleVaultComplete}
-            onReset={() => { setInviteCode(''); setOnboardingStep('waitlist'); }}
           />
         );
         break;

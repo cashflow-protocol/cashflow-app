@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { BrevoClient } from '@getbrevo/brevo';
 import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel } from '../models';
 import * as socialAuth from '../services/socialAuth';
+import * as telegram from '../services/telegramManager';
 
 const router = Router();
 
@@ -104,11 +105,12 @@ router.post('/waitlist/register', async (req, res) => {
       return;
     }
 
-    await WaitlistUserModel.findOneAndUpdate(
-      { publicKey },
-      { $setOnInsert: { publicKey, xp: 0, status: 'waiting', completedTasks: [] } },
-      { upsert: true },
-    );
+    const existing = await WaitlistUserModel.findOne({ publicKey });
+    if (!existing) {
+      await WaitlistUserModel.create({ publicKey, xp: 0, status: 'waiting', completedTasks: [] });
+      const total = await WaitlistUserModel.countDocuments();
+      telegram.notifyAdmin(`🆕 New waitlist signup!\n\nWallet: <code>${publicKey.slice(0, 6)}...${publicKey.slice(-4)}</code>\nTotal waitlist: ${total}`);
+    }
 
     res.json({ success: true });
   } catch (error) {
@@ -377,6 +379,18 @@ async function awardTaskXp(publicKey: string, taskId: string, extraFields?: Reco
     { new: true },
   );
 
+  if (result) {
+    const parts = [`✅ Task completed: <b>${task?.title ?? taskId}</b> (+${xpReward} XP)`];
+    parts.push(`\nTotal XP: ${result.xp} | Tasks: ${result.completedTasks.length}`);
+    parts.push(`Wallet: <code>${publicKey.slice(0, 6)}...${publicKey.slice(-4)}</code>`);
+    if (result.email) parts.push(`Email: ${result.email}`);
+    if (result.twitterHandle) parts.push(`X: @${result.twitterHandle}`);
+    if (result.discordUsername) parts.push(`Discord: ${result.discordUsername}`);
+    if (result.telegramUsername) parts.push(`Telegram: @${result.telegramUsername}`);
+    if (result.walletAddress) parts.push(`Solana: <code>${result.walletAddress.slice(0, 6)}...${result.walletAddress.slice(-4)}</code>`);
+    telegram.notifyAdmin(parts.join('\n'));
+  }
+
   return { awarded: result !== null, xpReward };
 }
 
@@ -566,7 +580,7 @@ router.post('/waitlist/connect-telegram/start', async (req, res) => {
       return;
     }
 
-    if (!process.env.TELEGRAM_BOT_TOKEN) {
+    if (!telegram.isConfigured()) {
       res.status(503).json({ success: false, error: 'Telegram integration not configured' });
       return;
     }
@@ -597,7 +611,7 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
     // Handle /start without code — welcome message
     const rawText = message.text.trim();
     if (rawText === '/start') {
-      await socialAuth.sendTelegramMessage(
+      await telegram.sendMessage(
         message.from.id.toString(),
         '👋 Welcome to cashflow.fun bot!\n\nTo link your Telegram account just send the verification code here.\n\nThat\'s it!',
       );
@@ -610,7 +624,7 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
     const pending = pendingTelegramCodes.get(code);
 
     if (!pending || Date.now() > pending.expiresAt) {
-      await socialAuth.sendTelegramMessage(
+      await telegram.sendMessage(
         message.from.id.toString(),
         pending ? 'This code has expired. Please request a new one in the app.' : 'Invalid code. Please get a code from the Cashflow app first.',
       );
@@ -625,7 +639,7 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
       telegramUsername: message.from.username || '',
     });
 
-    await socialAuth.sendTelegramMessage(
+    await telegram.sendMessage(
       message.from.id.toString(),
       'Telegram connected! You can now return to the Cashflow app.',
     );
@@ -705,7 +719,7 @@ router.post('/waitlist/verify-action', async (req, res) => {
           res.json({ success: true, verified: false, message: 'Connect your Telegram first.' });
           return;
         }
-        verified = await socialAuth.checkTelegramChannelMember(user.telegramId, '@founders_journey');
+        verified = await telegram.checkChannelMember(user.telegramId, '@founders_journey');
         break;
       }
       default:

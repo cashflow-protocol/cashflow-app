@@ -25,12 +25,11 @@ interface VaultSetupScreenProps {
   inviteCode: string;
   onComplete: () => void;
   onBack?: () => void;
-  onReset?: () => void;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onReset }: VaultSetupScreenProps) {
+export default function VaultSetupScreen({ inviteCode, onComplete, onBack }: VaultSetupScreenProps) {
   const { connect: connectWallet } = useWallet();
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
@@ -204,15 +203,6 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
               <Text style={styles.setupButtonText}>Set Up Vault</Text>
             )}
           </TouchableOpacity>
-          {onReset && (
-            <TouchableOpacity
-              onPress={() => { authService.setInviteCode(''); onReset(); }}
-              activeOpacity={0.7}
-              style={{ alignItems: 'center', marginTop: 12 }}
-            >
-              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Reset (test)</Text>
-            </TouchableOpacity>
-          )}
         </Animated.View>
       </SafeAreaView>
     </View>

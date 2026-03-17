@@ -8,8 +8,6 @@ const TWITTER_CLIENT_SECRET = () => process.env.TWITTER_CLIENT_SECRET;
 const TWITTER_BEARER_TOKEN = () => process.env.TWITTER_BEARER_TOKEN;
 const DISCORD_CLIENT_ID = () => process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = () => process.env.DISCORD_CLIENT_SECRET;
-const TELEGRAM_BOT_TOKEN = () => process.env.TELEGRAM_BOT_TOKEN;
-
 const BACKEND_URL = process.env.BACKEND_URL || 'https://api.cashflow.fun';
 const OAUTH_CALLBACK_BASE = BACKEND_URL + '/onboarding/v1';
 
@@ -174,33 +172,3 @@ export async function exchangeDiscordCode(
   };
 }
 
-// ─── Telegram ───
-
-export async function checkTelegramChannelMember(
-  userId: string,
-  channelUsername: string,
-): Promise<boolean> {
-  const botToken = TELEGRAM_BOT_TOKEN();
-  if (!botToken) return false;
-
-  try {
-    const res = await axios.get(
-      `https://api.telegram.org/bot${botToken}/getChatMember`,
-      { params: { chat_id: channelUsername, user_id: userId } },
-    );
-    const status = res.data?.result?.status;
-    return ['member', 'administrator', 'creator'].includes(status);
-  } catch {
-    return false;
-  }
-}
-
-export async function sendTelegramMessage(chatId: string, text: string): Promise<void> {
-  const botToken = TELEGRAM_BOT_TOKEN();
-  if (!botToken) return;
-
-  await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-    chat_id: chatId,
-    text,
-  });
-}

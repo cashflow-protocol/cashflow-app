@@ -5,6 +5,7 @@ import { EarnTokenModel } from '../models/EarnToken';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { TransactionAction } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
+import { notifyAdmin } from '../services/telegramManager';
 
 const router = Router();
 const dbManager = new DBManager();
@@ -265,6 +266,11 @@ router.post('/deposit', async (req: Request, res: Response) => {
       unsignedTransaction: transaction,
     });
 
+    const tokenInfo2 = SUPPORTED_TOKENS_BY_MINT[mint];
+    const decimals2 = tokenInfo2?.decimals ?? 0;
+    const uiAmount = (Number(amount) / 10 ** decimals2).toFixed(decimals2 > 2 ? 4 : 2);
+    notifyAdmin(`💰 Deposit initiated!\n\nAmount: ${uiAmount} ${tokenInfo2?.symbol ?? mint.slice(0, 6)}\nType: ${type}\nWallet: <code>${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}</code>`);
+
     res.json({
       success: true,
       transactionId: record._id,
@@ -387,6 +393,11 @@ router.post('/withdraw', async (req: Request, res: Response) => {
       walletAddress,
       unsignedTransaction: transaction,
     });
+
+    const wTokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+    const wDecimals = wTokenInfo?.decimals ?? 0;
+    const wUiAmount = (Number(amount) / 10 ** wDecimals).toFixed(wDecimals > 2 ? 4 : 2);
+    notifyAdmin(`📤 Withdrawal initiated!\n\nAmount: ${wUiAmount} ${wTokenInfo?.symbol ?? mint.slice(0, 6)}\nType: ${type}\nWallet: <code>${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}</code>`);
 
     res.json({
       success: true,

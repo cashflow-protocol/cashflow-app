@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { getBase58Encoder } from '@solana/kit';
 import { createChallenge, consumeChallenge } from '../services/challengeStore';
 import { UserModel, AuthLogModel, WaitlistUserModel } from '../models';
+import { notifyAdmin } from '../services/telegramManager';
 
 const router = Router();
 
@@ -100,11 +101,16 @@ router.post('/verify', async (req, res) => {
         if (inviteCode) extraFields.inviteCode = inviteCode;
         if (waitlistUser) extraFields.waitlistUserId = String(waitlistUser._id);
 
+        const existingUser = await UserModel.findOne({ vaultAddress });
         await UserModel.findOneAndUpdate(
           { vaultAddress },
           { $set: extraFields, $setOnInsert: { vaultAddress } },
           { upsert: true },
         );
+
+        if (!existingUser) {
+          notifyAdmin(`🏦 New Squad created!\n\nWallet: <code>${publicKey.slice(0, 6)}...${publicKey.slice(-4)}</code>\nVault: <code>${vaultAddress.slice(0, 6)}...${vaultAddress.slice(-4)}</code>${inviteCode ? `\nInvite: <code>${inviteCode}</code>` : ''}`);
+        }
       } catch (err) {
         console.error('User upsert error:', err);
       }
