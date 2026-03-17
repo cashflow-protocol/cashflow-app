@@ -62,6 +62,9 @@ export class WaitlistUser {
 
   @prop({ type: () => [Object], default: [], allowMixed: Severity.ALLOW })
   public proofScreenshots!: { taskId: string; imageUrl: string; uploadedAt: Date }[];
+
+  @prop({ type: () => [String], default: [] })
+  public fcmTokens!: string[];
 }
 
 export const WaitlistUserModel = getModelForClass(WaitlistUser);

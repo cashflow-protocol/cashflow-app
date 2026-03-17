@@ -857,4 +857,28 @@ router.post('/waitlist/verify-action', async (req, res) => {
   }
 });
 
+/**
+ * POST /waitlist/register-device
+ * Register an FCM token for a waitlist user (no auth required).
+ */
+router.post('/waitlist/register-device', async (req, res) => {
+  try {
+    const { publicKey, fcmToken } = req.body;
+    if (!publicKey || !fcmToken || typeof fcmToken !== 'string') {
+      res.status(400).json({ success: false, error: 'publicKey and fcmToken are required' });
+      return;
+    }
+
+    await WaitlistUserModel.findOneAndUpdate(
+      { publicKey },
+      { $addToSet: { fcmTokens: fcmToken } },
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Waitlist register device error:', error);
+    res.status(500).json({ success: false, error: 'Failed to register device' });
+  }
+});
+
 export default router;

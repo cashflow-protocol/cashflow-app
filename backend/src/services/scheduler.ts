@@ -6,6 +6,7 @@ import { JupiterManager, KaminoManager, DriftManager, DBManager, PriceManager, T
 import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from '../models';
 import { NotificationType } from '../models';
 import { dispatchSystemNotification } from './notificationService';
+import { sendWaitlistPushNotification } from './firebaseManager';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
@@ -157,7 +158,7 @@ async function approveTopWaitlistUsers() {
 
       console.log(`  Approved ${user.publicKey.slice(0, 8)}... (${user.xp} XP) → code: ${code}`);
 
-      // Send push notification if user already has a vault
+      // Send push notification
       const appUser = await UserModel.findOne({ waitlistUserId: String(user._id) }).lean();
       if (appUser) {
         dispatchSystemNotification(
@@ -166,6 +167,14 @@ async function approveTopWaitlistUsers() {
           undefined,
           NotificationType.WAITLIST_APPROVED,
         ).catch((err) => console.error('Waitlist notification error:', err));
+      } else {
+        // User hasn't created a vault yet — send via waitlist FCM tokens
+        sendWaitlistPushNotification(
+          user.publicKey,
+          'Cashflow',
+          'Your waitlist approved! Open the app to get started.',
+          { type: 'waitlist_approved' },
+        ).catch((err) => console.error('Waitlist push error:', err));
       }
     }
 

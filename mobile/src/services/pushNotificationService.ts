@@ -2,24 +2,30 @@ import messaging from '@react-native-firebase/messaging';
 import { Platform, PermissionsAndroid } from 'react-native';
 import apiService from './apiService';
 
+async function requestPermissionAndGetToken(): Promise<string | null> {
+  // Request permission (required on iOS, Android 13+)
+  if (Platform.OS === 'android' && Platform.Version >= 33) {
+    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+  }
+
+  const authStatus = await messaging().requestPermission();
+  const enabled =
+    authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+    authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+  if (!enabled) {
+    console.log('Push notification permission denied');
+    return null;
+  }
+
+  return messaging().getToken();
+}
+
 export async function initializePushNotifications(): Promise<void> {
   try {
-    // Request permission (required on iOS, Android 13+)
-    if (Platform.OS === 'android' && Platform.Version >= 33) {
-      await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
-    }
+    const fcmToken = await requestPermissionAndGetToken();
+    if (!fcmToken) return;
 
-    const authStatus = await messaging().requestPermission();
-    const enabled =
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-    if (!enabled) {
-      console.log('Push notification permission denied');
-      return;
-    }
-
-    const fcmToken = await messaging().getToken();
     await apiService.registerDeviceToken(fcmToken);
 
     // Listen for token refresh
@@ -32,6 +38,26 @@ export async function initializePushNotifications(): Promise<void> {
     });
   } catch (error) {
     console.error('Push notification initialization failed:', error);
+  }
+}
+
+export async function initializeWaitlistPushNotifications(publicKey: string): Promise<void> {
+  try {
+    const fcmToken = await requestPermissionAndGetToken();
+    if (!fcmToken) return;
+
+    await apiService.registerWaitlistDeviceToken(publicKey, fcmToken);
+
+    // Listen for token refresh
+    messaging().onTokenRefresh(async (newToken) => {
+      try {
+        await apiService.registerWaitlistDeviceToken(publicKey, newToken);
+      } catch (error) {
+        console.error('FCM token refresh registration failed:', error);
+      }
+    });
+  } catch (error) {
+    console.error('Waitlist push notification initialization failed:', error);
   }
 }
 

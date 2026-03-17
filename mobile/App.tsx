@@ -27,7 +27,7 @@ import { hasPin } from './src/services/pinStorage';
 import { migrateKeypairsToBiometric, getCloudPublicKey } from './src/services/keypairStorage';
 import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
-import { initializePushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
+import { initializePushNotifications, initializeWaitlistPushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
 import Toast from './src/components/Toast';
 
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
@@ -70,6 +70,10 @@ function App() {
       // If user previously joined the waitlist, go straight to waitlist screen
       if (!hasVault && cloudPk) {
         setOnboardingStep('waitlist');
+        // Initialize push notifications for waitlist users
+        initializeWaitlistPushNotifications(cloudPk).catch((err) => {
+          console.error('Waitlist push notification init failed:', err);
+        });
       }
       setCheckingVault(false);
 
@@ -89,14 +93,14 @@ function App() {
 
   // Set up foreground push notification handler
   useEffect(() => {
-    if (!onboardingDone) return;
+    if (checkingVault) return;
     const unsubscribe = setupForegroundHandler((title, body) => {
       setToastMessage(title);
       setToastDescription(body);
       setToastVisible(true);
     });
     return unsubscribe;
-  }, [onboardingDone]);
+  }, [checkingVault]);
 
   // Lock app when returning from background after timeout
   useEffect(() => {

@@ -288,6 +288,10 @@ class ApiService {
     await this.post('/notifications/v2/register-device', { fcmToken });
   }
 
+  async registerWaitlistDeviceToken(publicKey: string, fcmToken: string): Promise<void> {
+    await this.post('/onboarding/v1/waitlist/register-device', { publicKey, fcmToken });
+  }
+
   async getNotificationHistory(params?: { limit?: number; before?: string }): Promise<{
     notifications: AppNotification[];
     hasMore: boolean;
