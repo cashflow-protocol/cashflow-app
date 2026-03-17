@@ -4,6 +4,7 @@ import { getBase58Encoder } from '@solana/kit';
 import { createChallenge, consumeChallenge } from '../services/challengeStore';
 import { UserModel, AuthLogModel, WaitlistUserModel } from '../models';
 import { notifyAdmin } from '../services/telegramManager';
+import { subscribeToVault } from '../services/heliusListener';
 
 const router = Router();
 
@@ -110,6 +111,7 @@ router.post('/verify', async (req, res) => {
 
         if (!existingUser) {
           notifyAdmin(`🏦 New Squad created!\n\nWallet: <code>${publicKey.slice(0, 6)}...${publicKey.slice(-4)}</code>\nVault: <code>${vaultAddress.slice(0, 6)}...${vaultAddress.slice(-4)}</code>${inviteCode ? `\nInvite: <code>${inviteCode}</code>` : ''}`);
+          subscribeToVault(vaultAddress);
         }
       } catch (err) {
         console.error('User upsert error:', err);

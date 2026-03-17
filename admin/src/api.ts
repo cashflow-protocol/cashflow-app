@@ -129,3 +129,24 @@ export async function getWaitlistUsers(page = 1, search = '', sortBy = 'xp', sor
   if (search) params.set('search', search);
   return apiFetch(`/waitlist-users?${params}`);
 }
+
+// App users
+export async function getAppUsers(page = 1, search = '') {
+  const params = new URLSearchParams({ page: String(page), limit: '50' });
+  if (search) params.set('search', search);
+  return apiFetch(`/users?${params}`);
+}
+
+export async function sendUserNotification(userId: string, title: string, body?: string) {
+  return apiFetch(`/users/${userId}/send-notification`, {
+    method: 'POST',
+    body: JSON.stringify({ title, body }),
+  });
+}
+
+export async function broadcastNotification(title: string, body?: string) {
+  return apiFetch('/users/broadcast-notification', {
+    method: 'POST',
+    body: JSON.stringify({ title, body }),
+  });
+}

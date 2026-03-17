@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel } from '../models';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, NotificationType } from '../models';
+import { dispatchSystemNotification } from '../services/notificationService';
 
 const router = Router();
 
@@ -409,6 +410,124 @@ router.post('/waitlist-users/:id/revoke-task', async (req, res) => {
   } catch (error) {
     console.error('Admin revoke task error:', error);
     res.status(500).json({ success: false, error: 'Failed to revoke task' });
+  }
+});
+
+// ─── App Users ───
+
+/**
+ * GET /users
+ * List all registered app users (with vaults).
+ */
+router.get('/users', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+    const search = (req.query.search as string) || '';
+
+    const filter: any = {};
+    if (search) {
+      filter.$or = [
+        { vaultAddress: { $regex: search, $options: 'i' } },
+        { publicKey: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const [users, total] = await Promise.all([
+      UserModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      UserModel.countDocuments(filter),
+    ]);
+
+    res.json({
+      success: true,
+      users: users.map((u) => ({
+        id: u._id,
+        vaultAddress: u.vaultAddress,
+        publicKey: u.publicKey,
+        lastSeenAt: u.lastSeenAt,
+        inviteCode: u.inviteCode || null,
+        hasPush: (u.fcmTokens?.length ?? 0) > 0,
+        createdAt: (u as any).createdAt,
+      })),
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    console.error('Admin list users error:', error);
+    res.status(500).json({ success: false, error: 'Failed to list users' });
+  }
+});
+
+/**
+ * POST /users/:id/send-notification
+ * Send a push + in-app notification to a specific user.
+ */
+router.post('/users/:id/send-notification', async (req, res) => {
+  try {
+    const { title, body } = req.body;
+    if (!title || typeof title !== 'string') {
+      res.status(400).json({ success: false, error: 'title is required' });
+      return;
+    }
+
+    const user = await UserModel.findById(req.params.id).lean();
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    await dispatchSystemNotification(
+      user.vaultAddress,
+      title,
+      body || undefined,
+      NotificationType.SYSTEM,
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin send notification error:', error);
+    res.status(500).json({ success: false, error: 'Failed to send notification' });
+  }
+});
+
+/**
+ * POST /users/broadcast-notification
+ * Send a push + in-app notification to ALL users.
+ */
+router.post('/users/broadcast-notification', async (req, res) => {
+  try {
+    const { title, body } = req.body;
+    if (!title || typeof title !== 'string') {
+      res.status(400).json({ success: false, error: 'title is required' });
+      return;
+    }
+
+    const users = await UserModel.find({}).select('vaultAddress').lean();
+    let sent = 0;
+
+    for (const user of users) {
+      try {
+        await dispatchSystemNotification(
+          user.vaultAddress,
+          title,
+          body || undefined,
+          NotificationType.SYSTEM,
+        );
+        sent++;
+      } catch (err) {
+        console.error(`Broadcast notification failed for ${user.vaultAddress}:`, err);
+      }
+    }
+
+    res.json({ success: true, sent, total: users.length });
+  } catch (error) {
+    console.error('Admin broadcast notification error:', error);
+    res.status(500).json({ success: false, error: 'Failed to broadcast notification' });
   }
 });
 

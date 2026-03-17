@@ -3,8 +3,9 @@ import { isLoggedIn, setPassword, clearPassword, getEnv, setEnv, type Env } from
 import InviteCodesPage from './pages/InviteCodes';
 import WaitlistUsersPage from './pages/WaitlistUsers';
 import WaitlistTasksPage from './pages/WaitlistTasks';
+import UsersPage from './pages/Users';
 
-type Page = 'invite-codes' | 'waitlist-users' | 'waitlist-tasks';
+type Page = 'invite-codes' | 'waitlist-users' | 'waitlist-tasks' | 'users';
 
 function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [pw, setPw] = useState('');
@@ -78,6 +79,12 @@ export default function App() {
             >
               Tasks
             </button>
+            <button
+              className={page === 'users' ? 'active' : ''}
+              onClick={() => setPage('users')}
+            >
+              Users
+            </button>
           </div>
           <button
             onClick={handleEnvToggle}
@@ -104,6 +111,7 @@ export default function App() {
       {page === 'invite-codes' && <InviteCodesPage />}
       {page === 'waitlist-users' && <WaitlistUsersPage />}
       {page === 'waitlist-tasks' && <WaitlistTasksPage />}
+      {page === 'users' && <UsersPage />}
     </div>
   );
 }

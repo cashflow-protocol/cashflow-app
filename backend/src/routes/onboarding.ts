@@ -394,8 +394,8 @@ async function awardTaskXp(publicKey: string, taskId: string, extraFields?: Reco
     if (screenshotUrl) {
       telegram.notifyAdminWithPhoto(screenshotUrl, parts.join('\n'), [
         [
-          { text: '✅ Approve', callback_data: `approve:${publicKey}:${taskId}` },
-          { text: '❌ Reject', callback_data: `reject:${publicKey}:${taskId}` },
+          { text: '✅ Approve', callback_data: `a:${publicKey}:${taskId}` },
+          { text: '❌ Reject', callback_data: `r:${publicKey}:${taskId}` },
         ],
       ]);
     } else {
@@ -623,7 +623,7 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
         return;
       }
       const [action, publicKey, taskId] = callbackQuery.data.split(':');
-      if (action === 'reject' && publicKey && taskId) {
+      if (action === 'r' && publicKey && taskId) {
         // Revoke task: remove from completedTasks, deduct XP
         const task = await WaitlistTaskModel.findOne({ taskId }).lean();
         const xpReward = task?.xpReward ?? 0;
@@ -641,7 +641,7 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
           callbackQuery.message.message_id,
           callbackQuery.message.caption + '\n\n❌ <b>REJECTED</b>',
         );
-      } else if (action === 'approve') {
+      } else if (action === 'a') {
         await telegram.answerCallbackQuery(callbackQuery.id, '✅ Approved!');
         await telegram.editMessageCaption(
           callbackQuery.message.chat.id,

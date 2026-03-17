@@ -1,4 +1,4 @@
-import { EarnTokenModel, TransactionModel, TransactionAction, TransactionStatus, CachedTokenModel, WaitlistEntryModel, UserModel, AuthLogModel } from '../models';
+import { EarnTokenModel, TransactionModel, TransactionAction, TransactionStatus, CachedTokenModel, WaitlistEntryModel, UserModel, AuthLogModel, NotificationModel, NotificationType } from '../models';
 import { EarnTokenType } from '../types';
 
 export interface EarnTokenUpsert {
@@ -128,6 +128,52 @@ export class DBManager {
   }
 
   /**
+   * Create a notification record
+   */
+  async createNotification(data: {
+    userId: string;
+    vaultAddress: string;
+    title: string;
+    body?: string;
+    type: NotificationType;
+    txSignature?: string;
+    metadata?: Record<string, any>;
+  }) {
+    return NotificationModel.create(data);
+  }
+
+  /**
+   * Get paginated notifications for a vault address (newest first)
+   */
+  async getNotifications(vaultAddress: string, limit: number = 20, before?: string) {
+    const query: any = { vaultAddress };
+    if (before) {
+      query._id = { $lt: before };
+    }
+    return NotificationModel.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit + 1) // fetch one extra to determine hasMore
+      .lean();
+  }
+
+  /**
+   * Mark notifications as read
+   */
+  async markNotificationsRead(vaultAddress: string, notificationIds: string[]) {
+    return NotificationModel.updateMany(
+      { _id: { $in: notificationIds }, vaultAddress },
+      { $set: { read: true } },
+    );
+  }
+
+  /**
+   * Get count of unread notifications for a vault address
+   */
+  async getUnreadCount(vaultAddress: string): Promise<number> {
+    return NotificationModel.countDocuments({ vaultAddress, read: false });
+  }
+
+  /**
    * Sync MongoDB indexes to match model definitions
    */
   async syncIndexes(): Promise<void> {
@@ -137,5 +183,6 @@ export class DBManager {
     await WaitlistEntryModel.syncIndexes();
     await UserModel.syncIndexes();
     await AuthLogModel.syncIndexes();
+    await NotificationModel.syncIndexes();
   }
 }

@@ -1,5 +1,6 @@
 import { API_CONFIG } from '../config/api';
 import type { EarnToken, EarnPosition, WalletAsset, Suggestion } from '../types/earn';
+import type { AppNotification } from '../types/notification';
 import authService from './authService';
 import { verifyResponseSignature } from './responseVerifier';
 
@@ -282,6 +283,32 @@ class ApiService {
       status: string;
     }>('/solana/v2/send-bundle', { transactions });
     return { bundleId: res.bundleId, status: res.status };
+  }
+  async registerDeviceToken(fcmToken: string): Promise<void> {
+    await this.post('/notifications/v2/register-device', { fcmToken });
+  }
+
+  async getNotificationHistory(params?: { limit?: number; before?: string }): Promise<{
+    notifications: AppNotification[];
+    hasMore: boolean;
+  }> {
+    const queryParams: Record<string, string> = {};
+    if (params?.limit) queryParams.limit = String(params.limit);
+    if (params?.before) queryParams.before = params.before;
+    const res = await this.get<{ success: boolean; notifications: AppNotification[]; hasMore: boolean }>(
+      '/notifications/v2/history',
+      queryParams,
+    );
+    return { notifications: res.notifications, hasMore: res.hasMore };
+  }
+
+  async markNotificationsRead(notificationIds: string[]): Promise<void> {
+    await this.post('/notifications/v2/mark-read', { notificationIds });
+  }
+
+  async getUnreadNotificationCount(): Promise<number> {
+    const res = await this.get<{ success: boolean; count: number }>('/notifications/v2/unread-count');
+    return res.count;
   }
 }
 

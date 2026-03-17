@@ -30,6 +30,8 @@ import ComingSoonModal from '../components/ComingSoonModal';
 import ReceiveModal from '../components/ReceiveModal';
 import SendModal from '../components/SendModal';
 import FundWalletModal from '../components/FundWalletModal';
+import { useNotifications } from '../hooks/useNotifications';
+import Svg, { Path } from 'react-native-svg';
 
 // Bottom padding to account for floating tab bar
 const TAB_BAR_PADDING = 120;
@@ -40,9 +42,10 @@ function formatUsd(value: number): string {
 
 interface HomeScreenProps {
   onNavigateToTab?: (tab: TabName) => void;
+  onNavigate?: (screen: string) => void;
 }
 
-export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
+export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenProps) {
   const { wallet, balance, connect } = useWallet();
   const { assets, totalUsdValue: assetsTotalUsd, loading: assetsLoading, refresh: refreshAssets } = useAssets();
   const { tokens, loading: earnLoading } = useEarnTokens();
@@ -54,6 +57,7 @@ export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
   const [receiveModalVisible, setReceiveModalVisible] = useState(false);
   const [sendModalVisible, setSendModalVisible] = useState(false);
   const [fundWalletModalVisible, setFundWalletModalVisible] = useState(false);
+  const { unreadCount } = useNotifications();
 
   // Top 3 assets sorted by USD value descending
   const topAssets = useMemo(() => {
@@ -126,12 +130,27 @@ export default function HomeScreen({ onNavigateToTab }: HomeScreenProps) {
             >
               <ProfileIcon size={44} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.rewardsIcon}
-              onPress={() => setRewardsModalVisible(true)}
-            >
-              <RewardsIcon size={36} />
-            </TouchableOpacity>
+            <View style={styles.headerRight}>
+              <TouchableOpacity
+                style={styles.bellButton}
+                onPress={() => onNavigate?.('notifications')}
+              >
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                  <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+                {unreadCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.rewardsIcon}
+                onPress={() => setRewardsModalVisible(true)}
+              >
+                <RewardsIcon size={36} />
+              </TouchableOpacity>
+            </View>
           </View>
         </SafeAreaView>
 
@@ -347,6 +366,34 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingTop: 8,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  bellButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 2,
+    backgroundColor: '#DC3545',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   rewardsIcon: {
     width: 44,

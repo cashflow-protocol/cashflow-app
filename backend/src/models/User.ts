@@ -22,6 +22,9 @@ export class User {
 
   @prop()
   public waitlistUserId?: string;
+
+  @prop({ type: () => [String], default: [] })
+  public fcmTokens!: string[];
 }
 
 export const UserModel = getModelForClass(User);

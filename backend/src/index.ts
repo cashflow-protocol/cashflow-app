@@ -16,6 +16,9 @@ import { signResponseMiddleware } from './middleware/signResponse';
 import { initializeScheduler } from './services';
 import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
+import notificationsRouter from './routes/notifications';
+import { initializeFirebase } from './services/firebaseManager';
+import { initializeHeliusListener } from './services/heliusListener';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
@@ -46,6 +49,7 @@ app.use('/admin/v1', adminRouter);
 app.use('/earn/v2', requireAuth, signResponseMiddleware, earnRouter);
 app.use('/solana/v2', requireAuth, signResponseMiddleware, solanaRouter);
 app.use('/suggestions/v2', requireAuth, signResponseMiddleware, suggestionsRouter);
+app.use('/notifications/v2', requireAuth, notificationsRouter);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -86,9 +90,11 @@ mongoose
       console.log(`🚀 Server is running on port ${PORT}`);
     });
 
-    // Initialize cron scheduler after server starts
+    // Initialize services after server starts
+    initializeFirebase();
     await initializeScheduler();
     await initialiseLookupManager();
+    await initializeHeliusListener();
   })
   .catch((error) => {
     console.error('❌ MongoDB connection error:', error);

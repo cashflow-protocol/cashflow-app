@@ -19,6 +19,7 @@ import MoreScreen from './src/screens/MoreScreen';
 import SquadsScreen from './src/screens/SquadsScreen';
 import AddMemberScreen from './src/screens/AddMemberScreen';
 import ChangePinScreen from './src/screens/ChangePinScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
 import BiometricLockScreen from './src/components/BiometricLockScreen';
 import TabBar, { type TabName } from './src/components/TabBar';
 import { getVault } from './src/services/vaultStorage';
@@ -26,10 +27,12 @@ import { hasPin } from './src/services/pinStorage';
 import { migrateKeypairsToBiometric, getCloudPublicKey } from './src/services/keypairStorage';
 import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
+import { initializePushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
+import Toast from './src/components/Toast';
 
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-type SubScreen = 'squads' | 'add-member' | 'change-pin' | null;
+type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | null;
 type OnboardingStep = 'carousel' | 'invite-code' | 'vault-setup' | 'waitlist' | null;
 
 function App() {
@@ -43,6 +46,9 @@ function App() {
   const [inviteCodeFrom, setInviteCodeFrom] = useState<'carousel' | 'waitlist'>('carousel');
   const [inviteCode, setInviteCode] = useState('');
   const backgroundedAt = useRef<number | null>(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastDescription, setToastDescription] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -72,9 +78,25 @@ function App() {
         migrateKeypairsToBiometric().catch((err) => {
           console.error('Migration failed:', err);
         });
+
+        // Initialize push notifications for authenticated users
+        initializePushNotifications().catch((err) => {
+          console.error('Push notification init failed:', err);
+        });
       }
     })();
   }, []);
+
+  // Set up foreground push notification handler
+  useEffect(() => {
+    if (!onboardingDone) return;
+    const unsubscribe = setupForegroundHandler((title, body) => {
+      setToastMessage(title);
+      setToastDescription(body);
+      setToastVisible(true);
+    });
+    return unsubscribe;
+  }, [onboardingDone]);
 
   // Lock app when returning from background after timeout
   useEffect(() => {
@@ -112,12 +134,19 @@ function App() {
   const handleBack = useCallback(() => {
     if (subScreen === 'add-member') {
       setSubScreen('squads');
+    } else if (subScreen === 'notifications') {
+      setSubScreen(null);
     } else {
       setSubScreen(null);
     }
   }, [subScreen]);
 
   const renderScreen = () => {
+    // Notifications sub-screen is accessible from any tab
+    if (subScreen === 'notifications') {
+      return <NotificationsScreen onBack={handleBack} />;
+    }
+
     // Handle sub-screens under the More tab
     if (activeTab === 'more' && subScreen) {
       switch (subScreen) {
@@ -140,7 +169,7 @@ function App() {
         return <MoreScreen onNavigate={handleNavigate} />;
       case 'home':
       default:
-        return <HomeScreen onNavigateToTab={handleTabPress} />;
+        return <HomeScreen onNavigateToTab={handleTabPress} onNavigate={handleNavigate} />;
     }
   };
 
@@ -245,6 +274,13 @@ function App() {
         <View style={styles.root}>
           {renderScreen()}
           <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
+          <Toast
+            visible={toastVisible}
+            message={toastMessage}
+            description={toastDescription}
+            type="success"
+            onDismiss={() => setToastVisible(false)}
+          />
         </View>
       </WalletProvider>
     </SafeAreaProvider>

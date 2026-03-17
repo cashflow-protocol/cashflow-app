@@ -3,7 +3,9 @@ import cron from 'node-cron';
 import { createSolanaRpc } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
 import { JupiterManager, KaminoManager, DriftManager, DBManager, PriceManager, TokenManager } from '../managers';
-import { TransactionStatus, InviteCodeModel, WaitlistUserModel } from '../models';
+import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from '../models';
+import { NotificationType } from '../models';
+import { dispatchSystemNotification } from './notificationService';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
@@ -154,6 +156,17 @@ async function approveTopWaitlistUsers() {
       );
 
       console.log(`  Approved ${user.publicKey.slice(0, 8)}... (${user.xp} XP) → code: ${code}`);
+
+      // Send push notification if user already has a vault
+      const appUser = await UserModel.findOne({ waitlistUserId: String(user._id) }).lean();
+      if (appUser) {
+        dispatchSystemNotification(
+          appUser.vaultAddress,
+          'Your waitlist approved. Try Cashflow now!',
+          undefined,
+          NotificationType.WAITLIST_APPROVED,
+        ).catch((err) => console.error('Waitlist notification error:', err));
+      }
     }
 
     console.log(`[Cron] Waitlist approval batch complete`);
