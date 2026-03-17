@@ -15,6 +15,7 @@ import EarnTokenItem from '../components/EarnTokenItem';
 import VaultModal from '../components/VaultModal';
 import { LifetimeEarnedIcon, Last7DIcon, AvgApyIcon } from '../assets/stat-icons';
 import type { EarnTokenWithPosition } from '../hooks/useEarnTokens';
+import { logScreenView, logEarnFilterSelect, logEarnVaultPress, logEarnRetry } from '../services/analyticsService';
 
 const ALL_FILTER = 'All';
 const STABLES_FILTER = 'Stables';
@@ -25,6 +26,8 @@ export default function EarnScreen() {
   const { tokens, loading, refreshing, error, refresh } = useEarnTokens();
   const [activeFilter, setActiveFilter] = useState(ALL_FILTER);
   const [selectedToken, setSelectedToken] = useState<EarnTokenWithPosition | null>(null);
+
+  React.useEffect(() => { logScreenView('EarnScreen'); }, []);
 
   // Build filter list: All, Stables, USDC, then remaining symbols
   const filters = useMemo(() => {
@@ -89,7 +92,7 @@ export default function EarnScreen() {
           <Text style={styles.errorEmoji}>!</Text>
           <Text style={styles.errorTitle}>Something went wrong</Text>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={refresh}>
+          <TouchableOpacity style={styles.retryButton} onPress={() => { logEarnRetry(); refresh(); }}>
             <Text style={styles.retryText}>Try again</Text>
           </TouchableOpacity>
         </View>
@@ -153,7 +156,7 @@ export default function EarnScreen() {
                   styles.filterChip,
                   activeFilter === filter && styles.filterChipActive,
                 ]}
-                onPress={() => setActiveFilter(filter)}
+                onPress={() => { logEarnFilterSelect(filter); setActiveFilter(filter); }}
                 activeOpacity={0.7}
               >
                 <Text
@@ -186,7 +189,7 @@ export default function EarnScreen() {
                   logoUrl={item.logoUrl}
                   rewardsRate={item.rewardsRate}
                   positionAmount={item.position?.balance.uiAmount}
-                  onPress={() => setSelectedToken(item)}
+                  onPress={() => { logEarnVaultPress(item.symbol, item.vaultAddress, item.type); setSelectedToken(item); }}
                 />
               )}
               ListEmptyComponent={

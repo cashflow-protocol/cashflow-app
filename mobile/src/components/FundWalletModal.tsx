@@ -18,6 +18,7 @@ import walletService from '../services/walletService';
 import { getVault } from '../services/vaultStorage';
 import { useWallet } from '../hooks/useWallet';
 import type { WalletAsset } from '../types/earn';
+import { logFundWalletModalOpen, logFundWalletConnect, logFundWalletTokenSelect, logFundWalletMaxPress, logFundWalletSubmit, logFundWalletSuccess, logFundWalletError } from '../services/analyticsService';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 // Reserve 0.01 SOL for tx fees when sending SOL
@@ -46,6 +47,7 @@ export default function FundWalletModal({ visible, onClose, onSuccess }: FundWal
   // Reset state when modal opens
   useEffect(() => {
     if (visible) {
+      logFundWalletModalOpen();
       setStep('select');
       setSelectedToken(null);
       setAmount('');
@@ -82,6 +84,7 @@ export default function FundWalletModal({ visible, onClose, onSuccess }: FundWal
   };
 
   const handleConnect = async () => {
+    logFundWalletConnect();
     const account = await connect();
     if (account) {
       // Assets will be fetched by the useEffect above
@@ -120,6 +123,7 @@ export default function FundWalletModal({ visible, onClose, onSuccess }: FundWal
   };
 
   const handleSelectToken = (asset: WalletAsset) => {
+    logFundWalletTokenSelect(asset.symbol);
     setSelectedToken(asset);
     setStep('amount');
     setAmount('');
@@ -135,6 +139,7 @@ export default function FundWalletModal({ visible, onClose, onSuccess }: FundWal
 
   const handleMaxPress = () => {
     if (!selectedToken) return;
+    logFundWalletMaxPress(selectedToken.symbol);
     let maxRaw = BigInt(selectedToken.amount);
     // Reserve SOL for fees if sending native SOL
     if (selectedToken.mint === 'native' || selectedToken.mint === SOL_MINT) {
@@ -161,6 +166,7 @@ export default function FundWalletModal({ visible, onClose, onSuccess }: FundWal
   const handleSubmit = async () => {
     if (!canSubmit || !selectedToken || !vaultAddress || !wallet?.publicKey) return;
 
+    logFundWalletSubmit(selectedToken.symbol, amount);
     setLoading(true);
     setResult(null);
 
@@ -182,9 +188,11 @@ export default function FundWalletModal({ visible, onClose, onSuccess }: FundWal
       // Sign and send via MWA
       await walletService.signAndSendTransactions([txBytes]);
 
+      logFundWalletSuccess(selectedToken.symbol, amount);
       onSuccess();
       onClose();
     } catch (err) {
+      logFundWalletError(selectedToken.symbol, (err as Error).message || 'unknown');
       setResult({
         success: false,
         message: (err as Error).message || 'Something went wrong',

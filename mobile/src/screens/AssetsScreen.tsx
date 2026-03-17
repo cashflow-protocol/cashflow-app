@@ -13,6 +13,7 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { useAssets } from '../hooks/useAssets';
 import { LifetimeEarnedIcon, Last7DIcon } from '../assets/stat-icons';
 import AssetRow from '../components/AssetRow';
+import { logScreenView } from '../services/analyticsService';
 
 function formatUsd(value: number): string {
   return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -20,6 +21,8 @@ function formatUsd(value: number): string {
 
 export default function AssetsScreen() {
   const { assets, totalUsdValue, loading, refreshing, refresh } = useAssets();
+
+  React.useEffect(() => { logScreenView('AssetsScreen'); }, []);
 
   return (
     <View style={styles.container}>

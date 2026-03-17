@@ -1,6 +1,7 @@
 import messaging from '@react-native-firebase/messaging';
 import { Platform, PermissionsAndroid } from 'react-native';
 import apiService from './apiService';
+import { logPushPermissionGranted, logPushPermissionDenied } from './analyticsService';
 
 async function requestPermissionAndGetToken(): Promise<string | null> {
   // Request permission (required on iOS, Android 13+)
@@ -14,10 +15,12 @@ async function requestPermissionAndGetToken(): Promise<string | null> {
     authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
   if (!enabled) {
+    logPushPermissionDenied();
     console.log('Push notification permission denied');
     return null;
   }
 
+  logPushPermissionGranted();
   return messaging().getToken();
 }
 

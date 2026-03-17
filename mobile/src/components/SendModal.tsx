@@ -18,6 +18,7 @@ import { getVault, type VaultData } from '../services/vaultStorage';
 import { executeVaultTransaction } from '../services/squadsService';
 import { useAssets } from '../hooks/useAssets';
 import type { WalletAsset } from '../types/earn';
+import { logSendTokenSelect, logSendMaxPress, logSendPasteAddress, logSendSubmit, logSendSuccess, logSendError } from '../services/analyticsService';
 
 import { TARGET_CLOUD_BALANCE as TARGET_CLOUD_BALANCE_NUM } from '../config/constants';
 
@@ -94,6 +95,7 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
   };
 
   const handleSelectToken = (asset: WalletAsset) => {
+    logSendTokenSelect(asset.symbol, asset.mint);
     setSelectedToken(asset);
     setStep('amount');
     setAmount('');
@@ -111,6 +113,7 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
 
   const handleMaxPress = () => {
     if (!selectedToken) return;
+    logSendMaxPress(selectedToken.symbol);
     let maxRaw = BigInt(selectedToken.amount);
     // Reserve SOL for rent if sending native SOL
     if (selectedToken.mint === 'native' || selectedToken.mint === SOL_MINT) {
@@ -120,6 +123,7 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
   };
 
   const handlePaste = async () => {
+    logSendPasteAddress();
     const text = await Clipboard.getString();
     if (text) setRecipient(text.trim());
   };
@@ -143,6 +147,7 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
   const handleSubmit = async () => {
     if (!canSubmit || !selectedToken || !vaultData) return;
 
+    logSendSubmit(selectedToken.symbol, amount);
     setLoading(true);
     setResult(null);
 
@@ -163,9 +168,11 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
         res.instructions,
       );
 
+      logSendSuccess(selectedToken.symbol, amount);
       onSuccess();
       onClose();
     } catch (err) {
+      logSendError(selectedToken.symbol, (err as Error).message || 'unknown');
       setResult({
         success: false,
         message: (err as Error).message || 'Something went wrong',

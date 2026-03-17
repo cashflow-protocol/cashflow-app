@@ -5,6 +5,7 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { authenticate } from '../services/keypairStorage';
 import { verifyPin } from '../services/pinStorage';
 import PinPad from './PinPad';
+import { logScreenView, logBiometricUnlockAttempt, logBiometricUnlockSuccess, logPinUnlockSuccess, logPinUnlockFailed } from '../services/analyticsService';
 
 interface BiometricLockScreenProps {
   onUnlock: () => void;
@@ -14,14 +15,17 @@ export default function BiometricLockScreen({ onUnlock }: BiometricLockScreenPro
   const [error, setError] = useState('');
 
   const promptBiometric = useCallback(async () => {
+    logBiometricUnlockAttempt();
     const success = await authenticate('Unlock Cashflow');
     if (success) {
+      logBiometricUnlockSuccess();
       onUnlock();
     }
   }, [onUnlock]);
 
   // Auto-prompt biometric on mount
   useEffect(() => {
+    logScreenView('BiometricLockScreen');
     promptBiometric();
   }, []);
 
@@ -29,8 +33,10 @@ export default function BiometricLockScreen({ onUnlock }: BiometricLockScreenPro
     async (pin: string) => {
       const valid = await verifyPin(pin);
       if (valid) {
+        logPinUnlockSuccess();
         onUnlock();
       } else {
+        logPinUnlockFailed();
         setError('Wrong PIN. Try again.');
       }
     },

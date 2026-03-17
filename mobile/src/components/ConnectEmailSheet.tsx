@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import BottomSheet from './BottomSheet';
 import { sendEmailCode, verifyEmailCode } from '../services/onboardingService';
+import { logEmailCodeSent, logEmailCodeError, logEmailVerifySuccess, logEmailVerifyError } from '../services/analyticsService';
 
 interface ConnectEmailSheetProps {
   visible: boolean;
@@ -31,11 +32,14 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
     try {
       const ok = await sendEmailCode(publicKey, email.trim());
       if (ok) {
+        logEmailCodeSent();
         setStep('code');
       } else {
+        logEmailCodeError('send_failed');
         setError('Failed to send code. Try again.');
       }
     } catch {
+      logEmailCodeError('exception');
       setError('Failed to send code. Try again.');
     } finally {
       setLoading(false);
@@ -49,12 +53,15 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
     try {
       const result = await verifyEmailCode(publicKey, email.trim(), code.trim());
       if (result.success) {
+        logEmailVerifySuccess();
         onSuccess(result.xpAwarded ?? 100);
         handleReset();
       } else {
+        logEmailVerifyError('invalid_code');
         setError('Invalid code. Try again.');
       }
     } catch {
+      logEmailVerifyError('exception');
       setError('Verification failed. Try again.');
     } finally {
       setLoading(false);

@@ -30,6 +30,7 @@ import ConnectEmailSheet from '../components/ConnectEmailSheet';
 import ConnectTelegramSheet from '../components/ConnectTelegramSheet';
 import VerifyActionSheet from '../components/VerifyActionSheet';
 import UploadScreenshotSheet from '../components/UploadScreenshotSheet';
+import { logScreenView, logWaitlistTaskPress, logWaitlistApproved, logOnboardingHaveInviteCode, logError } from '../services/analyticsService';
 
 function getCountdown(): string {
   const now = new Date();
@@ -104,6 +105,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
 
     const status = await checkWaitlistStatus(pk);
     if (status.approved && status.inviteCode) {
+      logWaitlistApproved();
       onApproved(status.inviteCode);
     }
   };
@@ -149,8 +151,11 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
     return () => sub.remove();
   }, [telegramSheetVisible, publicKey]);
 
+  React.useEffect(() => { logScreenView('WaitlistDashboardScreen'); }, []);
+
   const handleTaskPress = async (task: WaitlistTaskItem) => {
     if (task.completed || task.locked || !publicKey) return;
+    logWaitlistTaskPress(task.taskId);
 
     switch (task.taskId) {
       case 'connect_wallet': {
@@ -163,6 +168,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         } catch (err: any) {
           const msg = err?.message || '';
           if (!msg.includes('CancellationException')) {
+            logError('waitlist_connect_wallet', msg);
             Alert.alert('Error', msg || 'Failed to connect wallet.');
           }
         }
@@ -394,7 +400,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
 
         <TouchableOpacity
           style={styles.inviteCodeButton}
-          onPress={onHaveInviteCode}
+          onPress={() => { logOnboardingHaveInviteCode('waitlist'); onHaveInviteCode(); }}
           activeOpacity={0.7}
         >
           <Text style={styles.inviteCodeButtonText}>I have an invite code</Text>

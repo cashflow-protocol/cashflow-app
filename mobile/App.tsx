@@ -29,6 +29,15 @@ import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
 import { initializePushNotifications, initializeWaitlistPushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
 import Toast from './src/components/Toast';
+import {
+  logScreenView,
+  logTabPress,
+  logAppInit,
+  logAppLocked,
+  logPushNotificationReceived,
+  setUserHasVault,
+  setUserOnWaitlist,
+} from './src/services/analyticsService';
 
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -67,6 +76,11 @@ function App() {
       setNeedsPinSetup(hasVault && !pinExists);
       // Only require lock if user has completed onboarding and has a PIN
       setLocked(hasVault && pinExists);
+
+      // Analytics
+      logAppInit(hasVault, pinExists);
+      setUserHasVault(hasVault);
+      setUserOnWaitlist(!hasVault && !!cloudPk);
       // If user previously joined the waitlist, go straight to waitlist screen
       if (!hasVault && cloudPk) {
         setOnboardingStep('waitlist');
@@ -95,6 +109,7 @@ function App() {
   useEffect(() => {
     if (checkingVault) return;
     const unsubscribe = setupForegroundHandler((title, body) => {
+      logPushNotificationReceived(title);
       setToastMessage(title);
       setToastDescription(body);
       setToastVisible(true);
@@ -111,6 +126,7 @@ function App() {
         const elapsed = Date.now() - backgroundedAt.current;
         backgroundedAt.current = null;
         if (elapsed >= LOCK_TIMEOUT_MS && onboardingDone) {
+          logAppLocked();
           setLocked(true);
         }
       }
@@ -119,6 +135,8 @@ function App() {
   }, [onboardingDone]);
 
   const handleTabPress = useCallback((tab: TabName) => {
+    logTabPress(tab);
+    logScreenView(tab === 'home' ? 'HomeScreen' : tab === 'earn' ? 'EarnScreen' : tab === 'assets' ? 'AssetsScreen' : 'MoreScreen');
     setActiveTab(tab);
     setSubScreen(null); // Reset sub-screen when switching tabs
   }, []);
@@ -132,6 +150,7 @@ function App() {
       setSubScreen(null);
       return;
     }
+    logScreenView(screen);
     setSubScreen(screen as SubScreen);
   }, []);
 

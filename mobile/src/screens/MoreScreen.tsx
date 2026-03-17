@@ -17,6 +17,17 @@ import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey, getDevicePri
 import { reclaimRent } from '../services/squadsService';
 import apiService from '../services/apiService';
 import { APP_VERSION, BUILD_NUMBER } from '../config/version';
+import {
+  logScreenView,
+  logMoreNavigate,
+  logCopyAddress,
+  logCopyPrivateKey,
+  logReclaimRentPress,
+  logReclaimRentSuccess,
+  logReclaimRentError,
+  logRemoveVaultPress,
+  logRemoveVaultConfirm,
+} from '../services/analyticsService';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
@@ -49,6 +60,8 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
   const [deviceBalance, setDeviceBalance] = useState<number | null>(null);
   const [reclaimStatus, setReclaimStatus] = useState<string | null>(null);
   const [emptyAccounts, setEmptyAccounts] = useState<{ total: number; empty: number } | null>(null);
+
+  useEffect(() => { logScreenView('MoreScreen'); }, []);
 
   useEffect(() => {
     (async () => {
@@ -88,12 +101,14 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
   }, []);
 
   const copyAddress = useCallback((addr: string, field: string) => {
+    logCopyAddress(field);
     Clipboard.setString(addr);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
   }, []);
 
   const copyPrivateKey = useCallback((keyType: 'cloud' | 'device') => {
+    logCopyPrivateKey(keyType);
     const label = keyType === 'cloud' ? 'Cloud' : 'Device';
     Alert.alert(
       `Export ${label} Private Key`,
@@ -120,20 +135,24 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
 
   const handleReclaimRent = useCallback(async () => {
     if (!vault) return;
+    logReclaimRentPress();
     setReclaimStatus('Starting...');
     try {
       const result = await reclaimRent(vault.multisigAddress, (msg) => {
         setReclaimStatus(msg);
       });
+      logReclaimRentSuccess(result.closed, result.skipped, result.failed);
       setReclaimStatus(`Done! Closed: ${result.closed}, Skipped: ${result.skipped}, Failed: ${result.failed}`);
       setTimeout(() => setReclaimStatus(null), 5000);
     } catch (err: any) {
+      logReclaimRentError(err.message);
       setReclaimStatus(`Error: ${err.message}`);
       setTimeout(() => setReclaimStatus(null), 5000);
     }
   }, [vault]);
 
   const handleRemoveVault = useCallback(() => {
+    logRemoveVaultPress();
     Alert.alert(
       'Remove Vault',
       'This will delete the local vault data and signing keypairs. The on-chain multisig will still exist but you will lose signing access from this device.\n\nAre you sure?',
@@ -143,6 +162,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
+            logRemoveVaultConfirm();
             await Promise.all([clearVault(), deleteAllKeypairs()]);
             onNavigate?.('onboarding');
           },
@@ -210,7 +230,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
             <>
             <TouchableOpacity
               style={styles.vaultCard}
-              onPress={() => onNavigate?.('squads')}
+              onPress={() => { logMoreNavigate('squads'); onNavigate?.('squads'); }}
               activeOpacity={0.7}
             >
               <View style={styles.vaultHeader}>
@@ -320,7 +340,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
 
             <TouchableOpacity
               style={styles.changePinButton}
-              onPress={() => onNavigate?.('change-pin')}
+              onPress={() => { logMoreNavigate('change-pin'); onNavigate?.('change-pin'); }}
               activeOpacity={0.7}
             >
               <Text style={styles.changePinButtonText}>Change PIN</Text>
@@ -337,7 +357,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
           ) : (
             <TouchableOpacity
               style={styles.menuCard}
-              onPress={() => onNavigate?.('squads')}
+              onPress={() => { logMoreNavigate('squads'); onNavigate?.('squads'); }}
               activeOpacity={0.7}
             >
               <View style={styles.menuIconCircle}>

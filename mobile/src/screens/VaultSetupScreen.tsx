@@ -21,6 +21,7 @@ import authService from '../services/authService';
 import { deleteAllKeypairs } from '../services/keypairStorage';
 import Toast from '../components/Toast';
 import { MIN_LAMPORTS_FOR_VAULT } from '../config/constants';
+import { logScreenView, logVaultSetupStart, logVaultSetupWalletConnected, logVaultSetupSuccess, logVaultSetupError, logVaultSetupInsufficientBalance } from '../services/analyticsService';
 
 interface VaultSetupScreenProps {
   inviteCode: string;
@@ -77,17 +78,22 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
     setTimeout(() => confettiRef.current?.start(), 300);
   }, []);
 
+  React.useEffect(() => { logScreenView('VaultSetupScreen'); }, []);
+
   const handleSetup = useCallback(async () => {
+    logVaultSetupStart();
     setLoading(true);
     try {
       setStatusText('Connecting wallet...');
       const account = await connectWallet();
       if (!account) return;
+      logVaultSetupWalletConnected();
 
       setStatusText('Checking balance...');
       const balanceSol = await walletService.getBalance(account.publicKey);
       const minSol = MIN_LAMPORTS_FOR_VAULT / 1e9;
       if (balanceSol < minSol) {
+        logVaultSetupInsufficientBalance(balanceSol);
         setToastMessage('Insufficient SOL Balance');
         setToastDescription(
           `You need at least ${minSol} SOL to create a vault.\nCurrent balance: ${balanceSol.toFixed(4)} SOL.`,
@@ -101,10 +107,12 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
 
       setStatusText('Creating vault...');
       await createMultisig(account.publicKey as string);
+      logVaultSetupSuccess();
       onComplete();
     } catch (err: any) {
       const msg = err?.message || '';
       if (!msg.includes('CancellationException')) {
+        logVaultSetupError(msg);
         Alert.alert('Error', msg || 'Something went wrong. Please try again.');
       }
     } finally {

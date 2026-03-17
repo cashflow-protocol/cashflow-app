@@ -10,6 +10,7 @@ import QRCodeStyled from 'react-native-qrcode-styled';
 import Clipboard from '@react-native-clipboard/clipboard';
 import BottomSheet from './BottomSheet';
 import { getVault } from '../services/vaultStorage';
+import { logReceiveAddressCopy, logError } from '../services/analyticsService';
 
 const cashflowLogo = require('../assets/cashflow-logo-rounded.png');
 
@@ -36,6 +37,7 @@ export default function ReceiveModal({ visible, onClose, onFundFromSeeker }: Rec
         if (vault?.vaultAddress) {
           setAddress(vault.vaultAddress);
         } else {
+          logError('receive_modal', 'vault_address_not_found');
           setError(true);
         }
       })();
@@ -44,6 +46,7 @@ export default function ReceiveModal({ visible, onClose, onFundFromSeeker }: Rec
 
   const handleCopy = () => {
     if (!address) return;
+    logReceiveAddressCopy();
     Clipboard.setString(address);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

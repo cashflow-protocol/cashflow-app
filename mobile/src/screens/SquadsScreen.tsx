@@ -21,6 +21,7 @@ import {
 } from '../services/squadsService';
 import { useWallet } from '../hooks/useWallet';
 import type { VaultData } from '../services/vaultStorage';
+import { logScreenView, logSquadsCreateVaultPress, logSquadsCreateVaultSuccess, logSquadsCreateVaultError, logSquadsCopyAddress, logSquadsAddMemberPress } from '../services/analyticsService';
 
 const squadAvatar = require('../assets/squad-avatar.webp');
 
@@ -43,6 +44,8 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => { logScreenView('SquadsScreen'); }, []);
 
   const loadVault = useCallback(async () => {
     setLoading(true);
@@ -92,9 +95,11 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
 
   const handleCreate = useCallback(async () => {
     if (!walletAddress) return;
+    logSquadsCreateVaultPress();
     setCreating(true);
     try {
       const result = await createMultisig(walletAddress);
+      logSquadsCreateVaultSuccess();
 
       // Show the vault immediately with local data
       const stored = await getVault();
@@ -103,6 +108,7 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
       // Poll until on-chain data is available
       await waitForOnChainData(result.multisigAddress);
     } catch (err: any) {
+      logSquadsCreateVaultError(err?.message || 'unknown');
       console.error('Failed to create vault:', err);
       Alert.alert('Error', err?.message || 'Failed to create vault. Please try again.');
     } finally {
@@ -111,6 +117,7 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
   }, [walletAddress, waitForOnChainData]);
 
   const copyAddress = (addr: string) => {
+    logSquadsCopyAddress();
     Clipboard.setString(addr);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -295,7 +302,7 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
             {/* Add Member Button */}
             <TouchableOpacity
               style={styles.addMemberButton}
-              onPress={() => onNavigate('add-member')}
+              onPress={() => { logSquadsAddMemberPress(); onNavigate('add-member'); }}
             >
               <Text style={styles.addMemberButtonText}>Add Signing Wallet</Text>
             </TouchableOpacity>

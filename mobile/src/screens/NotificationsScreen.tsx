@@ -13,6 +13,7 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { useNotifications } from '../hooks/useNotifications';
 import type { AppNotification } from '../types/notification';
+import { logScreenView, logNotificationPress, logNotificationLoadMore } from '../services/analyticsService';
 
 interface NotificationsScreenProps {
   onBack: () => void;
@@ -110,8 +111,11 @@ function NotificationItem({
 export default function NotificationsScreen({ onBack }: NotificationsScreenProps) {
   const { notifications, loading, hasMore, loadMore, markAsRead, refresh } = useNotifications();
 
+  React.useEffect(() => { logScreenView('NotificationsScreen'); }, []);
+
   const handlePress = useCallback(
     (notification: AppNotification) => {
+      logNotificationPress(notification.type, notification.read);
       if (!notification.read) {
         markAsRead([notification._id]);
       }
@@ -158,7 +162,7 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor="#3985D8" />}
-          onEndReached={hasMore ? loadMore : undefined}
+          onEndReached={hasMore ? () => { logNotificationLoadMore(); loadMore(); } : undefined}
           onEndReachedThreshold={0.3}
         />
       )}

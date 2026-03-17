@@ -11,6 +11,7 @@ import {
 import { launchImageLibrary } from 'react-native-image-picker';
 import BottomSheet from './BottomSheet';
 import { uploadScreenshot } from '../services/onboardingService';
+import { logScreenshotStoreOpen, logScreenshotImageSelected, logScreenshotSubmit, logScreenshotSuccess, logScreenshotError } from '../services/analyticsService';
 
 interface UploadScreenshotSheetProps {
   visible: boolean;
@@ -43,6 +44,7 @@ export default function UploadScreenshotSheet({
     });
 
     if (result.didCancel || !result.assets?.[0]) return;
+    logScreenshotImageSelected();
 
     const asset = result.assets[0];
     setImageUri(asset.uri ?? null);
@@ -56,17 +58,21 @@ export default function UploadScreenshotSheet({
 
   const handleSubmit = useCallback(async () => {
     if (!imageFile) return;
+    logScreenshotSubmit(taskId);
     setLoading(true);
     setError('');
     try {
       const result = await uploadScreenshot(publicKey, taskId, imageFile);
       if (result.success) {
+        logScreenshotSuccess(taskId);
         onSuccess(result.xpAwarded ?? 300);
         handleReset();
       } else {
+        logScreenshotError(taskId, 'upload_failed');
         setError('Upload failed. Please try again.');
       }
     } catch {
+      logScreenshotError(taskId, 'exception');
       setError('Upload failed. Please try again.');
     } finally {
       setLoading(false);
@@ -94,7 +100,7 @@ export default function UploadScreenshotSheet({
 
       <TouchableOpacity
         style={styles.storeButton}
-        onPress={() => Linking.openURL(storeUrl)}
+        onPress={() => { logScreenshotStoreOpen(); Linking.openURL(storeUrl); }}
         activeOpacity={0.7}
       >
         <Text style={styles.storeButtonText}>Open dApp Store</Text>

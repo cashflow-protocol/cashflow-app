@@ -32,6 +32,18 @@ import SendModal from '../components/SendModal';
 import FundWalletModal from '../components/FundWalletModal';
 import { useNotifications } from '../hooks/useNotifications';
 import Svg, { Path } from 'react-native-svg';
+import {
+  logScreenView,
+  logHomeActionPress,
+  logNotificationsBellPress,
+  logSupportLinkPress,
+  logQuestionsLinkPress,
+  logComingSoonView,
+  logReceiveModalOpen,
+  logSendModalOpen,
+  logReceiveFundFromSeeker,
+  logSectionMorePress,
+} from '../services/analyticsService';
 
 // Bottom padding to account for floating tab bar
 const TAB_BAR_PADDING = 120;
@@ -58,6 +70,8 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
   const [sendModalVisible, setSendModalVisible] = useState(false);
   const [fundWalletModalVisible, setFundWalletModalVisible] = useState(false);
   const { unreadCount } = useNotifications();
+
+  React.useEffect(() => { logScreenView('HomeScreen'); }, []);
 
   // Top 3 assets sorted by USD value descending
   const topAssets = useMemo(() => {
@@ -126,14 +140,14 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         <SafeAreaView edges={['top']} style={styles.statusBar}>
           <View style={styles.statusBarContent}>
             <TouchableOpacity
-              onPress={() => setProfileModalVisible(true)}
+              onPress={() => { logComingSoonView('profile'); setProfileModalVisible(true); }}
             >
               <ProfileIcon size={44} />
             </TouchableOpacity>
             <View style={styles.headerRight}>
               <TouchableOpacity
                 style={styles.bellButton}
-                onPress={() => onNavigate?.('notifications')}
+                onPress={() => { logNotificationsBellPress(unreadCount); onNavigate?.('notifications'); }}
               >
                 <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
                   <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
@@ -146,7 +160,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.rewardsIcon}
-                onPress={() => setRewardsModalVisible(true)}
+                onPress={() => { logComingSoonView('rewards'); setRewardsModalVisible(true); }}
               >
                 <RewardsIcon size={36} />
               </TouchableOpacity>
@@ -166,19 +180,19 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
           <ActionButton
             icon={<ReceiveIcon size={32} />}
             label="Receive"
-            onPress={() => setReceiveModalVisible(true)}
+            onPress={() => { logHomeActionPress('receive'); logReceiveModalOpen(); setReceiveModalVisible(true); }}
             backgroundColor="#171D26"
           />
           <ActionButton
             icon={<SendIcon size={32} />}
             label="Send"
-            onPress={() => setSendModalVisible(true)}
+            onPress={() => { logHomeActionPress('send'); logSendModalOpen(); setSendModalVisible(true); }}
             backgroundColor="#171D26"
           />
           <ActionButton
             icon={<ConvertIcon size={32} />}
             label="Convert"
-            onPress={() => setConvertModalVisible(true)}
+            onPress={() => { logHomeActionPress('convert'); logComingSoonView('convert'); setConvertModalVisible(true); }}
             backgroundColor="#171D26"
           />
         </View>
@@ -217,7 +231,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         {(assetsLoading || topAssets.length > 0) && (
         <SectionCard
           title="Assets"
-          onMorePress={() => onNavigateToTab?.('assets')}
+          onMorePress={() => { logSectionMorePress('assets'); onNavigateToTab?.('assets'); }}
         >
           {assetsLoading ? (
             <ActivityIndicator size="small" color="#175DA3" />
@@ -233,7 +247,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         {(earnLoading || topEarnPositions.length > 0) && (
         <SectionCard
           title="Earn"
-          onMorePress={() => onNavigateToTab?.('earn')}
+          onMorePress={() => { logSectionMorePress('earn'); onNavigateToTab?.('earn'); }}
         >
           {earnLoading ? (
             <ActivityIndicator size="small" color="#19C394" />
@@ -286,11 +300,11 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
             </View>
           </View>
           <View style={styles.helpButtons}>
-            <TouchableOpacity style={styles.helpButton} onPress={() => Linking.openURL('https://t.me/heymike777')}>
+            <TouchableOpacity style={styles.helpButton} onPress={() => { logSupportLinkPress(); Linking.openURL('https://t.me/heymike777'); }}>
               <SupportIcon size={20} />
               <Text style={styles.helpButtonText}>Support</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.helpButton} onPress={() => Linking.openURL('https://t.me/heymike777')}>
+            <TouchableOpacity style={styles.helpButton} onPress={() => { logQuestionsLinkPress(); Linking.openURL('https://t.me/heymike777'); }}>
               <QuestionsIcon size={20} />
               <Text style={styles.helpButtonText}>Questions</Text>
             </TouchableOpacity>
@@ -321,6 +335,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         visible={receiveModalVisible}
         onClose={() => setReceiveModalVisible(false)}
         onFundFromSeeker={() => {
+          logReceiveFundFromSeeker();
           setReceiveModalVisible(false);
           setFundWalletModalVisible(true);
         }}

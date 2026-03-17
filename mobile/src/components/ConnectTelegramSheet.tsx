@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import BottomSheet from './BottomSheet';
+import { logTelegramCodeCopy, logTelegramBotOpen } from '../services/analyticsService';
 
 interface ConnectTelegramSheetProps {
   visible: boolean;
@@ -20,12 +21,14 @@ export default function ConnectTelegramSheet({ visible, onClose, code, botUrl }:
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
+    logTelegramCodeCopy();
     Clipboard.setString(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleOpenBot = () => {
+    logTelegramBotOpen();
     // Append ?start=CODE so Telegram auto-sends "/start CODE" to the bot
     const deepLink = `${botUrl}?start=${code}`;
     Linking.openURL(deepLink);

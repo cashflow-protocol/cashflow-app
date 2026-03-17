@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import type { Suggestion } from '../types/earn';
+import { logSuggestionCardPress } from '../services/analyticsService';
 
 interface SuggestionCardProps {
   suggestion: Suggestion;
@@ -13,6 +14,7 @@ export default function SuggestionCard({ suggestion, compact, onFundWallet, onTr
   const accent = suggestion.color;
 
   const handlePress = () => {
+    logSuggestionCardPress(suggestion.id, suggestion.type);
     switch (suggestion.type) {
       case 'link':
         if (suggestion.url) Linking.openURL(suggestion.url);

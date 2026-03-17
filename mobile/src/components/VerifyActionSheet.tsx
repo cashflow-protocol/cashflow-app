@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import BottomSheet from './BottomSheet';
 import { verifyWaitlistAction, type WaitlistTaskItem } from '../services/onboardingService';
+import { logVerifyActionOpen, logVerifyActionAttempt, logVerifyActionSuccess, logVerifyActionError } from '../services/analyticsService';
 
 interface VerifyActionSheetProps {
   visible: boolean;
@@ -39,23 +40,28 @@ export default function VerifyActionSheet({ visible, onClose, task, publicKey, o
 
   const handleOpenAction = useCallback(() => {
     if (!task) return;
+    logVerifyActionOpen(task.taskId);
     const url = task.metadata?.profileUrl || task.metadata?.tweetUrl || task.metadata?.channelUrl || FALLBACK_URLS[task.taskId] || '';
     if (url) Linking.openURL(url);
   }, [task]);
 
   const handleVerify = useCallback(async () => {
     if (!task) return;
+    logVerifyActionAttempt(task.taskId);
     setLoading(true);
     setMessage('');
     try {
       const result = await verifyWaitlistAction(publicKey, task.taskId);
       if (result.verified) {
+        logVerifyActionSuccess(task.taskId);
         onSuccess();
         setMessage('');
       } else {
+        logVerifyActionError(task.taskId, result.message || 'not_verified');
         setMessage(result.message || 'Could not verify. Please try again.');
       }
     } catch {
+      logVerifyActionError(task.taskId, 'exception');
       setMessage('Verification failed. Please try again.');
     } finally {
       setLoading(false);

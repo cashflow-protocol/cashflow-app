@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import PinPad from '../components/PinPad';
 import { savePin } from '../services/pinStorage';
+import { logScreenView, logPinSetupComplete, logPinSetupMismatch } from '../services/analyticsService';
 
 interface PinSetupScreenProps {
   onComplete: () => void;
@@ -14,6 +15,8 @@ export default function PinSetupScreen({ onComplete }: PinSetupScreenProps) {
   const [firstPin, setFirstPin] = useState('');
   const [error, setError] = useState('');
 
+  React.useEffect(() => { logScreenView('PinSetupScreen'); }, []);
+
   const handleCreate = useCallback((pin: string) => {
     setFirstPin(pin);
     setError('');
@@ -23,12 +26,14 @@ export default function PinSetupScreen({ onComplete }: PinSetupScreenProps) {
   const handleConfirm = useCallback(
     async (pin: string) => {
       if (pin !== firstPin) {
+        logPinSetupMismatch();
         setError("PINs don't match. Try again.");
         setStep('create');
         setFirstPin('');
         return;
       }
       await savePin(pin);
+      logPinSetupComplete();
       onComplete();
     },
     [firstPin, onComplete],

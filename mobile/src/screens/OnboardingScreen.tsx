@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
+import { logScreenView, logOnboardingNext, logOnboardingHaveInviteCode, logOnboardingJoinWaitlist, logOnboardingPageView } from '../services/analyticsService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -119,10 +120,13 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
   const flatListRef = useRef<FlatList>(null);
   const [currentPage, setCurrentPage] = useState(0);
 
+  React.useEffect(() => { logScreenView('OnboardingScreen'); }, []);
+
   const isLastPage = currentPage === PAGES.length - 1;
 
   const handleNext = useCallback(() => {
     if (currentPage < PAGES.length - 1) {
+      logOnboardingNext(currentPage);
       const next = currentPage + 1;
       flatListRef.current?.scrollToIndex({ index: next, animated: true });
       setCurrentPage(next);
@@ -131,8 +135,11 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
 
   const onScroll = useCallback((e: any) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+    if (page !== currentPage) {
+      logOnboardingPageView(PAGES[page]?.key ?? String(page), page);
+    }
     setCurrentPage(page);
-  }, []);
+  }, [currentPage]);
 
   const renderPage = ({ item }: { item: PageData }) => {
     return (
@@ -183,14 +190,14 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
             <>
               <TouchableOpacity
                 style={styles.nextButton}
-                onPress={onHaveInviteCode}
+                onPress={() => { logOnboardingHaveInviteCode('carousel'); onHaveInviteCode(); }}
                 activeOpacity={0.7}
               >
                 <Text style={styles.nextButtonText}>I have an invite code</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.secondaryButton}
-                onPress={onJoinWaitlist}
+                onPress={() => { logOnboardingJoinWaitlist(); onJoinWaitlist(); }}
                 activeOpacity={0.7}
               >
                 <Text style={styles.secondaryButtonText}>Join the waitlist</Text>

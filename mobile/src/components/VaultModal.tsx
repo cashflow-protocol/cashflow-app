@@ -20,6 +20,7 @@ import { useWallet } from '../hooks/useWallet';
 import { getCloudPublicKey } from '../services/keypairStorage';
 import { Buffer } from 'buffer';
 import bs58 from 'bs58';
+import { logVaultModalOpen, logVaultModeSwitch, logVaultMaxPress, logVaultSubmit, logVaultSuccess, logVaultError } from '../services/analyticsService';
 
 const PROTOCOL_LABELS: Record<EarnTokenType, string> = {
   jupiter: 'Jupiter',
@@ -106,6 +107,7 @@ export default function VaultModal({
   // Reset state and fetch balance when modal opens
   useEffect(() => {
     if (visible) {
+      logVaultModalOpen(symbol, 'deposit');
       setMode('deposit');
       setAmount('');
       setLoading(false);
@@ -152,6 +154,7 @@ export default function VaultModal({
   const canSubmit = isValidAmount && !exceedsBalance && !belowMinimum && !loading;
 
   const handleMaxPress = () => {
+    logVaultMaxPress(mode, symbol);
     if (mode === 'withdraw' && hasPosition) {
       setAmount(toUiAmount(BigInt(position!.balance.amount), decimals));
     } else if (mode === 'deposit' && walletBalance !== null) {
@@ -166,6 +169,7 @@ export default function VaultModal({
   const handleSubmit = async () => {
     if (!canSubmit) return;
 
+    logVaultSubmit(mode, symbol, amount, type);
     setLoading(true);
     setResult(null);
 
@@ -222,6 +226,7 @@ export default function VaultModal({
         signature = bs58.encode(sigBytes);
       }
 
+      logVaultSuccess(mode, symbol, amount, type);
       console.log(`[VaultModal] ${mode} success, signature: ${signature}`);
       setResult({
         success: true,
@@ -233,6 +238,7 @@ export default function VaultModal({
         onSuccess();
       }, 1500);
     } catch (err) {
+      logVaultError(mode, symbol, (err as Error).message || 'unknown');
       console.error(`[VaultModal] ${mode} error:`, (err as Error).message);
       setResult({
         success: false,
@@ -266,7 +272,7 @@ export default function VaultModal({
               <View style={styles.modeToggle}>
                 <TouchableOpacity
                   style={[styles.modeButton, mode === 'deposit' && styles.modeButtonActive]}
-                  onPress={() => { setMode('deposit'); setAmount(''); setResult(null); }}
+                  onPress={() => { logVaultModeSwitch('deposit'); setMode('deposit'); setAmount(''); setResult(null); }}
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.modeText, mode === 'deposit' && styles.modeTextActive]}>
@@ -275,7 +281,7 @@ export default function VaultModal({
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modeButton, mode === 'withdraw' && styles.modeButtonActive]}
-                  onPress={() => { setMode('withdraw'); setAmount(''); setResult(null); }}
+                  onPress={() => { logVaultModeSwitch('withdraw'); setMode('withdraw'); setAmount(''); setResult(null); }}
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.modeText, mode === 'withdraw' && styles.modeTextActive]}>

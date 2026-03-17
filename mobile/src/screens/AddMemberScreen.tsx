@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { addMember } from '../services/squadsService';
 import { getVault } from '../services/vaultStorage';
+import { logScreenView, logError, logAddMemberSubmit, logAddMemberSuccess } from '../services/analyticsService';
 
 
 interface AddMemberScreenProps {
@@ -35,6 +36,8 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState('');
 
+  React.useEffect(() => { logScreenView('AddMemberScreen'); }, []);
+
   const handleAddMember = async () => {
     if (!memberAddress.trim()) {
       Alert.alert('Error', 'Please enter a wallet address');
@@ -47,6 +50,7 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
       return;
     }
 
+    logAddMemberSubmit(permissionType);
     setSubmitting(true);
     try {
       const vaultData = await getVault();
@@ -62,12 +66,14 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
         permissionType,
       );
 
+      logAddMemberSuccess();
       Alert.alert(
         'Member Added',
         `Successfully added ${memberAddress.trim().slice(0, 8)}... to your vault.`,
         [{ text: 'OK', onPress: () => onNavigate('squads') }],
       );
     } catch (err: any) {
+      logError('add_member', err?.message || 'unknown');
       console.error('Failed to add member:', err);
       Alert.alert('Error', err?.message || 'Failed to add member. Please try again.');
     } finally {

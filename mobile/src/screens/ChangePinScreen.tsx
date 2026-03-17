@@ -5,6 +5,7 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import PinPad from '../components/PinPad';
 import { verifyPin, savePin } from '../services/pinStorage';
 import { authenticate } from '../services/keypairStorage';
+import { logScreenView, logPinChangeStart, logPinChangeComplete, logPinChangeWrongPin, logPinChangeMismatch } from '../services/analyticsService';
 
 interface ChangePinScreenProps {
   onComplete: () => void;
@@ -18,12 +19,15 @@ export default function ChangePinScreen({ onComplete, onBack }: ChangePinScreenP
   const [newPin, setNewPin] = useState('');
   const [error, setError] = useState('');
 
+  React.useEffect(() => { logScreenView('ChangePinScreen'); logPinChangeStart(); }, []);
+
   const handleVerify = useCallback(async (pin: string) => {
     const valid = await verifyPin(pin);
     if (valid) {
       setError('');
       setStep('create');
     } else {
+      logPinChangeWrongPin();
       setError('Wrong PIN');
     }
   }, []);
@@ -45,12 +49,14 @@ export default function ChangePinScreen({ onComplete, onBack }: ChangePinScreenP
   const handleConfirm = useCallback(
     async (pin: string) => {
       if (pin !== newPin) {
+        logPinChangeMismatch();
         setError("PINs don't match. Try again.");
         setNewPin('');
         setStep('create');
         return;
       }
       await savePin(pin);
+      logPinChangeComplete();
       onComplete();
     },
     [newPin, onComplete],

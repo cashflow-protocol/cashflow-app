@@ -15,6 +15,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import { validateInviteCode, redeemInviteCode } from '../services/onboardingService';
 import { getCloudPublicKey, generateAndStoreCloudKeypair } from '../services/keypairStorage';
 import Toast from '../components/Toast';
+import { logScreenView, logInviteCodeSubmit, logInviteCodeSuccess, logInviteCodeError } from '../services/analyticsService';
 
 interface InviteCodeScreenProps {
   onValidCode: (code: string) => void;
@@ -26,14 +27,18 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
   const [loading, setLoading] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
 
+  React.useEffect(() => { logScreenView('InviteCodeScreen'); }, []);
+
   const handleSubmit = useCallback(async () => {
     const trimmed = code.trim().toUpperCase();
     if (trimmed.length === 0) return;
 
+    logInviteCodeSubmit();
     setLoading(true);
     try {
       const valid = await validateInviteCode(trimmed);
       if (!valid) {
+        logInviteCodeError('invalid');
         setToastVisible(true);
         return;
       }
@@ -46,11 +51,14 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
 
       const redeemed = await redeemInviteCode(trimmed, pk);
       if (redeemed) {
+        logInviteCodeSuccess();
         onValidCode(trimmed);
       } else {
+        logInviteCodeError('redeem_failed');
         setToastVisible(true);
       }
     } catch {
+      logInviteCodeError('exception');
       setToastVisible(true);
     } finally {
       setLoading(false);
