@@ -284,6 +284,10 @@ class ApiService {
     }>('/solana/v2/send-bundle', { transactions });
     return { bundleId: res.bundleId, status: res.status };
   }
+
+  async submitBundleSignatures(transactionId: string, signatures: string[]): Promise<void> {
+    await this.post('/solana/v2/submit-bundle-signatures', { transactionId, signatures });
+  }
   async registerDeviceToken(fcmToken: string, deviceId: string): Promise<void> {
     await this.post('/notifications/v2/register-device', { fcmToken, deviceId });
   }

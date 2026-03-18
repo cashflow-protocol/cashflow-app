@@ -50,6 +50,9 @@ export class Transaction {
   @prop()
   public signature?: string;
 
+  @prop({ type: () => [String], default: [] })
+  public bundleSignatures!: string[];
+
   @prop()
   public unsignedTransaction?: string;
 }

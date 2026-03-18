@@ -607,7 +607,7 @@ export async function executeVaultTransaction(
   multisigAddress: string,
   instructions: Array<{ programId: string; accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; data: string }>,
   extraLookupTables?: string[],
-): Promise<{ signature: string }> {
+): Promise<{ signature: string; bundleSignatures: string[] }> {
   const multisigPda = new PublicKey(multisigAddress);
 
   // Get cloud/device public keys from native storage
@@ -636,6 +636,14 @@ export async function executeVaultTransaction(
 
   // Derive vault PDA
   const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
+
+  // Check vault has enough SOL for fees
+  const vaultBalance = await connection.getBalance(vaultPda, 'confirmed');
+  if (vaultBalance < TARGET_CLOUD_BALANCE) {
+    const needed = (TARGET_CLOUD_BALANCE / 1e9).toFixed(3);
+    const have = (vaultBalance / 1e9).toFixed(4);
+    throw new Error(`Insufficient SOL for transaction fees. Need ${needed} SOL but vault only has ${have} SOL. Please deposit SOL to your vault first.`);
+  }
 
   // Get current transaction index
   const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(
@@ -870,8 +878,14 @@ export async function executeVaultTransaction(
     console.log(`[VaultTx] bundle result: id=${bundleResult.bundleId}, status=${bundleResult.status}`);
 
     const signature = bs58.encode(tx3.signatures[0]);
+    const bundleSignatures = [
+      bs58.encode(tx1.signatures[0]),
+      bs58.encode(tx2.signatures[0]),
+      bs58.encode(tx3.signatures[0]),
+      bs58.encode(tx4.signatures[0]),
+    ];
     console.log(`[VaultTx] signature: ${signature}`);
-    return { signature };
+    return { signature, bundleSignatures };
   } catch (err: any) {
     logError('squads_vault_tx', err.message || 'unknown');
     debugLines.push(`ERROR: ${err.message}`);

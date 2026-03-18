@@ -35,9 +35,7 @@ export function useNotifications() {
   }, []);
 
   useEffect(() => {
-    if (cachedNotifications === null) {
-      fetchData();
-    }
+    fetchData();
   }, [fetchData]);
 
   const refresh = useCallback(() => fetchData(), [fetchData]);

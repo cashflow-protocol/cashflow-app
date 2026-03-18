@@ -112,6 +112,30 @@ export class DBManager {
   }
 
   /**
+   * Submit bundle signatures for a transaction (Squads vault flow)
+   */
+  async submitBundleTransaction(transactionId: string, signatures: string[]) {
+    return TransactionModel.findByIdAndUpdate(transactionId, {
+      status: TransactionStatus.SUBMITTED,
+      signature: signatures[0],
+      bundleSignatures: signatures,
+    });
+  }
+
+  /**
+   * Find a pending/submitted transaction by any of its bundle signatures
+   */
+  async findTransactionBySignature(signature: string) {
+    return TransactionModel.findOne({
+      status: { $in: [TransactionStatus.CREATED, TransactionStatus.SUBMITTED] },
+      $or: [
+        { signature },
+        { bundleSignatures: signature },
+      ],
+    }).lean();
+  }
+
+  /**
    * Get all transactions that have been submitted but not yet confirmed/failed
    */
   async getSubmittedTransactions() {

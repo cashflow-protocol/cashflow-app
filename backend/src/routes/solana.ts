@@ -42,6 +42,24 @@ const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
 const bigIntReplacer = (_key: string, value: unknown) =>
   typeof value === 'bigint' ? value.toString() : value;
 
+// POST /solana/v1/submit-bundle-signatures - Store bundle signatures for a transaction
+router.post('/submit-bundle-signatures', async (req: Request, res: Response) => {
+  try {
+    const { transactionId, signatures } = req.body;
+
+    if (!transactionId || !Array.isArray(signatures) || signatures.length === 0) {
+      res.status(400).json({ success: false, error: 'transactionId and signatures[] are required' });
+      return;
+    }
+
+    await dbManager.submitBundleTransaction(transactionId, signatures);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Submit bundle signatures error:', error);
+    res.status(500).json({ success: false, error: 'Failed to submit bundle signatures' });
+  }
+});
+
 // POST /solana/v1/send - Send a signed transaction on-chain
 router.post('/send', async (req: Request, res: Response) => {
   try {
