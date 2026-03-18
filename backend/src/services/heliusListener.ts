@@ -16,6 +16,10 @@ const pendingSubscriptions = new Map<number, string>();
 // Map subscription IDs to vault addresses (for matching notifications)
 const subscriptionToVault = new Map<number, string>();
 
+// Track recently processed signatures to avoid duplicate notifications
+const recentSignatures = new Set<string>();
+const MAX_RECENT_SIGNATURES = 500;
+
 let nextRequestId = 1;
 
 export async function initializeHeliusListener(): Promise<void> {
@@ -47,7 +51,8 @@ export function subscribeToVault(vaultAddress: string): void {
 function connect(): void {
   if (!apiKey) return;
 
-  ws = new WebSocket(`wss://atlas-mainnet.helius-rpc.com?api-key=${apiKey}`);
+  // Use standard Solana RPC WebSocket (available on all Helius plans)
+  ws = new WebSocket(`wss://mainnet.helius-rpc.com?api-key=${apiKey}`);
 
   ws.on('open', () => {
     console.log('✅ Helius WebSocket connected');
@@ -92,18 +97,14 @@ function sendSubscribeMessage(vaultAddress: string): void {
   const requestId = nextRequestId++;
   pendingSubscriptions.set(requestId, vaultAddress);
 
+  // Use standard accountSubscribe — available on all Helius plans
   ws.send(JSON.stringify({
     jsonrpc: '2.0',
     id: requestId,
-    method: 'transactionSubscribe',
+    method: 'accountSubscribe',
     params: [
-      { accountInclude: [vaultAddress] },
-      {
-        commitment: 'confirmed',
-        encoding: 'jsonParsed',
-        transactionDetails: 'full',
-        maxSupportedTransactionVersion: 0,
-      },
+      vaultAddress,
+      { encoding: 'jsonParsed', commitment: 'confirmed' },
     ],
   }));
 }
@@ -119,16 +120,78 @@ function handleMessage(message: any): void {
     return;
   }
 
-  // Handle transaction notification
-  if (message.method === 'transactionNotification' && message.params) {
+  // Handle account change notification
+  if (message.method === 'accountNotification' && message.params) {
     const subscriptionId = message.params.subscription;
     const vaultAddress = subscriptionToVault.get(subscriptionId);
     if (!vaultAddress) return;
 
-    const tx = message.params.result as HeliusEnhancedTransaction;
-    if (!tx?.signature) return;
+    // Account changed — fetch recent transactions via Helius enhanced API
+    fetchAndDispatchTransactions(vaultAddress).catch((error) => {
+      console.error('Transaction fetch/dispatch error:', error);
+    });
+  }
+}
 
-    // Dispatch asynchronously — don't block the WebSocket handler
+/**
+ * Fetch recent transactions for a vault address using the Helius enhanced
+ * transactions API, then dispatch notifications for any new ones.
+ */
+async function fetchAndDispatchTransactions(vaultAddress: string): Promise<void> {
+  if (!apiKey) return;
+
+  // Small delay to let the transaction finalize on RPC
+  await new Promise((r) => setTimeout(r, 1500));
+
+  // Step 1: Get recent transaction signatures for this account
+  const sigResponse = await fetch(
+    `https://mainnet.helius-rpc.com/?api-key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getSignaturesForAddress',
+        params: [vaultAddress, { limit: 3, commitment: 'confirmed' }],
+      }),
+    },
+  );
+  const sigData = await sigResponse.json() as any;
+  const signatures: string[] = (sigData.result || [])
+    .filter((s: any) => !s.err)
+    .map((s: any) => s.signature);
+
+  if (signatures.length === 0) return;
+
+  // Filter out already-processed signatures
+  const newSignatures = signatures.filter((sig) => !recentSignatures.has(sig));
+  if (newSignatures.length === 0) return;
+
+  // Step 2: Fetch enhanced transaction details from Helius
+  const txResponse = await fetch(
+    `https://api.helius.xyz/v0/transactions?api-key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transactions: newSignatures }),
+    },
+  );
+  const enhancedTxs = await txResponse.json() as HeliusEnhancedTransaction[];
+
+  if (!Array.isArray(enhancedTxs)) return;
+
+  // Mark as processed and dispatch
+  for (const tx of enhancedTxs) {
+    if (!tx?.signature) continue;
+
+    recentSignatures.add(tx.signature);
+    // Evict old entries to prevent memory growth
+    if (recentSignatures.size > MAX_RECENT_SIGNATURES) {
+      const first = recentSignatures.values().next().value;
+      if (first) recentSignatures.delete(first);
+    }
+
     dispatchOnchainNotification(vaultAddress, tx).catch((error) => {
       console.error('Notification dispatch error:', error);
     });
