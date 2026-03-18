@@ -215,6 +215,13 @@ function App() {
       setNeedsPinSetup(true);
       setOnboardingStep('carousel');
       setInviteCode('');
+      setUserHasVault(true);
+      setUserOnWaitlist(false);
+
+      // Initialize push notifications now that the vault exists
+      initializePushNotifications().catch((err) => {
+        console.error('Push notification init failed:', err);
+      });
     };
 
     let onboardingContent;

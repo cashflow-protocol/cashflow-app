@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { isLoggedIn, setPassword, clearPassword, getEnv, setEnv, type Env } from './api';
 import InviteCodesPage from './pages/InviteCodes';
 import WaitlistUsersPage from './pages/WaitlistUsers';
@@ -6,6 +6,13 @@ import WaitlistTasksPage from './pages/WaitlistTasks';
 import UsersPage from './pages/Users';
 
 type Page = 'invite-codes' | 'waitlist-users' | 'waitlist-tasks' | 'users';
+
+const PAGES: Page[] = ['invite-codes', 'waitlist-users', 'waitlist-tasks', 'users'];
+
+function getPageFromPath(): Page {
+  const path = window.location.pathname.replace(/^\//, '');
+  return PAGES.includes(path as Page) ? (path as Page) : 'invite-codes';
+}
 
 function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [pw, setPw] = useState('');
@@ -42,8 +49,19 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(isLoggedIn());
-  const [page, setPage] = useState<Page>('invite-codes');
+  const [page, setPageState] = useState<Page>(getPageFromPath());
   const [env, setEnvState] = useState<Env>(getEnv());
+
+  const setPage = useCallback((p: Page) => {
+    window.history.pushState(null, '', `/${p}`);
+    setPageState(p);
+  }, []);
+
+  useEffect(() => {
+    const onPopState = () => setPageState(getPageFromPath());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   const handleEnvToggle = () => {
     const next = env === 'dev' ? 'prod' : 'dev';
