@@ -18,7 +18,7 @@ import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
 import notificationsRouter from './routes/notifications';
 import { initializeFirebase } from './services/firebaseManager';
-import { initializeHeliusListener } from './services/heliusListener';
+import { initializeHeliusListener, verifyWebhookAuth, handleWebhookPayload } from './services/heliusListener';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
@@ -50,6 +50,21 @@ app.use('/earn/v2', requireAuth, signResponseMiddleware, earnRouter);
 app.use('/solana/v2', requireAuth, signResponseMiddleware, solanaRouter);
 app.use('/suggestions/v2', requireAuth, signResponseMiddleware, suggestionsRouter);
 app.use('/notifications/v2', requireAuth, notificationsRouter);
+
+// Helius webhook — receives enhanced transaction data (no JWT, secured by auth header)
+app.post('/helius/webhook', async (req, res) => {
+  if (!verifyWebhookAuth(req.headers.authorization)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const transactions = Array.isArray(req.body) ? req.body : [];
+  handleWebhookPayload(transactions).catch((err) => {
+    console.error('Webhook payload processing error:', err);
+  });
+
+  res.json({ ok: true });
+});
 
 // Health check
 app.get('/health', (req, res) => {
