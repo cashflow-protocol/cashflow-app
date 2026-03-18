@@ -22,8 +22,13 @@ export async function dispatchOnchainNotification(
     return;
   }
 
+  console.log(`✅ Parsed: "${parsed.title}" (${parsed.type}) for ${vaultAddress.slice(0, 8)}...`);
+
   const user = await UserModel.findOne({ vaultAddress }).lean();
-  if (!user) return;
+  if (!user) {
+    console.log(`⚠️ No user found for vault ${vaultAddress.slice(0, 8)}...`);
+    return;
+  }
 
   try {
     await dbManager.createNotification({
@@ -35,19 +40,26 @@ export async function dispatchOnchainNotification(
       txSignature: parsed.txSignature,
       metadata: parsed.metadata,
     });
+    console.log(`💾 Notification saved for ${tx.signature?.slice(0, 8)}...`);
   } catch (error: any) {
     // Duplicate txSignature — already notified
-    if (error?.code === 11000) return;
+    if (error?.code === 11000) {
+      console.log(`⏭️ Duplicate tx ${tx.signature?.slice(0, 8)}..., skipping`);
+      return;
+    }
     throw error;
   }
 
   if (user.fcmTokens?.length) {
+    console.log(`📱 Sending push to ${user.fcmTokens.length} device(s) for "${parsed.title}"`);
     await sendPushNotification(
       user.fcmTokens,
       parsed.title,
       parsed.body || '',
       { type: parsed.type, vaultAddress, txSignature: parsed.txSignature },
     );
+  } else {
+    console.log(`⚠️ No FCM tokens for user ${vaultAddress.slice(0, 8)}..., skipping push`);
   }
 }
 
