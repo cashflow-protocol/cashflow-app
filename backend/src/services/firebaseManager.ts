@@ -14,7 +14,7 @@ export function initializeFirebase(): void {
     const serviceAccount = JSON.parse(Buffer.from(key, 'base64').toString());
     admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
     initialized = true;
-    console.log('✅ Firebase Admin initialized');
+    console.log(`✅ Firebase Admin initialized (project: ${serviceAccount.project_id}, client_email: ${serviceAccount.client_email})`);
   } catch (error) {
     console.error('❌ Firebase initialization failed:', error);
   }
@@ -52,7 +52,8 @@ export async function sendPushNotification(
     const tokensToRemove: string[] = [];
     response.responses.forEach((resp, idx) => {
       if (resp.error?.code === 'messaging/registration-token-not-registered' ||
-          resp.error?.code === 'messaging/invalid-registration-token') {
+          resp.error?.code === 'messaging/invalid-registration-token' ||
+          resp.error?.code === 'messaging/mismatched-credential') {
         tokensToRemove.push(fcmTokens[idx]);
       }
     });
