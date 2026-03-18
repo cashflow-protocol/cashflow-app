@@ -228,6 +228,8 @@ async function fetchAndDispatchTransactions(vaultAddress: string): Promise<void>
     }
 
     console.log(`📨 Dispatching notification for ${tx.signature.slice(0, 8)}... (type=${tx.type}, source=${tx.source})`);
+    console.log(`   nativeTransfers=${JSON.stringify(tx.nativeTransfers?.slice(0, 3))}`);
+    console.log(`   tokenTransfers=${JSON.stringify(tx.tokenTransfers?.slice(0, 3))}`);
     dispatchOnchainNotification(vaultAddress, tx).catch((error) => {
       console.error('Notification dispatch error:', error);
     });

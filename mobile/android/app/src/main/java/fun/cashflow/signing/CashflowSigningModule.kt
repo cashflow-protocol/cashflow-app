@@ -342,7 +342,8 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     try {
       // Migrate device key: decrypt with old key, re-encrypt with biometric key
       val encryptedBase64 = prefs.getString("device_seed", null)
-      if (encryptedBase64 != null) {
+      val alreadyBio = prefs.getBoolean("device_bio", false)
+      if (encryptedBase64 != null && !alreadyBio) {
         val encrypted = Base64.decode(encryptedBase64, Base64.NO_WRAP)
         val seed = decryptWithKeystore(encrypted, biometric = false)
         try {
