@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { useNotifications } from '../hooks/useNotifications';
 import type { AppNotification } from '../types/notification';
@@ -22,7 +21,7 @@ interface NotificationsScreenProps {
 function BackArrow() {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-      <Path d="M19 12H5m0 0l7 7m-7-7l7-7" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M19 12H5m0 0l7 7m-7-7l7-7" stroke="#1F2937" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -103,7 +102,6 @@ function NotificationItem({
         ) : null}
         <Text style={styles.notificationTime}>{formatTimeAgo(notification.createdAt)}</Text>
       </View>
-      {!notification.read && <View style={styles.unreadDot} />}
     </TouchableOpacity>
   );
 }
@@ -111,16 +109,22 @@ function NotificationItem({
 export default function NotificationsScreen({ onBack }: NotificationsScreenProps) {
   const { notifications, loading, hasMore, loadMore, markAsRead, refresh } = useNotifications();
 
-  React.useEffect(() => { logScreenView('NotificationsScreen'); }, []);
+  useEffect(() => { logScreenView('NotificationsScreen'); }, []);
+
+  // Mark all notifications as read when the screen opens
+  useEffect(() => {
+    if (loading) return;
+    const unreadIds = notifications.filter((n) => !n.read).map((n) => n._id);
+    if (unreadIds.length > 0) {
+      markAsRead(unreadIds);
+    }
+  }, [loading]); // Only run once after initial load
 
   const handlePress = useCallback(
     (notification: AppNotification) => {
       logNotificationPress(notification.type, notification.read);
-      if (!notification.read) {
-        markAsRead([notification._id]);
-      }
     },
-    [markAsRead],
+    [],
   );
 
   const renderItem = useCallback(
@@ -132,13 +136,6 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#104982', '#3985D8']}
-        style={styles.headerGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-      />
-
       <SafeAreaView edges={['top']} style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <BackArrow />
@@ -153,7 +150,11 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
         </View>
       ) : notifications.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={styles.emptyText}>No notifications yet</Text>
+          <Svg width={48} height={48} viewBox="0 0 24 24" fill="none" style={{ marginBottom: 12 }}>
+            <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="#D1D5DB" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>
+          <Text style={styles.emptyTitle}>No notifications yet</Text>
+          <Text style={styles.emptySubtitle}>We'll notify you about transactions{'\n'}and important updates</Text>
         </View>
       ) : (
         <FlatList
@@ -175,19 +176,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#E8EAF1',
   },
-  headerGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 160,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 12,
   },
   backButton: {
     width: 40,
@@ -198,20 +192,29 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#fff',
+    color: '#1F2937',
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 32,
   },
-  emptyText: {
-    fontSize: 16,
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
     color: '#6B7280',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 20,
   },
   list: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 4,
     paddingBottom: 120,
   },
   notificationRow: {
@@ -250,12 +253,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9CA3AF',
     marginTop: 4,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#3985D8',
-    marginLeft: 8,
   },
 });

@@ -29,6 +29,8 @@ import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
 import { initializePushNotifications, initializeWaitlistPushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
 import Toast from './src/components/Toast';
+import { invalidateAssets } from './src/hooks/useAssets';
+import { invalidateEarnTokens } from './src/hooks/useEarnTokens';
 import {
   logScreenView,
   logTabPress,
@@ -108,11 +110,20 @@ function App() {
   // Set up foreground push notification handler
   useEffect(() => {
     if (checkingVault) return;
-    const unsubscribe = setupForegroundHandler((title, body) => {
+    const unsubscribe = setupForegroundHandler((title, body, data) => {
       logPushNotificationReceived(title);
       setToastMessage(title);
       setToastDescription(body);
       setToastVisible(true);
+
+      // Refresh relevant data based on notification type
+      const type = data?.type;
+      if (type === 'transfer_in' || type === 'transfer_out') {
+        invalidateAssets();
+      } else if (type === 'deposit' || type === 'withdraw') {
+        invalidateAssets();
+        invalidateEarnTokens();
+      }
     });
     return unsubscribe;
   }, [checkingVault]);

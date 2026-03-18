@@ -72,13 +72,14 @@ export async function initializeWaitlistPushNotifications(publicKey: string): Pr
  * Returns an unsubscribe function.
  */
 export function setupForegroundHandler(
-  onNotification: (title: string, body: string) => void,
+  onNotification: (title: string, body: string, data?: Record<string, string>) => void,
 ): () => void {
   return messaging().onMessage(async (remoteMessage) => {
     const title = remoteMessage.notification?.title || '';
     const body = remoteMessage.notification?.body || '';
+    const data = remoteMessage.data as Record<string, string> | undefined;
     if (title) {
-      onNotification(title, body);
+      onNotification(title, body, data);
     }
   });
 }

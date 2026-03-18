@@ -7,6 +7,16 @@ import type { WalletAsset } from '../types/earn';
 let cachedAssets: WalletAsset[] | null = null;
 let cachedTotalUsdValue: number | null = null;
 
+// Listeners that get notified when cache should be invalidated
+const refreshListeners = new Set<() => void>();
+
+/** Invalidate the assets cache and trigger a refresh on all mounted hooks. */
+export function invalidateAssets(): void {
+  cachedAssets = null;
+  cachedTotalUsdValue = null;
+  refreshListeners.forEach((fn) => fn());
+}
+
 export function useAssets() {
   const [assets, setAssets] = useState<WalletAsset[]>(cachedAssets ?? []);
   const [totalUsdValue, setTotalUsdValue] = useState(cachedTotalUsdValue ?? 0);
@@ -42,6 +52,13 @@ export function useAssets() {
     if (cachedAssets === null) {
       fetchData();
     }
+  }, [fetchData]);
+
+  // Listen for external invalidation (e.g. push notification)
+  useEffect(() => {
+    const listener = () => fetchData(true);
+    refreshListeners.add(listener);
+    return () => { refreshListeners.delete(listener); };
   }, [fetchData]);
 
   const refresh = useCallback(() => fetchData(true), [fetchData]);

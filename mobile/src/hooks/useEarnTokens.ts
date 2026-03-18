@@ -11,6 +11,15 @@ export interface EarnTokenWithPosition extends EarnToken {
 // Module-level cache — persists across tab switches, cleared on app restart
 let cachedTokens: EarnTokenWithPosition[] | null = null;
 
+// Listeners that get notified when cache should be invalidated
+const refreshListeners = new Set<() => void>();
+
+/** Invalidate the earn tokens cache and trigger a refresh on all mounted hooks. */
+export function invalidateEarnTokens(): void {
+  cachedTokens = null;
+  refreshListeners.forEach((fn) => fn());
+}
+
 function mergeTokensAndPositions(earnTokens: EarnToken[], positions: EarnPosition[]): EarnTokenWithPosition[] {
   // Index positions by exact key (type:mint:vaultAddress) and fallback key (type:mint)
   const exactMap = new Map<string, EarnPosition>();
@@ -71,6 +80,13 @@ export function useEarnTokens() {
     if (cachedTokens === null) {
       fetchData();
     }
+  }, [fetchData]);
+
+  // Listen for external invalidation (e.g. push notification)
+  useEffect(() => {
+    const listener = () => fetchData(true);
+    refreshListeners.add(listener);
+    return () => { refreshListeners.delete(listener); };
   }, [fetchData]);
 
   const refresh = useCallback(() => fetchData(true), [fetchData]);
