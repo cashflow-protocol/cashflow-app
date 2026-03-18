@@ -23,7 +23,7 @@ const jitoManager = new JitoManager();
 const tokenManager = new TokenManager();
 const transferManager = new TransferManager();
 const priceManager = new PriceManager();
-const kShouldSimulate = true; // Enabled for debugging
+const kShouldSimulate = false; // Enabled for debugging
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 
