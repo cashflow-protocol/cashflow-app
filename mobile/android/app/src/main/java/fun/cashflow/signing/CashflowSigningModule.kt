@@ -37,7 +37,7 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     private const val KEYSTORE_ALIAS_BIO = "fun.cashflow.signing.aes.bio"
     private const val PREFS_NAME = "fun.cashflow.signing"
     private const val GCM_TAG_LENGTH = 128
-    private const val BIO_VALIDITY_SECONDS = 30
+    private const val BIO_VALIDITY_SECONDS = 300 // 5 minutes — matches app lock timeout
     private const val ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
     // Hardcoded salt compiled into the binary — an attacker needs both the Keystore key AND
     // this salt to recover the seed. Must match iOS. Changing this invalidates all stored keys.

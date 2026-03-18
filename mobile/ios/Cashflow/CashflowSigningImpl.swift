@@ -188,7 +188,7 @@ class CashflowSigningImpl: NSObject {
     // Cloud keys don't have biometric access control, so LAContext can cause issues
     if tag != "cloud" {
       let context = LAContext()
-      context.touchIDAuthenticationAllowableReuseDuration = 30
+      context.touchIDAuthenticationAllowableReuseDuration = 300 // 5 minutes — matches app lock timeout
       query[kSecUseAuthenticationContext as String] = context
     }
 
