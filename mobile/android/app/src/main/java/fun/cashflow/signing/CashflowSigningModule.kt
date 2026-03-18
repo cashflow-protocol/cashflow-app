@@ -59,25 +59,99 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
       val seed = privateKeyParams.encoded
       val pubKey = publicKeyParams.encoded
+      val useBio = !cloudSync && isBiometricAvailable()
 
-      // Use biometric-protected key for device (non-cloud) keys
-      val encrypted = if (!cloudSync && isBiometricAvailable()) {
-        encryptWithKeystore(seed, biometric = true)
+      if (useBio) {
+        // Ensure the biometric Keystore key exists before prompting
+        getOrCreateAesKey(biometric = true)
+
+        // Try encrypting — may throw UserNotAuthenticatedException
+        try {
+          val encrypted = encryptWithKeystore(seed, biometric = true)
+          saveAndResolve(tag, seed, pubKey, encrypted, useBio = true, promise)
+        } catch (e: UserNotAuthenticatedException) {
+          // Prompt biometric, then retry encryption
+          promptBiometricThenEncrypt(tag, seed, pubKey, promise)
+        }
       } else {
-        encryptWithKeystore(seed, biometric = false)
+        val encrypted = encryptWithKeystore(seed, biometric = false)
+        saveAndResolve(tag, seed, pubKey, encrypted, useBio = false, promise)
       }
-
-      val prefs = getPrefs()
-      prefs.edit()
-        .putString("${tag}_seed", Base64.encodeToString(encrypted, Base64.NO_WRAP))
-        .putString("${tag}_pub", Base64.encodeToString(pubKey, Base64.NO_WRAP))
-        .putBoolean("${tag}_bio", !cloudSync && isBiometricAvailable())
-        .apply()
-
-      seed.fill(0)
-      promise.resolve(base58Encode(pubKey))
     } catch (e: Exception) {
       promise.reject("ERR_KEYGEN", "Failed to generate keypair: ${e.message}", e)
+    }
+  }
+
+  private fun saveAndResolve(
+    tag: String,
+    seed: ByteArray,
+    pubKey: ByteArray,
+    encrypted: ByteArray,
+    useBio: Boolean,
+    promise: Promise,
+  ) {
+    val prefs = getPrefs()
+    prefs.edit()
+      .putString("${tag}_seed", Base64.encodeToString(encrypted, Base64.NO_WRAP))
+      .putString("${tag}_pub", Base64.encodeToString(pubKey, Base64.NO_WRAP))
+      .putBoolean("${tag}_bio", useBio)
+      .apply()
+
+    seed.fill(0)
+    promise.resolve(base58Encode(pubKey))
+  }
+
+  private fun promptBiometricThenEncrypt(
+    tag: String,
+    seed: ByteArray,
+    pubKey: ByteArray,
+    promise: Promise,
+  ) {
+    promptBiometricUnlock("Authenticate to secure your signing key") { success, error ->
+      if (!success) {
+        seed.fill(0)
+        promise.reject("ERR_KEYGEN", "Failed to generate keypair: ${error?.message ?: "authentication required"}", error)
+        return@promptBiometricUnlock
+      }
+      try {
+        val encrypted = encryptWithKeystore(seed, biometric = true)
+        saveAndResolve(tag, seed, pubKey, encrypted, useBio = true, promise)
+      } catch (e: Exception) {
+        seed.fill(0)
+        promise.reject("ERR_KEYGEN", "Failed to generate keypair: ${e.message}", e)
+      }
+    }
+  }
+
+  /** Prompt biometric just to unlock the Keystore key (no decrypt needed). */
+  private fun promptBiometricUnlock(reason: String, onResult: (Boolean, Exception?) -> Unit) {
+    val activity = currentActivity as? FragmentActivity
+    if (activity == null) {
+      onResult(false, Exception("No activity available for biometric prompt"))
+      return
+    }
+
+    val executor = ContextCompat.getMainExecutor(reactApplicationContext)
+    val callback = object : BiometricPrompt.AuthenticationCallback() {
+      override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+        onResult(true, null)
+      }
+      override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+        onResult(false, Exception("Authentication cancelled: $errString"))
+      }
+    }
+
+    activity.runOnUiThread {
+      val prompt = BiometricPrompt(activity, executor, callback)
+      val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        .setTitle("Cashflow")
+        .setSubtitle(reason)
+        .setAllowedAuthenticators(
+          BiometricManager.Authenticators.BIOMETRIC_STRONG or
+          BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        )
+        .build()
+      prompt.authenticate(promptInfo)
     }
   }
 

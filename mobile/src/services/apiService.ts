@@ -289,7 +289,13 @@ class ApiService {
   }
 
   async registerWaitlistDeviceToken(publicKey: string, fcmToken: string): Promise<void> {
-    await this.post('/onboarding/v1/waitlist/register-device', { publicKey, fcmToken });
+    // Bypass auth — waitlist users don't have a vault yet, so auth/verify would fail
+    const res = await fetch(`${this.baseUrl}/onboarding/v1/waitlist/register-device`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey, fcmToken }),
+    });
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
   }
 
   async getNotificationHistory(params?: { limit?: number; before?: string }): Promise<{
