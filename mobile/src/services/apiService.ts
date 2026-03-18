@@ -242,6 +242,8 @@ class ApiService {
   async getSuggestions(params: {
     vaultAddress?: string;
     walletAddress?: string;
+    threshold?: number;
+    memberCount?: number;
     appVersion?: string;
     buildNumber?: string;
     osVersion?: string;

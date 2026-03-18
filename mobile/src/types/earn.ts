@@ -27,7 +27,7 @@ export interface WalletAsset {
   isVerified: boolean;
 }
 
-export type SuggestionType = 'link' | 'fund_wallet_from_seeker' | 'transfer_position';
+export type SuggestionType = 'link' | 'fund_wallet_from_seeker' | 'transfer_position' | 'add_recovery';
 
 export interface Suggestion {
   id: string;

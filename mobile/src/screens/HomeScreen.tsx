@@ -204,6 +204,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
             suggestion={suggestions[0]}
             onFundWallet={() => setFundWalletModalVisible(true)}
             onTransferPosition={() => onNavigateToTab?.('earn')}
+            onAddRecovery={() => onNavigate?.('keys-recovery')}
           />
         )}
         {suggestions.length > 1 && (
@@ -221,6 +222,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
                   compact
                   onFundWallet={() => setFundWalletModalVisible(true)}
                   onTransferPosition={() => onNavigateToTab?.('earn')}
+                  onAddRecovery={() => onNavigate?.('keys-recovery')}
                 />
               )}
             />

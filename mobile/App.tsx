@@ -18,6 +18,8 @@ import AssetsScreen from './src/screens/AssetsScreen';
 import MoreScreen from './src/screens/MoreScreen';
 import SquadsScreen from './src/screens/SquadsScreen';
 import AddMemberScreen from './src/screens/AddMemberScreen';
+import KeysRecoveryScreen from './src/screens/KeysRecoveryScreen';
+import AddRecoveryKeyScreen from './src/screens/AddRecoveryKeyScreen';
 import ChangePinScreen from './src/screens/ChangePinScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import BiometricLockScreen from './src/components/BiometricLockScreen';
@@ -43,7 +45,7 @@ import {
 
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | null;
+type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | 'keys-recovery' | 'add-recovery-key' | null;
 type OnboardingStep = 'carousel' | 'invite-code' | 'vault-setup' | 'waitlist' | null;
 
 function App() {
@@ -168,17 +170,23 @@ function App() {
   const handleBack = useCallback(() => {
     if (subScreen === 'add-member') {
       setSubScreen('squads');
-    } else if (subScreen === 'notifications') {
-      setSubScreen(null);
+    } else if (subScreen === 'add-recovery-key') {
+      setSubScreen('keys-recovery');
     } else {
       setSubScreen(null);
     }
   }, [subScreen]);
 
   const renderScreen = () => {
-    // Notifications sub-screen is accessible from any tab
+    // Sub-screens accessible from any tab
     if (subScreen === 'notifications') {
       return <NotificationsScreen onBack={handleBack} />;
+    }
+    if (subScreen === 'keys-recovery') {
+      return <KeysRecoveryScreen onNavigate={handleNavigate} onBack={handleBack} />;
+    }
+    if (subScreen === 'add-recovery-key') {
+      return <AddRecoveryKeyScreen onNavigate={handleNavigate} onBack={handleBack} />;
     }
 
     // Handle sub-screens under the More tab

@@ -328,6 +328,14 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={styles.keysRecoveryButton}
+              onPress={() => { logMoreNavigate('keys-recovery'); onNavigate?.('keys-recovery'); }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.keysRecoveryButtonText}>Keys & Recovery</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.reclaimButton}
               onPress={handleReclaimRent}
               activeOpacity={0.7}
@@ -554,6 +562,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#F95357',
+  },
+  keysRecoveryButton: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#19C394',
+  },
+  keysRecoveryButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
   },
   reclaimButton: {
     marginTop: 12,

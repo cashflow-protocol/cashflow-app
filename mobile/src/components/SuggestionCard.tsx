@@ -8,9 +8,10 @@ interface SuggestionCardProps {
   compact?: boolean;
   onFundWallet?: () => void;
   onTransferPosition?: (suggestion: Suggestion) => void;
+  onAddRecovery?: () => void;
 }
 
-export default function SuggestionCard({ suggestion, compact, onFundWallet, onTransferPosition }: SuggestionCardProps) {
+export default function SuggestionCard({ suggestion, compact, onFundWallet, onTransferPosition, onAddRecovery }: SuggestionCardProps) {
   const accent = suggestion.color;
 
   const handlePress = () => {
@@ -24,6 +25,9 @@ export default function SuggestionCard({ suggestion, compact, onFundWallet, onTr
         break;
       case 'transfer_position':
         onTransferPosition?.(suggestion);
+        break;
+      case 'add_recovery':
+        onAddRecovery?.();
         break;
     }
   };

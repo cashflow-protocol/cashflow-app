@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import apiService from '../services/apiService';
 import { getVault } from '../services/vaultStorage';
+import { getMultisigInfo } from '../services/squadsService';
 import { APP_VERSION, BUILD_NUMBER } from '../config/version';
 import type { Suggestion } from '../types/earn';
 import { logError } from '../services/analyticsService';
@@ -18,9 +19,21 @@ export function useSuggestions() {
     try {
       const vault = await getVault();
 
+      let threshold: number | undefined;
+      let memberCount: number | undefined;
+      if (vault?.multisigAddress) {
+        try {
+          const info = await getMultisigInfo(vault.multisigAddress);
+          threshold = info.threshold;
+          memberCount = info.members.length;
+        } catch {}
+      }
+
       const data = await apiService.getSuggestions({
         vaultAddress: vault?.vaultAddress,
         walletAddress: vault?.walletAddress,
+        threshold,
+        memberCount,
         appVersion: APP_VERSION,
         buildNumber: BUILD_NUMBER,
         platform: Platform.OS,

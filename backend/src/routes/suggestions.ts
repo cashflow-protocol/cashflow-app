@@ -24,6 +24,8 @@ router.post('/', async (req: Request, res: Response) => {
     const {
       vaultAddress,
       walletAddress,
+      threshold,
+      memberCount,
       appVersion,
       buildNumber,
       osVersion,
@@ -85,6 +87,18 @@ router.post('/', async (req: Request, res: Response) => {
       } catch (err) {
         console.error('Error checking balances for suggestions:', err);
       }
+    }
+
+    // --- Recovery keys suggestion ---
+    if (threshold && memberCount && threshold >= memberCount) {
+      suggestions.push({
+        id: 'add-recovery',
+        type: 'add_recovery',
+        title: 'Add recovery keys',
+        description: 'Your vault has no recovery keys. Add a recovery wallet to protect against losing access.',
+        color: '#F5A623',
+        buttonTitle: 'Set Up',
+      });
     }
 
     suggestions.push({

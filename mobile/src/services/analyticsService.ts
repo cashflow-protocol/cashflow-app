@@ -453,6 +453,24 @@ export function logAddMemberSuccess() {
   analytics().logEvent('add_member_success');
 }
 
+// ── Keys & Recovery ──
+
+export function logAddRecoveryKeyPress() {
+  analytics().logEvent('add_recovery_key_press');
+}
+
+export function logAddRecoveryKeySubmit() {
+  analytics().logEvent('add_recovery_key_submit');
+}
+
+export function logAddRecoveryKeySuccess() {
+  analytics().logEvent('add_recovery_key_success');
+}
+
+export function logAddRecoveryKeyError(error: string) {
+  analytics().logEvent('add_recovery_key_error', { error: error.slice(0, 100) });
+}
+
 // ── User Properties ──
 
 export function setUserHasVault(hasVault: boolean) {

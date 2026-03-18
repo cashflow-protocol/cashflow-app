@@ -18,7 +18,7 @@ export interface SerializedInstruction {
   data: string; // base64-encoded
 }
 
-export type SuggestionType = 'link' | 'fund_wallet_from_seeker' | 'transfer_position';
+export type SuggestionType = 'link' | 'fund_wallet_from_seeker' | 'transfer_position' | 'add_recovery';
 
 export interface Suggestion {
   id: string;
@@ -38,6 +38,8 @@ export interface Suggestion {
 export interface SuggestionsRequest {
   vaultAddress?: string;
   walletAddress?: string;
+  threshold?: number;
+  memberCount?: number;
   appVersion?: string;
   buildNumber?: string;
   osVersion?: string;
