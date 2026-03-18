@@ -73,6 +73,11 @@ export async function dispatchOnchainNotification(
     notifType = matched.type;
     metadata = { transactionId: matched.transactionId };
   } else {
+    // If this signature belongs to a known bundle but wasn't the primary match,
+    // skip it — the primary transaction already generated the notification.
+    const inBundle = await dbManager.isSignatureInBundle(tx.signature);
+    if (inBundle) return;
+
     // Fall back to parsing the Helius transaction data
     const parsed = parseTransaction(tx, vaultAddress);
     if (!parsed) return;

@@ -136,6 +136,16 @@ export class DBManager {
   }
 
   /**
+   * Check if a signature belongs to any known bundle (any status)
+   */
+  async isSignatureInBundle(signature: string): Promise<boolean> {
+    const count = await TransactionModel.countDocuments({
+      bundleSignatures: signature,
+    });
+    return count > 0;
+  }
+
+  /**
    * Get all transactions that have been submitted but not yet confirmed/failed
    */
   async getSubmittedTransactions() {
