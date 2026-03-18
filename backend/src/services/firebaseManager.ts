@@ -1,5 +1,5 @@
 import admin from 'firebase-admin';
-import { UserModel, WaitlistUserModel } from '../models';
+import { UserModel, WaitlistUserModel, DeviceTokenModel } from '../models';
 
 let initialized = false;
 
@@ -62,10 +62,7 @@ export async function sendPushNotification(
     });
 
     if (tokensToRemove.length > 0) {
-      await UserModel.updateMany(
-        { fcmTokens: { $in: tokensToRemove } },
-        { $pullAll: { fcmTokens: tokensToRemove } },
-      );
+      await DeviceTokenModel.deleteMany({ fcmToken: { $in: tokensToRemove } });
       console.log(`Removed ${tokensToRemove.length} invalid FCM tokens`);
     }
   } catch (error) {

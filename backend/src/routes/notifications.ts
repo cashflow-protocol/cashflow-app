@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { UserModel } from '../models';
+import { UserModel, DeviceTokenModel } from '../models';
 import { DBManager } from '../managers';
 
 const router = Router();
@@ -11,15 +11,27 @@ const dbManager = new DBManager();
  */
 router.post('/register-device', async (req, res) => {
   try {
-    const { fcmToken } = req.body;
+    const { fcmToken, deviceId } = req.body;
     if (!fcmToken || typeof fcmToken !== 'string') {
       res.status(400).json({ success: false, error: 'fcmToken is required' });
       return;
     }
+    if (!deviceId || typeof deviceId !== 'string') {
+      res.status(400).json({ success: false, error: 'deviceId is required' });
+      return;
+    }
 
-    await UserModel.findOneAndUpdate(
-      { vaultAddress: (req as any).user.vaultAddress },
-      { $addToSet: { fcmTokens: fcmToken } },
+    const user = await UserModel.findOne({ vaultAddress: (req as any).user.vaultAddress }).lean();
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    // Upsert: one token per device per user
+    await DeviceTokenModel.findOneAndUpdate(
+      { userId: String(user._id), deviceId },
+      { fcmToken },
+      { upsert: true },
     );
 
     res.json({ success: true });

@@ -1,5 +1,6 @@
 import messaging from '@react-native-firebase/messaging';
 import { Platform, PermissionsAndroid } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 import apiService from './apiService';
 import { logPushPermissionGranted, logPushPermissionDenied } from './analyticsService';
 
@@ -29,12 +30,14 @@ export async function initializePushNotifications(): Promise<void> {
     const fcmToken = await requestPermissionAndGetToken();
     if (!fcmToken) return;
 
-    await apiService.registerDeviceToken(fcmToken);
+    const deviceId = await DeviceInfo.getUniqueId();
+    console.log(`[FCM] Registering token: ${fcmToken.slice(0, 20)}... device: ${deviceId}`);
+    await apiService.registerDeviceToken(fcmToken, deviceId);
 
     // Listen for token refresh
     messaging().onTokenRefresh(async (newToken) => {
       try {
-        await apiService.registerDeviceToken(newToken);
+        await apiService.registerDeviceToken(newToken, deviceId);
       } catch (error) {
         console.error('FCM token refresh registration failed:', error);
       }

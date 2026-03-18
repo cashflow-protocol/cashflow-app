@@ -8,3 +8,4 @@ export { InviteCode, InviteCodeModel } from './InviteCode';
 export { WaitlistUser, WaitlistUserModel } from './WaitlistUser';
 export { WaitlistTask, WaitlistTaskModel } from './WaitlistTask';
 export { Notification, NotificationModel, NotificationType } from './Notification';
+export { DeviceToken, DeviceTokenModel } from './DeviceToken';

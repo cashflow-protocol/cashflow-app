@@ -284,8 +284,8 @@ class ApiService {
     }>('/solana/v2/send-bundle', { transactions });
     return { bundleId: res.bundleId, status: res.status };
   }
-  async registerDeviceToken(fcmToken: string): Promise<void> {
-    await this.post('/notifications/v2/register-device', { fcmToken });
+  async registerDeviceToken(fcmToken: string, deviceId: string): Promise<void> {
+    await this.post('/notifications/v2/register-device', { fcmToken, deviceId });
   }
 
   async registerWaitlistDeviceToken(publicKey: string, fcmToken: string): Promise<void> {

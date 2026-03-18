@@ -1,8 +1,13 @@
-import { UserModel, NotificationType } from '../models';
+import { UserModel, DeviceTokenModel, NotificationType } from '../models';
 import { DBManager } from '../managers';
 import { parseTransaction } from './transactionParser';
 import { sendPushNotification } from './firebaseManager';
 import type { HeliusEnhancedTransaction } from './transactionParser';
+
+async function getFcmTokensForUser(userId: string): Promise<string[]> {
+  const devices = await DeviceTokenModel.find({ userId }).select('fcmToken').lean();
+  return devices.map((d) => d.fcmToken);
+}
 
 const dbManager = new DBManager();
 
@@ -34,9 +39,10 @@ export async function dispatchOnchainNotification(
 
   console.log(`📨 ${parsed.title} (${vaultAddress.slice(0, 8)}...)`);
 
-  if (user.fcmTokens?.length) {
+  const fcmTokens = await getFcmTokensForUser(String(user._id));
+  if (fcmTokens.length) {
     await sendPushNotification(
-      user.fcmTokens,
+      fcmTokens,
       parsed.title,
       parsed.body || '',
       { type: parsed.type, vaultAddress, txSignature: parsed.txSignature },
@@ -61,9 +67,10 @@ export async function dispatchSystemNotification(
     type,
   });
 
-  if (user.fcmTokens?.length) {
+  const fcmTokens = await getFcmTokensForUser(String(user._id));
+  if (fcmTokens.length) {
     await sendPushNotification(
-      user.fcmTokens,
+      fcmTokens,
       title,
       body || '',
       { type, vaultAddress },

@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, NotificationType } from '../models';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType } from '../models';
 import { dispatchSystemNotification } from '../services/notificationService';
 
 const router = Router();
@@ -442,6 +442,11 @@ router.get('/users', async (req, res) => {
       UserModel.countDocuments(filter),
     ]);
 
+    // Check which users have device tokens registered
+    const userIds = users.map((u) => String(u._id));
+    const tokensWithUsers = await DeviceTokenModel.distinct('userId', { userId: { $in: userIds } });
+    const usersWithPush = new Set(tokensWithUsers.map(String));
+
     res.json({
       success: true,
       users: users.map((u) => ({
@@ -450,7 +455,7 @@ router.get('/users', async (req, res) => {
         publicKey: u.publicKey,
         lastSeenAt: u.lastSeenAt,
         inviteCode: u.inviteCode || null,
-        hasPush: (u.fcmTokens?.length ?? 0) > 0,
+        hasPush: usersWithPush.has(String(u._id)),
         createdAt: (u as any).createdAt,
       })),
       total,
