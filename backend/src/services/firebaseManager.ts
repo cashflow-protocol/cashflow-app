@@ -37,15 +37,18 @@ export async function sendPushNotification(
       apns: { payload: { aps: { sound: 'default', badge: 1 } } },
     };
 
+    console.log(`📱 Sending to ${fcmTokens.length} token(s), first token prefix: ${fcmTokens[0]?.slice(0, 20)}...`);
     const response = await admin.messaging().sendEachForMulticast(message);
     const succeeded = response.responses.filter((r) => r.success).length;
     const failed = response.responses.filter((r) => !r.success).length;
     if (failed > 0) {
-      const errors = response.responses
-        .filter((r) => r.error)
-        .map((r) => r.error!.code)
-        .join(', ');
-      console.warn(`📱 Push: ${succeeded} ok, ${failed} failed (${errors})`);
+      response.responses.forEach((resp, idx) => {
+        if (resp.error) {
+          console.warn(`📱 Push failed [${idx}]: ${resp.error.code} - ${resp.error.message}`);
+        }
+      });
+    } else {
+      console.log(`📱 Push: ${succeeded} ok`);
     }
 
     // Remove invalid tokens
