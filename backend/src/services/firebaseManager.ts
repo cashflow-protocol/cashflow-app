@@ -12,7 +12,10 @@ export function initializeFirebase(): void {
 
   try {
     const serviceAccount = JSON.parse(Buffer.from(key, 'base64').toString());
-    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      projectId: serviceAccount.project_id,
+    });
     initialized = true;
     console.log(`✅ Firebase Admin initialized (project: ${serviceAccount.project_id}, client_email: ${serviceAccount.client_email})`);
   } catch (error) {
@@ -38,6 +41,12 @@ export async function sendPushNotification(
     };
 
     console.log(`📱 Sending to ${fcmTokens.length} token(s), first token prefix: ${fcmTokens[0]?.slice(0, 20)}...`);
+
+    // Debug: log the project ID being used
+    const app = admin.app();
+    const projectId = app.options.projectId || app.options.credential?.projectId;
+    console.log(`📱 Using project: ${projectId}`);
+
     const response = await admin.messaging().sendEachForMulticast(message);
     const succeeded = response.responses.filter((r) => r.success).length;
     const failed = response.responses.filter((r) => !r.success).length;
