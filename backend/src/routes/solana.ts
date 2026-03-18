@@ -413,8 +413,8 @@ router.get('/wallet-balance', async (req: Request, res: Response) => {
 // GET /solana/v1/empty-token-accounts - Count empty (zero-balance) token accounts on a wallet
 router.get('/empty-token-accounts', async (req: Request, res: Response) => {
   try {
-    const { walletAddress } = req.query;
-    if (!walletAddress || typeof walletAddress !== 'string') {
+    const walletAddress = typeof req.query.walletAddress === 'string' ? req.query.walletAddress.trim() : '';
+    if (!walletAddress) {
       res.status(400).json({ success: false, error: 'walletAddress query param is required' });
       return;
     }
