@@ -421,7 +421,7 @@ router.get('/empty-token-accounts', async (req: Request, res: Response) => {
 
     const accounts = await rpc.getTokenAccountsByOwner(
       address(walletAddress),
-      { programId: address('TokenkegQfeN4jG6CKiR2inLta7dTGqqmqiaBZabp7pN') },
+      { programId: address('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') },
       { encoding: 'jsonParsed' },
     ).send();
 
