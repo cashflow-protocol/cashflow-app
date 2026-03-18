@@ -56,46 +56,45 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <div className="top-bar">
-        <h1>Cashflow Admin</h1>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <div className="nav">
-            <button
-              className={page === 'invite-codes' ? 'active' : ''}
-              onClick={() => setPage('invite-codes')}
-            >
-              Invite Codes
-            </button>
-            <button
-              className={page === 'waitlist-users' ? 'active' : ''}
-              onClick={() => setPage('waitlist-users')}
-            >
-              Waitlist Users
-            </button>
-            <button
-              className={page === 'waitlist-tasks' ? 'active' : ''}
-              onClick={() => setPage('waitlist-tasks')}
-            >
-              Tasks
-            </button>
-            <button
-              className={page === 'users' ? 'active' : ''}
-              onClick={() => setPage('users')}
-            >
-              Users
-            </button>
-          </div>
+    <div className="app-layout">
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <h1>Cashflow</h1>
+          <span className="sidebar-subtitle">Admin</span>
+        </div>
+
+        <nav className="sidebar-nav">
           <button
+            className={page === 'invite-codes' ? 'active' : ''}
+            onClick={() => setPage('invite-codes')}
+          >
+            Invite Codes
+          </button>
+          <button
+            className={page === 'waitlist-users' ? 'active' : ''}
+            onClick={() => setPage('waitlist-users')}
+          >
+            Waitlist Users
+          </button>
+          <button
+            className={page === 'waitlist-tasks' ? 'active' : ''}
+            onClick={() => setPage('waitlist-tasks')}
+          >
+            Tasks
+          </button>
+          <button
+            className={page === 'users' ? 'active' : ''}
+            onClick={() => setPage('users')}
+          >
+            Users
+          </button>
+        </nav>
+
+        <div className="sidebar-footer">
+          <button
+            className="env-badge"
             onClick={handleEnvToggle}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 6,
-              fontSize: 12,
-              fontWeight: 700,
-              background: env === 'prod' ? '#e53e3e' : '#3985D8',
-              color: '#fff',
-            }}
+            data-env={env}
           >
             {env.toUpperCase()}
           </button>
@@ -106,12 +105,14 @@ export default function App() {
             Logout
           </button>
         </div>
-      </div>
+      </aside>
 
-      {page === 'invite-codes' && <InviteCodesPage />}
-      {page === 'waitlist-users' && <WaitlistUsersPage />}
-      {page === 'waitlist-tasks' && <WaitlistTasksPage />}
-      {page === 'users' && <UsersPage />}
+      <main className="main-content">
+        {page === 'invite-codes' && <InviteCodesPage />}
+        {page === 'waitlist-users' && <WaitlistUsersPage />}
+        {page === 'waitlist-tasks' && <WaitlistTasksPage />}
+        {page === 'users' && <UsersPage />}
+      </main>
     </div>
   );
 }

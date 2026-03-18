@@ -11,7 +11,16 @@ export async function dispatchOnchainNotification(
   tx: HeliusEnhancedTransaction,
 ): Promise<void> {
   const parsed = parseTransaction(tx, vaultAddress);
-  if (!parsed) return;
+  if (!parsed) {
+    console.log(`⚠️ parseTransaction returned null for ${tx.signature?.slice(0, 8)}... vault=${vaultAddress.slice(0, 8)}...`);
+    console.log(`   type=${tx.type} source=${tx.source} tokenTransfers=${tx.tokenTransfers?.length ?? 'undefined'} nativeTransfers=${tx.nativeTransfers?.length ?? 'undefined'}`);
+    if (tx.nativeTransfers?.length) {
+      for (const nt of tx.nativeTransfers) {
+        console.log(`   native: ${nt.fromUserAccount?.slice(0, 8)}... → ${nt.toUserAccount?.slice(0, 8)}... amount=${nt.amount}`);
+      }
+    }
+    return;
+  }
 
   const user = await UserModel.findOne({ vaultAddress }).lean();
   if (!user) return;
