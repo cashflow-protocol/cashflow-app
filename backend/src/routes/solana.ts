@@ -599,9 +599,7 @@ router.get('/sol-price', (_req: Request, res: Response) => {
   res.json({ success: true, data: { price } });
 });
 
-// POST /solana/v1/resolve-domains - Resolve Solana wallet addresses to domain names via Helius
-const heliusApiKey = process.env.HELIUS_API_KEY;
-
+// POST /solana/v1/resolve-domains - Resolve Solana wallet addresses to domain names via AllDomains
 router.post('/resolve-domains', async (req: Request, res: Response) => {
   try {
     const { addresses } = req.body;
@@ -609,22 +607,20 @@ router.post('/resolve-domains', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'addresses array required' });
     }
 
-    if (!heliusApiKey) {
-      return res.json({ success: true, data: {} });
-    }
+    // Lazy-import to avoid top-level @solana/web3.js Connection
+    const { TldParser } = await import('@onsol/tldparser');
+    const { Connection, PublicKey } = await import('@solana/web3.js');
+    const conn = new Connection(rpcUrl);
+    const parser = new TldParser(conn);
 
     const domains: Record<string, string> = {};
 
     await Promise.all(
       addresses.slice(0, 10).map(async (addr: string) => {
         try {
-          const resp = await fetch(
-            `https://api.helius.xyz/v0/addresses/${addr}/names?api-key=${heliusApiKey}`,
-          );
-          if (!resp.ok) return;
-          const data = await resp.json() as { domainNames?: string[] };
-          if (data.domainNames && data.domainNames.length > 0) {
-            domains[addr] = data.domainNames[0];
+          const result = await parser.getMainDomain(new PublicKey(addr));
+          if (result?.domain) {
+            domains[addr] = result.domain;
           }
         } catch {}
       }),
