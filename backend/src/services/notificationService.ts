@@ -11,24 +11,10 @@ export async function dispatchOnchainNotification(
   tx: HeliusEnhancedTransaction,
 ): Promise<void> {
   const parsed = parseTransaction(tx, vaultAddress);
-  if (!parsed) {
-    console.log(`⚠️ parseTransaction returned null for ${tx.signature?.slice(0, 8)}... vault=${vaultAddress.slice(0, 8)}...`);
-    console.log(`   type=${tx.type} source=${tx.source} tokenTransfers=${tx.tokenTransfers?.length ?? 'undefined'} nativeTransfers=${tx.nativeTransfers?.length ?? 'undefined'}`);
-    if (tx.nativeTransfers?.length) {
-      for (const nt of tx.nativeTransfers) {
-        console.log(`   native: ${nt.fromUserAccount?.slice(0, 8)}... → ${nt.toUserAccount?.slice(0, 8)}... amount=${nt.amount}`);
-      }
-    }
-    return;
-  }
-
-  console.log(`✅ Parsed: "${parsed.title}" (${parsed.type}) for ${vaultAddress.slice(0, 8)}...`);
+  if (!parsed) return;
 
   const user = await UserModel.findOne({ vaultAddress }).lean();
-  if (!user) {
-    console.log(`⚠️ No user found for vault ${vaultAddress.slice(0, 8)}...`);
-    return;
-  }
+  if (!user) return;
 
   try {
     await dbManager.createNotification({
@@ -40,26 +26,21 @@ export async function dispatchOnchainNotification(
       txSignature: parsed.txSignature,
       metadata: parsed.metadata,
     });
-    console.log(`💾 Notification saved for ${tx.signature?.slice(0, 8)}...`);
   } catch (error: any) {
     // Duplicate txSignature — already notified
-    if (error?.code === 11000) {
-      console.log(`⏭️ Duplicate tx ${tx.signature?.slice(0, 8)}..., skipping`);
-      return;
-    }
+    if (error?.code === 11000) return;
     throw error;
   }
 
+  console.log(`📨 ${parsed.title} (${vaultAddress.slice(0, 8)}...)`);
+
   if (user.fcmTokens?.length) {
-    console.log(`📱 Sending push to ${user.fcmTokens.length} device(s) for "${parsed.title}"`);
     await sendPushNotification(
       user.fcmTokens,
       parsed.title,
       parsed.body || '',
       { type: parsed.type, vaultAddress, txSignature: parsed.txSignature },
     );
-  } else {
-    console.log(`⚠️ No FCM tokens for user ${vaultAddress.slice(0, 8)}..., skipping push`);
   }
 }
 

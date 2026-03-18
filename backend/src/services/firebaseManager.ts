@@ -38,6 +38,15 @@ export async function sendPushNotification(
     };
 
     const response = await admin.messaging().sendEachForMulticast(message);
+    const succeeded = response.responses.filter((r) => r.success).length;
+    const failed = response.responses.filter((r) => !r.success).length;
+    if (failed > 0) {
+      const errors = response.responses
+        .filter((r) => r.error)
+        .map((r) => r.error!.code)
+        .join(', ');
+      console.warn(`📱 Push: ${succeeded} ok, ${failed} failed (${errors})`);
+    }
 
     // Remove invalid tokens
     const tokensToRemove: string[] = [];

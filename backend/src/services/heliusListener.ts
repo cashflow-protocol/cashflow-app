@@ -177,18 +177,11 @@ async function fetchAndDispatchTransactions(vaultAddress: string): Promise<void>
     .filter((s: any) => !s.err)
     .map((s: any) => s.signature);
 
-  console.log(`📋 ${vaultAddress.slice(0, 8)}...: ${signatures.length} recent sigs, ${recentSignatures.size} already processed`);
-
   if (signatures.length === 0) return;
 
   // Filter out already-processed signatures
   const newSignatures = signatures.filter((sig) => !recentSignatures.has(sig));
-  if (newSignatures.length === 0) {
-    console.log(`📋 ${vaultAddress.slice(0, 8)}...: all signatures already processed`);
-    return;
-  }
-
-  console.log(`📋 ${vaultAddress.slice(0, 8)}...: fetching ${newSignatures.length} new tx(s) from Helius`);
+  if (newSignatures.length === 0) return;
 
   // Step 2: Fetch enhanced transaction details from Helius
   const txResponse = await fetch(
@@ -209,12 +202,7 @@ async function fetchAndDispatchTransactions(vaultAddress: string): Promise<void>
 
   const enhancedTxs = await txResponse.json() as HeliusEnhancedTransaction[];
 
-  if (!Array.isArray(enhancedTxs)) {
-    console.error('❌ Helius enhanced API returned non-array:', typeof enhancedTxs);
-    return;
-  }
-
-  console.log(`📋 ${vaultAddress.slice(0, 8)}...: got ${enhancedTxs.length} enhanced tx(s)`);
+  if (!Array.isArray(enhancedTxs)) return;
 
   // Mark as processed and dispatch
   for (const tx of enhancedTxs) {
@@ -227,9 +215,6 @@ async function fetchAndDispatchTransactions(vaultAddress: string): Promise<void>
       if (first) recentSignatures.delete(first);
     }
 
-    console.log(`📨 Dispatching notification for ${tx.signature.slice(0, 8)}... (type=${tx.type}, source=${tx.source})`);
-    console.log(`   nativeTransfers=${JSON.stringify(tx.nativeTransfers?.slice(0, 3))}`);
-    console.log(`   tokenTransfers=${JSON.stringify(tx.tokenTransfers?.slice(0, 3))}`);
     dispatchOnchainNotification(vaultAddress, tx).catch((error) => {
       console.error('Notification dispatch error:', error);
     });
