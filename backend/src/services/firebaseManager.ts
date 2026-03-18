@@ -42,11 +42,6 @@ export async function sendPushNotification(
 
     console.log(`📱 Sending to ${fcmTokens.length} token(s), first token prefix: ${fcmTokens[0]?.slice(0, 20)}...`);
 
-    // Debug: log the project ID being used
-    const app = admin.app();
-    const projectId = app.options.projectId || app.options.credential?.projectId;
-    console.log(`📱 Using project: ${projectId}`);
-
     const response = await admin.messaging().sendEachForMulticast(message);
     const succeeded = response.responses.filter((r) => r.success).length;
     const failed = response.responses.filter((r) => !r.success).length;

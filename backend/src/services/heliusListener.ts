@@ -97,14 +97,15 @@ function sendSubscribeMessage(vaultAddress: string): void {
   const requestId = nextRequestId++;
   pendingSubscriptions.set(requestId, vaultAddress);
 
-  // Use standard accountSubscribe — available on all Helius plans
+  // Use logsSubscribe with "mentions" filter — fires for ANY transaction
+  // that includes this address in its account list (SOL + SPL tokens)
   ws.send(JSON.stringify({
     jsonrpc: '2.0',
     id: requestId,
-    method: 'accountSubscribe',
+    method: 'logsSubscribe',
     params: [
-      vaultAddress,
-      { encoding: 'jsonParsed', commitment: 'confirmed' },
+      { mentions: [vaultAddress] },
+      { commitment: 'confirmed' },
     ],
   }));
 }
@@ -129,94 +130,66 @@ function handleMessage(message: any): void {
     return;
   }
 
-  // Handle account change notification
-  if (message.method === 'accountNotification' && message.params) {
+  // Handle log notification (fires for any tx mentioning the vault address)
+  if (message.method === 'logsNotification' && message.params) {
     const subscriptionId = message.params.subscription;
     const vaultAddress = subscriptionToVault.get(subscriptionId);
     if (!vaultAddress) return;
 
-    console.log(`🔔 Account change detected for ${vaultAddress.slice(0, 8)}...`);
+    // Skip failed transactions
+    const err = message.params.result?.value?.err;
+    if (err) return;
 
-    // Account changed — fetch recent transactions via Helius enhanced API
-    fetchAndDispatchTransactions(vaultAddress).catch((error) => {
+    const signature = message.params.result?.value?.signature;
+    if (!signature || recentSignatures.has(signature)) return;
+
+    console.log(`🔔 Transaction detected for ${vaultAddress.slice(0, 8)}... (${signature.slice(0, 8)}...)`);
+
+    // Fetch enhanced transaction details and dispatch notification
+    fetchAndDispatchTransaction(vaultAddress, signature).catch((error) => {
       console.error('Transaction fetch/dispatch error:', error);
     });
   }
 }
 
 /**
- * Fetch recent transactions for a vault address using the Helius enhanced
- * transactions API, then dispatch notifications for any new ones.
+ * Fetch a single transaction by signature using the Helius enhanced
+ * transactions API, then dispatch a notification.
  */
-async function fetchAndDispatchTransactions(vaultAddress: string): Promise<void> {
+async function fetchAndDispatchTransaction(vaultAddress: string, signature: string): Promise<void> {
   if (!apiKey) return;
+
+  // Mark as processed immediately to avoid duplicates from rapid notifications
+  recentSignatures.add(signature);
+  if (recentSignatures.size > MAX_RECENT_SIGNATURES) {
+    const first = recentSignatures.values().next().value;
+    if (first) recentSignatures.delete(first);
+  }
 
   // Small delay to let the transaction finalize on RPC
   await new Promise((r) => setTimeout(r, 1500));
 
-  // Step 1: Get recent transaction signatures for this account
-  const sigResponse = await fetch(
-    `https://mainnet.helius-rpc.com/?api-key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getSignaturesForAddress',
-        params: [vaultAddress, { limit: 3, commitment: 'confirmed' }],
-      }),
-    },
-  );
-  const sigData = await sigResponse.json() as any;
-  if (sigData.error) {
-    console.error(`❌ getSignaturesForAddress error for ${vaultAddress.slice(0, 8)}...:`, sigData.error);
-    return;
-  }
-  const signatures: string[] = (sigData.result || [])
-    .filter((s: any) => !s.err)
-    .map((s: any) => s.signature);
-
-  if (signatures.length === 0) return;
-
-  // Filter out already-processed signatures
-  const newSignatures = signatures.filter((sig) => !recentSignatures.has(sig));
-  if (newSignatures.length === 0) return;
-
-  // Step 2: Fetch enhanced transaction details from Helius
   const txResponse = await fetch(
     `https://api.helius.xyz/v0/transactions?api-key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transactions: newSignatures }),
+      body: JSON.stringify({ transactions: [signature] }),
     },
   );
 
   if (!txResponse.ok) {
     console.error(`❌ Helius enhanced API error: ${txResponse.status} ${txResponse.statusText}`);
-    const body = await txResponse.text().catch(() => '');
-    if (body) console.error(`   Response: ${body.slice(0, 200)}`);
     return;
   }
 
   const enhancedTxs = await txResponse.json() as HeliusEnhancedTransaction[];
+  if (!Array.isArray(enhancedTxs) || enhancedTxs.length === 0) return;
 
-  if (!Array.isArray(enhancedTxs)) return;
+  const tx = enhancedTxs[0];
+  if (!tx?.signature) return;
 
-  // Mark as processed and dispatch
-  for (const tx of enhancedTxs) {
-    if (!tx?.signature) continue;
-
-    recentSignatures.add(tx.signature);
-    // Evict old entries to prevent memory growth
-    if (recentSignatures.size > MAX_RECENT_SIGNATURES) {
-      const first = recentSignatures.values().next().value;
-      if (first) recentSignatures.delete(first);
-    }
-
-    dispatchOnchainNotification(vaultAddress, tx).catch((error) => {
-      console.error('Notification dispatch error:', error);
-    });
-  }
+  dispatchOnchainNotification(vaultAddress, tx).catch((error: any) => {
+    console.error('Notification dispatch error:', error);
+  });
 }
