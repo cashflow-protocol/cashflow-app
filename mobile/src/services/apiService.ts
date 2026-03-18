@@ -326,6 +326,14 @@ class ApiService {
     const res = await this.get<{ success: boolean; count: number }>('/notifications/v2/unread-count');
     return res.count;
   }
+
+  async resolveDomains(addresses: string[]): Promise<Record<string, string>> {
+    const res = await this.post<{ success: boolean; data: Record<string, string> }>(
+      '/solana/v2/resolve-domains',
+      { addresses },
+    );
+    return res.data;
+  }
 }
 
 export default new ApiService();

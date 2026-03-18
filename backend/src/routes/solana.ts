@@ -599,4 +599,42 @@ router.get('/sol-price', (_req: Request, res: Response) => {
   res.json({ success: true, data: { price } });
 });
 
+// POST /solana/v1/resolve-domains - Resolve Solana wallet addresses to domain names via Helius
+const heliusApiKey = process.env.HELIUS_API_KEY;
+
+router.post('/resolve-domains', async (req: Request, res: Response) => {
+  try {
+    const { addresses } = req.body;
+    if (!Array.isArray(addresses) || addresses.length === 0) {
+      return res.status(400).json({ success: false, error: 'addresses array required' });
+    }
+
+    if (!heliusApiKey) {
+      return res.json({ success: true, data: {} });
+    }
+
+    const domains: Record<string, string> = {};
+
+    await Promise.all(
+      addresses.slice(0, 10).map(async (addr: string) => {
+        try {
+          const resp = await fetch(
+            `https://api.helius.xyz/v0/addresses/${addr}/names?api-key=${heliusApiKey}`,
+          );
+          if (!resp.ok) return;
+          const data = await resp.json() as { domainNames?: string[] };
+          if (data.domainNames && data.domainNames.length > 0) {
+            domains[addr] = data.domainNames[0];
+          }
+        } catch {}
+      }),
+    );
+
+    res.json({ success: true, data: domains });
+  } catch (error) {
+    console.error('Error resolving domains:', error);
+    res.status(500).json({ success: false, error: 'Failed to resolve domains' });
+  }
+});
+
 export default router;

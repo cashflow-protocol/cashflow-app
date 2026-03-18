@@ -13,6 +13,7 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { getMultisigInfo, type MultisigInfo } from '../services/squadsService';
 import { getCloudPublicKey, getDevicePublicKey } from '../services/keypairStorage';
 import { getVault } from '../services/vaultStorage';
+import apiService from '../services/apiService';
 import { logScreenView } from '../services/analyticsService';
 
 interface KeysRecoveryScreenProps {
@@ -74,6 +75,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
   const [devicePubkey, setDevicePubkey] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [domainMap, setDomainMap] = useState<Record<string, string>>({});
 
   useEffect(() => { logScreenView('KeysRecoveryScreen'); }, []);
 
@@ -93,6 +95,9 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
         if (vault?.multisigAddress) {
           const info = await getMultisigInfo(vault.multisigAddress);
           setMultisigInfo(info);
+
+          // Fetch .skr domains for all members
+          fetchDomains(info.members.map(m => m.address));
         }
       } catch (err) {
         console.error('Failed to load multisig info:', err);
@@ -101,6 +106,17 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       }
     })();
   }, []);
+
+  const fetchDomains = async (addresses: string[]) => {
+    try {
+      const domains = await apiService.resolveDomains(addresses);
+      if (Object.keys(domains).length > 0) {
+        setDomainMap(domains);
+      }
+    } catch {
+      // Domain resolution is best-effort
+    }
+  };
 
   const copyAddress = (addr: string, field: string) => {
     Clipboard.setString(addr);
@@ -159,6 +175,9 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
                   >
                     <View style={styles.memberLeft}>
                       <Text style={styles.memberLabel}>{m.label}</Text>
+                      {domainMap[m.address] ? (
+                        <Text style={styles.memberDomain}>{domainMap[m.address]}</Text>
+                      ) : null}
                       <Text style={styles.memberAddress}>
                         {truncateAddress(m.address)}
                         {copiedField === m.address ? '  Copied!' : ''}
@@ -192,6 +211,9 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
                     >
                       <View style={styles.memberLeft}>
                         <Text style={styles.memberLabel}>Recovery</Text>
+                        {domainMap[m.address] ? (
+                          <Text style={styles.memberDomain}>{domainMap[m.address]}</Text>
+                        ) : null}
                         <Text style={styles.memberAddress}>
                           {truncateAddress(m.address)}
                           {copiedField === m.address ? '  Copied!' : ''}
@@ -313,6 +335,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1A1A1A',
     marginBottom: 2,
+  },
+  memberDomain: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#19C394',
+    marginBottom: 1,
   },
   memberAddress: {
     fontSize: 12,
