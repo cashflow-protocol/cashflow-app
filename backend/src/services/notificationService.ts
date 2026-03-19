@@ -1,7 +1,7 @@
 import { UserModel, DeviceTokenModel, NotificationType, TransactionStatus } from '../models';
 import { DBManager } from '../managers';
 import { parseTransaction } from './transactionParser';
-import { sendPushNotification } from './firebaseManager';
+import { sendPushNotification, writeNotificationToRTDB } from './firebaseManager';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants/tokens';
 import type { HeliusEnhancedTransaction } from './transactionParser';
 
@@ -87,8 +87,9 @@ export async function dispatchOnchainNotification(
     metadata = parsed.metadata;
   }
 
+  let notificationDoc;
   try {
-    await dbManager.createNotification({
+    notificationDoc = await dbManager.createNotification({
       userId: String(user._id),
       vaultAddress,
       title,
@@ -105,15 +106,15 @@ export async function dispatchOnchainNotification(
 
   console.log(`📨 ${title} (${vaultAddress.slice(0, 8)}...)`);
 
-  const fcmTokens = await getFcmTokensForUser(String(user._id));
-  if (fcmTokens.length) {
-    await sendPushNotification(
-      fcmTokens,
-      title,
-      body || '',
-      { type: notifType, vaultAddress, txSignature: tx.signature },
-    );
-  }
+  const userId = String(user._id);
+  const fcmTokens = await getFcmTokensForUser(userId);
+
+  await Promise.all([
+    writeNotificationToRTDB(userId, String(notificationDoc._id), { title, body, type: notifType }),
+    fcmTokens.length
+      ? sendPushNotification(fcmTokens, title, body || '', { type: notifType, vaultAddress, txSignature: tx.signature })
+      : Promise.resolve(),
+  ]);
 }
 
 export async function dispatchSystemNotification(
@@ -125,7 +126,7 @@ export async function dispatchSystemNotification(
   const user = await UserModel.findOne({ vaultAddress }).lean();
   if (!user) return;
 
-  await dbManager.createNotification({
+  const notificationDoc = await dbManager.createNotification({
     userId: String(user._id),
     vaultAddress,
     title,
@@ -133,13 +134,13 @@ export async function dispatchSystemNotification(
     type,
   });
 
-  const fcmTokens = await getFcmTokensForUser(String(user._id));
-  if (fcmTokens.length) {
-    await sendPushNotification(
-      fcmTokens,
-      title,
-      body || '',
-      { type, vaultAddress },
-    );
-  }
+  const userId = String(user._id);
+  const fcmTokens = await getFcmTokensForUser(userId);
+
+  await Promise.all([
+    writeNotificationToRTDB(userId, String(notificationDoc._id), { title, body, type }),
+    fcmTokens.length
+      ? sendPushNotification(fcmTokens, title, body || '', { type, vaultAddress })
+      : Promise.resolve(),
+  ]);
 }

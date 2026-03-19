@@ -2,6 +2,7 @@ import admin from 'firebase-admin';
 import { UserModel, WaitlistUserModel, DeviceTokenModel } from '../models';
 
 let initialized = false;
+let rtdbEnabled = false;
 
 export function initializeFirebase(): void {
   const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
@@ -12,14 +13,73 @@ export function initializeFirebase(): void {
 
   try {
     const serviceAccount = JSON.parse(Buffer.from(key, 'base64').toString());
+    const databaseURL = process.env.FIREBASE_DATABASE_URL;
+
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       projectId: serviceAccount.project_id,
+      ...(databaseURL ? { databaseURL } : {}),
     });
     initialized = true;
-    console.log(`✅ Firebase Admin initialized (project: ${serviceAccount.project_id}, client_email: ${serviceAccount.client_email})`);
+    rtdbEnabled = !!databaseURL;
+    console.log(`✅ Firebase Admin initialized (project: ${serviceAccount.project_id}, rtdb: ${rtdbEnabled ? 'enabled' : 'disabled'})`);
   } catch (error) {
     console.error('❌ Firebase initialization failed:', error);
+  }
+}
+
+export async function writeNotificationToRTDB(
+  userId: string,
+  notificationId: string,
+  data: { title: string; body?: string; type: string },
+): Promise<void> {
+  if (!rtdbEnabled) return;
+
+  try {
+    await admin.database().ref(`/notifications/${userId}/${notificationId}`).set({
+      title: data.title,
+      body: data.body || '',
+      type: data.type,
+      createdAt: Date.now(),
+    });
+  } catch (error) {
+    console.error('RTDB write error:', error);
+  }
+}
+
+export async function generateFirebaseToken(userId: string): Promise<string> {
+  return admin.auth().createCustomToken(userId);
+}
+
+export async function cleanupExpiredRTDBNotifications(maxAgeMs: number): Promise<void> {
+  if (!rtdbEnabled) return;
+
+  try {
+    const ref = admin.database().ref('/notifications');
+    const snapshot = await ref.once('value');
+    if (!snapshot.exists()) return;
+
+    const now = Date.now();
+    const updates: Record<string, null> = {};
+
+    snapshot.forEach((userSnap) => {
+      userSnap.forEach((notifSnap) => {
+        const createdAt = notifSnap.val()?.createdAt;
+        if (createdAt && now - createdAt > maxAgeMs) {
+          updates[`${userSnap.key}/${notifSnap.key}`] = null;
+        }
+        return false;
+      });
+      return false;
+    });
+
+    const count = Object.keys(updates).length;
+    if (count > 0) {
+      await ref.update(updates);
+      console.log(`🧹 RTDB cleanup: removed ${count} expired notifications`);
+    }
+  } catch (error) {
+    console.error('RTDB cleanup error:', error);
   }
 }
 

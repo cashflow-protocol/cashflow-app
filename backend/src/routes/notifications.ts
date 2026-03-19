@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { UserModel, DeviceTokenModel } from '../models';
 import { DBManager } from '../managers';
+import { generateFirebaseToken } from '../services/firebaseManager';
 
 const router = Router();
 const dbManager = new DBManager();
@@ -96,6 +97,28 @@ router.get('/unread-count', async (req, res) => {
   } catch (error) {
     console.error('Unread count error:', error);
     res.status(500).json({ success: false, error: 'Failed to get unread count' });
+  }
+});
+
+/**
+ * POST /firebase-token
+ * Generate a Firebase custom token for RTDB authentication.
+ */
+router.post('/firebase-token', async (req, res) => {
+  try {
+    const vaultAddress = (req as any).user.vaultAddress;
+    const user = await UserModel.findOne({ vaultAddress }).lean();
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    const userId = String(user._id);
+    const firebaseToken = await generateFirebaseToken(userId);
+    res.json({ success: true, firebaseToken, userId });
+  } catch (error) {
+    console.error('Firebase token error:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate Firebase token' });
   }
 });
 

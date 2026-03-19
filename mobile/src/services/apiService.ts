@@ -327,6 +327,14 @@ class ApiService {
     return res.count;
   }
 
+  async getFirebaseToken(): Promise<{ firebaseToken: string; userId: string }> {
+    const res = await this.post<{ success: boolean; firebaseToken: string; userId: string }>(
+      '/notifications/v2/firebase-token',
+      {},
+    );
+    return { firebaseToken: res.firebaseToken, userId: res.userId };
+  }
+
   async resolveDomains(addresses: string[]): Promise<Record<string, string>> {
     const res = await this.post<{ success: boolean; data: Record<string, string> }>(
       '/solana/v2/resolve-domains',

@@ -30,6 +30,7 @@ import { migrateKeypairsToBiometric, getCloudPublicKey } from './src/services/ke
 import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
 import { initializePushNotifications, initializeWaitlistPushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
+import { initializeRealtimeNotifications, stopRealtimeNotifications } from './src/services/realtimeNotificationService';
 import Toast from './src/components/Toast';
 import { invalidateAssets } from './src/hooks/useAssets';
 import { invalidateEarnTokens } from './src/hooks/useEarnTokens';
@@ -59,6 +60,7 @@ function App() {
   const [inviteCodeFrom, setInviteCodeFrom] = useState<'carousel' | 'waitlist'>('carousel');
   const [inviteCode, setInviteCode] = useState('');
   const backgroundedAt = useRef<number | null>(null);
+  const recentNotifs = useRef(new Set<string>());
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastDescription, setToastDescription] = useState('');
@@ -109,26 +111,44 @@ function App() {
     })();
   }, []);
 
+  const handleIncomingNotification = useCallback((title: string, body: string, data?: Record<string, string>) => {
+    // Deduplicate — same title+type within 5 seconds means duplicate delivery (FCM + RTDB)
+    const dedupeKey = `${title}:${data?.type || ''}`;
+    if (recentNotifs.current.has(dedupeKey)) return;
+    recentNotifs.current.add(dedupeKey);
+    setTimeout(() => recentNotifs.current.delete(dedupeKey), 5000);
+
+    logPushNotificationReceived(title);
+    setToastMessage(title);
+    setToastDescription(body);
+    setToastVisible(true);
+
+    const type = data?.type;
+    if (type === 'transfer_in' || type === 'transfer_out') {
+      invalidateAssets();
+    } else if (type === 'deposit' || type === 'withdraw') {
+      invalidateAssets();
+      invalidateEarnTokens();
+    }
+  }, []);
+
   // Set up foreground push notification handler
   useEffect(() => {
     if (checkingVault) return;
     const unsubscribe = setupForegroundHandler((title, body, data) => {
-      logPushNotificationReceived(title);
-      setToastMessage(title);
-      setToastDescription(body);
-      setToastVisible(true);
-
-      // Refresh relevant data based on notification type
-      const type = data?.type;
-      if (type === 'transfer_in' || type === 'transfer_out') {
-        invalidateAssets();
-      } else if (type === 'deposit' || type === 'withdraw') {
-        invalidateAssets();
-        invalidateEarnTokens();
-      }
+      handleIncomingNotification(title, body, data);
     });
     return unsubscribe;
-  }, [checkingVault]);
+  }, [checkingVault, handleIncomingNotification]);
+
+  // Set up Firebase RTDB realtime notification listener
+  useEffect(() => {
+    if (!onboardingDone || locked) return;
+    initializeRealtimeNotifications((title, body, data) => {
+      handleIncomingNotification(title, body, data);
+    });
+    return () => stopRealtimeNotifications();
+  }, [onboardingDone, locked, handleIncomingNotification]);
 
   // Lock app when returning from background after timeout
   useEffect(() => {

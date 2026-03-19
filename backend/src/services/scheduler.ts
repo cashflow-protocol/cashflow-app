@@ -6,7 +6,7 @@ import { JupiterManager, KaminoManager, DriftManager, DBManager, PriceManager, T
 import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from '../models';
 import { NotificationType } from '../models';
 import { dispatchSystemNotification } from './notificationService';
-import { sendWaitlistPushNotification } from './firebaseManager';
+import { sendWaitlistPushNotification, cleanupExpiredRTDBNotifications } from './firebaseManager';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
@@ -237,6 +237,11 @@ export async function initializeScheduler() {
     timezone: 'UTC',
   });
 
+  // Clean up expired RTDB notifications every 15 minutes
+  cron.schedule('*/15 * * * *', () => cleanupExpiredRTDBNotifications(5 * 60 * 1000), {
+    timezone: 'UTC',
+  });
+
   console.log('✅ Cron scheduler initialized');
   console.log('📋 Scheduled tasks:');
   console.log('  - Token prices: Every minute');
@@ -248,6 +253,7 @@ export async function initializeScheduler() {
   console.log('  - Confirm transactions: Every 30 seconds');
   console.log('  - Cached token cleanup: Every 5 minutes');
   console.log('  - Waitlist approval batch: Every 12 hours (00:00, 12:00 UTC)');
+  console.log('  - RTDB notification cleanup: Every 15 minutes');
 
   // Run immediately on startup
   updatePrices();
