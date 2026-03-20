@@ -16,7 +16,7 @@
       <!-- FCM default notification icon and color -->
       <meta-data
         android:name="com.google.firebase.messaging.default_notification_icon"
-        android:resource="@mipmap/ic_launcher"
+        android:resource="@drawable/ic_notification"
         tools:replace="android:resource" />
       <meta-data
         android:name="com.google.firebase.messaging.default_notification_color"
