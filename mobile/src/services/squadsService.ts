@@ -597,6 +597,137 @@ export async function addMember(
   return { signature };
 }
 
+export async function removeMember(
+  multisigAddress: string,
+  memberAddress: string,
+): Promise<{ signature: string }> {
+  const multisigPda = new PublicKey(multisigAddress);
+  const memberPubkey = new PublicKey(memberAddress);
+
+  const cloudPubBase58 = await getCloudPublicKey();
+  const devicePubBase58 = await getDevicePublicKey();
+  if (!cloudPubBase58 || !devicePubBase58) {
+    logError('squads_remove_member', 'keypairs_not_found');
+    throw new Error('Signing keypairs not found. Please recreate your vault.');
+  }
+  const cloudPubkey = new PublicKey(cloudPubBase58);
+  const devicePubkey = new PublicKey(devicePubBase58);
+
+  let walletPubkey: PublicKey | null = null;
+  if (IS_SOLANA_MOBILE) {
+    const vaultData = await getVault();
+    if (!vaultData?.walletAddress) {
+      logError('squads_remove_member', 'wallet_address_not_found');
+      throw new Error('Wallet address not found. Please recreate your vault.');
+    }
+    walletPubkey = new PublicKey(vaultData.walletAddress);
+  }
+
+  const feePayer = cloudPubkey;
+
+  const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(
+    connection,
+    multisigPda,
+  );
+  const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
+
+  const configTxIx = multisig.instructions.configTransactionCreate({
+    multisigPda,
+    transactionIndex,
+    creator: cloudPubkey,
+    rentPayer: feePayer,
+    actions: [
+      {
+        __kind: 'RemoveMember' as const,
+        oldMember: memberPubkey,
+      },
+    ],
+  });
+
+  const proposalIx = multisig.instructions.proposalCreate({
+    multisigPda,
+    transactionIndex,
+    creator: cloudPubkey,
+    rentPayer: feePayer,
+  });
+
+  const approveCloudIx = multisig.instructions.proposalApprove({
+    multisigPda,
+    transactionIndex,
+    member: cloudPubkey,
+  });
+
+  const approveDeviceIx = multisig.instructions.proposalApprove({
+    multisigPda,
+    transactionIndex,
+    member: devicePubkey,
+  });
+
+  const tx1Instructions = [configTxIx, proposalIx, approveCloudIx, approveDeviceIx];
+  if (IS_SOLANA_MOBILE && walletPubkey) {
+    tx1Instructions.push(multisig.instructions.proposalApprove({
+      multisigPda,
+      transactionIndex,
+      member: walletPubkey,
+    }));
+  }
+
+  const luts = await getLuts(connection);
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+
+  const msg1 = new TransactionMessage({
+    payerKey: feePayer,
+    recentBlockhash: blockhash,
+    instructions: tx1Instructions,
+  }).compileToV0Message(luts);
+  const tx1 = new VersionedTransaction(msg1);
+  await signTransactionNatively(tx1, [
+    { pubkey: cloudPubkey, signFn: signWithCloud },
+    { pubkey: devicePubkey, signFn: signWithDevice },
+  ]);
+
+  const executeIx = multisig.instructions.configTransactionExecute({
+    multisigPda,
+    transactionIndex,
+    member: cloudPubkey,
+    rentPayer: feePayer,
+  });
+
+  const tx2Instructions: TransactionInstruction[] = [executeIx];
+  if (multisigAccount.rentCollector) {
+    tx2Instructions.push(
+      multisig.instructions.configTransactionAccountsClose({
+        multisigPda,
+        transactionIndex,
+        rentCollector: new PublicKey(multisigAccount.rentCollector),
+      }),
+    );
+  }
+  tx2Instructions.push(jitoTipIx(feePayer));
+
+  const msg2 = new TransactionMessage({
+    payerKey: feePayer,
+    recentBlockhash: blockhash,
+    instructions: tx2Instructions,
+  }).compileToV0Message(luts);
+  const tx2 = new VersionedTransaction(msg2);
+  await signTransactionNatively(tx2, [
+    { pubkey: cloudPubkey, signFn: signWithCloud },
+  ]);
+
+  if (IS_SOLANA_MOBILE && walletPubkey) {
+    await signTransactionsWithWallet([tx1, tx2], [0], walletPubkey);
+  }
+
+  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
+  const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
+
+  await apiService.sendBundle([tx1Base64, tx2Base64]);
+
+  const signature = bs58.encode(tx2.signatures[0]);
+  return { signature };
+}
+
 /**
  * Execute a vault transaction through the Squads proposal flow.
  * Wraps raw instructions in: vaultTransactionCreate → proposalCreate → approve×2 → execute

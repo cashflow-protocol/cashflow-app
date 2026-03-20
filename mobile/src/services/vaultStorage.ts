@@ -42,3 +42,24 @@ export async function clearVault(): Promise<void> {
   cachedVault = null;
   await Keychain.resetGenericPassword({ service: VAULT_SERVICE });
 }
+
+// Recovery email map: address → email
+const RECOVERY_EMAILS_SERVICE = 'fun.cashflow.recoveryEmails';
+let cachedRecoveryEmails: Record<string, string> | undefined = undefined;
+
+export async function getRecoveryEmails(): Promise<Record<string, string>> {
+  if (cachedRecoveryEmails !== undefined) return cachedRecoveryEmails;
+  const result = await Keychain.getGenericPassword({ service: RECOVERY_EMAILS_SERVICE });
+  cachedRecoveryEmails = result ? JSON.parse(result.password) : {};
+  return cachedRecoveryEmails!;
+}
+
+export async function saveRecoveryEmail(address: string, email: string): Promise<void> {
+  const map = await getRecoveryEmails();
+  map[address] = email;
+  cachedRecoveryEmails = map;
+  await Keychain.setGenericPassword('recoveryEmails', JSON.stringify(map), {
+    service: RECOVERY_EMAILS_SERVICE,
+    accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED,
+  });
+}

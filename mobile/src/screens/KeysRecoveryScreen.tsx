@@ -13,11 +13,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
-import { ArrowLeft, MoreHorizontal, ScanFace, Cloud, Wallet, Compass, Info, X, KeyRound, ShieldCheck, RotateCcw, Download, TriangleAlert, MessageSquareText, CircleCheck, ChevronRight, Mail, ClipboardPaste } from 'lucide-react-native';
+import { ArrowLeft, MoreHorizontal, ScanFace, Cloud, Wallet, Compass, Info, X, KeyRound, ShieldCheck, RotateCcw, Download, TriangleAlert, MessageSquareText, CircleCheck, ChevronRight, Mail, ClipboardPaste, Trash2, CirclePlus } from 'lucide-react-native';
 import BottomSheet from '../components/BottomSheet';
-import { getMultisigInfo, addMember, type MultisigInfo } from '../services/squadsService';
+import { getMultisigInfo, addMember, removeMember, type MultisigInfo } from '../services/squadsService';
 import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey } from '../services/keypairStorage';
-import { getVault } from '../services/vaultStorage';
+import { getVault, getRecoveryEmails, saveRecoveryEmail } from '../services/vaultStorage';
 import apiService from '../services/apiService';
 import { logScreenView, logAddRecoveryKeySubmit, logAddRecoveryKeySuccess, logAddRecoveryKeyError } from '../services/analyticsService';
 
@@ -89,6 +89,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [domainMap, setDomainMap] = useState<Record<string, string>>({});
+  const [emailMap, setEmailMap] = useState<Record<string, string>>({});
   const [menuMember, setMenuMember] = useState<ClassifiedMember | null>(null);
   const [infoMember, setInfoMember] = useState<ClassifiedMember | null>(null);
   const [backupVisible, setBackupVisible] = useState(false);
@@ -102,17 +103,21 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [emailCode, setEmailCode] = useState('');
   const [sendingCode, setSendingCode] = useState(false);
+  const [recoveryMenuMember, setRecoveryMenuMember] = useState<ClassifiedMember | null>(null);
+  const [deletingKey, setDeletingKey] = useState(false);
 
   useEffect(() => { logScreenView('KeysRecoveryScreen'); }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        const [vault, cloudPub, devicePub] = await Promise.all([
+        const [vault, cloudPub, devicePub, emails] = await Promise.all([
           getVault(),
           getCloudPublicKey(),
           getDevicePublicKey(),
+          getRecoveryEmails(),
         ]);
+        setEmailMap(emails);
 
         setCloudPubkey(cloudPub);
         setDevicePubkey(devicePub);
@@ -273,6 +278,8 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
         return;
       }
       await addMember(vaultData.multisigAddress, solanaAddress, 'vote');
+      await saveRecoveryEmail(solanaAddress, recoveryEmail.trim());
+      setEmailMap(prev => ({ ...prev, [solanaAddress]: recoveryEmail.trim() }));
       logAddRecoveryKeySuccess();
       setAddRecoveryVisible(false);
 
@@ -288,6 +295,88 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       setAddingKey(false);
       setAddingStep('');
     }
+  };
+
+  const handleRecoveryMenuInfo = () => {
+    const member = recoveryMenuMember;
+    setRecoveryMenuMember(null);
+    setTimeout(() => setInfoMember(member), 300);
+  };
+
+  const handleRecoveryMenuExplorer = () => {
+    if (recoveryMenuMember) openExplorer(recoveryMenuMember.address);
+    setRecoveryMenuMember(null);
+  };
+
+  const handleDeleteRecoveryKey = () => {
+    const member = recoveryMenuMember;
+    if (!member) return;
+    setRecoveryMenuMember(null);
+
+    setTimeout(() => {
+      const label = emailMap[member.address] || truncateAddress(member.address);
+      Alert.alert(
+        'Remove Recovery Key',
+        `Are you sure you want to remove "${label}" as a recovery key?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              setDeletingKey(true);
+              try {
+                const vaultData = await getVault();
+                if (!vaultData) throw new Error('No vault found.');
+                await removeMember(vaultData.multisigAddress, member.address);
+
+                const info = await getMultisigInfo(vaultData.multisigAddress);
+                setMultisigInfo(info);
+                fetchDomains(info.members.map(m => m.address));
+              } catch (err: any) {
+                Alert.alert('Error', err?.message || 'Failed to remove recovery key.');
+              } finally {
+                setDeletingKey(false);
+              }
+            },
+          },
+        ],
+      );
+    }, 300);
+  };
+
+  const getRecoveryIcon = (address: string) => {
+    if (emailMap[address]) return <Mail size={28} color="#D946EF" />;
+    return <Wallet size={28} color="#EF4444" />;
+  };
+
+  const getRecoveryLabel = (address: string) => {
+    if (emailMap[address]) return 'Email';
+    return 'External Wallet';
+  };
+
+  const getRecoveryDetail = (address: string) => {
+    if (emailMap[address]) return emailMap[address];
+    return truncateAddress(address);
+  };
+
+  const getRecoveryInfoContent = (address: string) => {
+    if (emailMap[address]) {
+      return {
+        title: "What's a Recovery Key?",
+        items: [
+          { icon: <KeyRound size={20} color="#1A1A1A" />, title: 'Wallet recovery', desc: `A Recovery Key can restore access to your wallet when paired with your Device or Cloud Key. Linked to ${emailMap[address]}` },
+          { icon: <RotateCcw size={20} color="#1A1A1A" />, title: 'Recovery only', desc: 'Recovery Keys have limited rights and can never access your Cashflow Vault without an associated Active Key' },
+        ],
+      };
+    }
+    return {
+      title: "What's a Recovery Key?",
+      items: [
+        { icon: <KeyRound size={20} color="#1A1A1A" />, title: 'Wallet recovery', desc: 'A Recovery Key can restore access to your wallet when paired with your Device or Cloud Key. Cashflow supports up to 3 Recovery Keys' },
+        { icon: <RotateCcw size={20} color="#1A1A1A" />, title: 'Recovery only', desc: 'Recovery Keys have limited rights and can never access your Cashflow Vault without an associated Active Key' },
+      ],
+    };
   };
 
   const handlePasteEmail = async () => {
@@ -397,52 +486,102 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
             {/* Recovery Keys */}
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Recovery Keys</Text>
-              <View style={styles.card}>
-                {recoveryMembers.length === 0 ? (
-                  <Text style={styles.emptyText}>
-                    Recovery keys allow trusted wallets to vote on proposals if you lose access to your main keys.
-                  </Text>
-                ) : (
-                  recoveryMembers.map((m) => (
-                    <TouchableOpacity
-                      key={m.address}
-                      style={styles.memberRow}
-                      onPress={() => copyAddress(m.address, m.address)}
-                      activeOpacity={0.6}
-                    >
-                      <View style={styles.memberLeft}>
-                        <Text style={styles.memberLabel}>Recovery</Text>
-                        {domainMap[m.address] ? (
-                          <Text style={styles.memberDomain}>{domainMap[m.address]}</Text>
-                        ) : null}
-                        <Text style={styles.memberAddress}>
-                          {truncateAddress(m.address)}
-                          {copiedField === m.address ? '  Copied!' : ''}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))
-                )}
-
+              <View style={styles.recoverySectionHeader}>
+                <View style={styles.recoverySectionLeft}>
+                  <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>Recovery Keys</Text>
+                  {recoveryMembers.length > 0 && (
+                    <View style={styles.countBadge}>
+                      <Text style={styles.countBadgeText}>{recoveryMembers.length}/{MAX_RECOVERY_KEYS}</Text>
+                    </View>
+                  )}
+                </View>
                 {canAddRecovery && (
+                  <TouchableOpacity onPress={openAddRecovery} activeOpacity={0.6}>
+                    <CirclePlus size={22} color="#1A1A1A" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.keysRow}>
+                {recoveryMembers.length === 0 ? (
                   <TouchableOpacity
-                    style={styles.addButton}
+                    style={styles.addRecoveryEmptyCard}
                     onPress={openAddRecovery}
                     activeOpacity={0.7}
                   >
                     <Text style={styles.addButtonText}>+ Add Recovery Key</Text>
                   </TouchableOpacity>
-                )}
-
-                {!canAddRecovery && recoveryMembers.length > 0 && (
-                  <Text style={styles.maxText}>Maximum recovery keys reached ({MAX_RECOVERY_KEYS})</Text>
+                ) : (
+                  recoveryMembers.map((m) => (
+                    <TouchableOpacity
+                      key={m.address}
+                      style={styles.keyCard}
+                      onPress={() => copyAddress(m.address, m.address)}
+                      activeOpacity={0.7}
+                    >
+                      {getRecoveryIcon(m.address)}
+                      <View style={styles.keyCardInfo}>
+                        <Text style={styles.keyCardLabel}>{getRecoveryLabel(m.address)}</Text>
+                      </View>
+                      <Text style={styles.recoveryDetail}>
+                        {getRecoveryDetail(m.address)}
+                        {copiedField === m.address ? '  Copied!' : ''}
+                      </Text>
+                      <TouchableOpacity style={styles.menuButton} activeOpacity={0.5} onPress={() => setRecoveryMenuMember(m)}>
+                        <MoreHorizontal size={18} color="#B2B2B2" />
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  ))
                 )}
               </View>
+
+              {!canAddRecovery && recoveryMembers.length > 0 && (
+                <Text style={styles.maxText}>Maximum recovery keys reached</Text>
+              )}
+
+              {recoveryMembers.length < 2 && (
+                <TouchableOpacity style={styles.recoverySuggestion} activeOpacity={0.7} onPress={openAddRecovery}>
+                  <View style={styles.recoverySuggestionIcon}>
+                    <ShieldCheck size={18} color="#F59E0B" />
+                  </View>
+                  <View style={styles.recoverySuggestionText}>
+                    <Text style={styles.recoverySuggestionTitle}>
+                      {recoveryMembers.length === 0 ? 'Add a Recovery Key' : 'Add one more Recovery Key'}
+                    </Text>
+                    <Text style={styles.recoverySuggestionDesc}>
+                      {recoveryMembers.length === 0
+                        ? 'Protect your wallet by adding at least 2 recovery keys in case you lose access to your device.'
+                        : 'We recommend at least 2 recovery keys for better security.'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              <Text style={styles.keysHint}>
+                Recovery Keys help you regain access to your wallet if you lose access to one of the Active Keys. You can choose between a key tied to your email or an external crypto wallet.
+              </Text>
             </View>
           </>
         )}
       </ScrollView>
+
+      {/* Recovery Key Menu */}
+      <BottomSheet visible={!!recoveryMenuMember} onClose={() => setRecoveryMenuMember(null)}>
+        <View style={styles.menuSheet}>
+          <TouchableOpacity style={styles.menuItem} activeOpacity={0.6} onPress={handleRecoveryMenuInfo}>
+            <Info size={20} color="#1A1A1A" />
+            <Text style={styles.menuItemText}>More info</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem} activeOpacity={0.6} onPress={handleRecoveryMenuExplorer}>
+            <Compass size={20} color="#1A1A1A" />
+            <Text style={styles.menuItemText}>Explorer</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem} activeOpacity={0.6} onPress={handleDeleteRecoveryKey}>
+            <Trash2 size={20} color="#EF4444" />
+            <Text style={[styles.menuItemText, { color: '#EF4444' }]}>Delete key</Text>
+          </TouchableOpacity>
+        </View>
+      </BottomSheet>
 
       {/* Key Menu */}
       <BottomSheet visible={!!menuMember} onClose={() => setMenuMember(null)}>
@@ -467,14 +606,21 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       {/* Key Info Modal */}
       <BottomSheet visible={!!infoMember} onClose={() => setInfoMember(null)}>
         {infoMember && (() => {
-          const content = getInfoContent(infoMember.label);
+          const content = infoMember.label === 'Recovery'
+            ? getRecoveryInfoContent(infoMember.address)
+            : getInfoContent(infoMember.label);
           return (
             <View style={styles.infoSheet}>
               <TouchableOpacity style={styles.infoClose} activeOpacity={0.6} onPress={() => setInfoMember(null)}>
                 <X size={20} color="#9CA3AF" />
               </TouchableOpacity>
-              <View style={styles.infoIconWrapper}>
-                {getKeyIcon(infoMember.label, '#fff')}
+              <View style={[
+                styles.infoIconWrapper,
+                infoMember.label === 'Recovery' && { backgroundColor: '#19C394' },
+              ]}>
+                {infoMember.label === 'Recovery'
+                  ? <Wallet size={28} color="#fff" />
+                  : getKeyIcon(infoMember.label, '#fff')}
               </View>
               <Text style={styles.infoTitle}>{content.title}</Text>
               <View style={styles.infoItems}>
@@ -841,6 +987,79 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#B2B2B2',
     marginTop: 2,
+  },
+  recoverySectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  recoverySectionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  countBadge: {
+    backgroundColor: '#E8EAF1',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  countBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7B8D',
+  },
+  addPlusButton: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    paddingHorizontal: 4,
+  },
+  addRecoveryEmptyCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#19C394',
+    borderStyle: 'dashed',
+  },
+  recoveryDetail: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#B2B2B2',
+  },
+  recoverySuggestion: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF8EB',
+    borderRadius: 14,
+    padding: 14,
+    gap: 12,
+    alignItems: 'flex-start',
+    marginTop: 10,
+  },
+  recoverySuggestionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recoverySuggestionText: {
+    flex: 1,
+  },
+  recoverySuggestionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 3,
+  },
+  recoverySuggestionDesc: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    lineHeight: 18,
   },
   keysHint: {
     fontSize: 13,
