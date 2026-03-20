@@ -357,6 +357,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
   const getRecoveryDetail = (address: string) => {
     if (emailMap[address]) return emailMap[address];
+    if (domainMap[address]) return domainMap[address];
     return truncateAddress(address);
   };
 
@@ -469,7 +470,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
                     <View style={styles.keyCardInfo}>
                       <Text style={styles.keyCardLabel}>{m.label}</Text>
                       <Text style={styles.keyCardAddress}>
-                        {truncateAddress(m.address)}
+                        {domainMap[m.address] || truncateAddress(m.address)}
                         {copiedField === m.address ? '  Copied!' : ''}
                       </Text>
                     </View>

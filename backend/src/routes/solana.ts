@@ -614,17 +614,32 @@ router.post('/resolve-domains', async (req: Request, res: Response) => {
     const parser = new TldParser(conn);
 
     const domains: Record<string, string> = {};
+    const addressList = addresses.slice(0, 10);
 
-    await Promise.all(
-      addresses.slice(0, 10).map(async (addr: string) => {
-        try {
-          const result = await parser.getMainDomain(new PublicKey(addr));
-          if (result?.domain) {
-            domains[addr] = result.domain;
-          }
-        } catch {}
-      }),
-    );
+    // Batch resolve main domains (efficient single call)
+    try {
+      const mainDomains = await parser.getMainDomains(addressList);
+      for (let i = 0; i < addressList.length; i++) {
+        if (mainDomains[i]) {
+          domains[addressList[i]] = mainDomains[i]!;
+        }
+      }
+    } catch {}
+
+    // For addresses without a main domain, try getAllUserDomains as fallback
+    const missing = addressList.filter(addr => !domains[addr]);
+    if (missing.length > 0) {
+      await Promise.all(
+        missing.map(async (addr: string) => {
+          try {
+            const allDomains = await parser.getParsedAllUserDomains(new PublicKey(addr));
+            if (allDomains && allDomains.length > 0 && allDomains[0].domain) {
+              domains[addr] = allDomains[0].domain;
+            }
+          } catch {}
+        }),
+      );
+    }
 
     res.json({ success: true, data: domains });
   } catch (error) {
