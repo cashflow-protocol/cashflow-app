@@ -17,6 +17,7 @@ import { initializeScheduler } from './services';
 import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
 import notificationsRouter from './routes/notifications';
+import recoveryRouter from './routes/recovery';
 import { initializeFirebase } from './services/firebaseManager';
 import { initializeHeliusListener, verifyWebhookAuth, handleWebhookPayload } from './services/heliusListener';
 
@@ -50,6 +51,7 @@ app.use('/earn/v2', requireAuth, signResponseMiddleware, earnRouter);
 app.use('/solana/v2', requireAuth, signResponseMiddleware, solanaRouter);
 app.use('/suggestions/v2', requireAuth, signResponseMiddleware, suggestionsRouter);
 app.use('/notifications/v2', requireAuth, notificationsRouter);
+app.use('/recovery/v1', requireAuth, recoveryRouter);
 
 // Helius webhook — receives enhanced transaction data (no JWT, secured by auth header)
 app.post('/helius/webhook', async (req, res) => {

@@ -342,6 +342,18 @@ class ApiService {
     );
     return res.data;
   }
+
+  async sendRecoveryCode(email: string): Promise<void> {
+    await this.post<{ success: boolean }>('/recovery/v1/send-code', { email });
+  }
+
+  async verifyRecoveryCode(email: string, code: string): Promise<string> {
+    const res = await this.post<{ success: boolean; data: { solanaAddress: string } }>(
+      '/recovery/v1/verify',
+      { email, code },
+    );
+    return res.data.solanaAddress;
+  }
 }
 
 export default new ApiService();
