@@ -26,5 +26,7 @@
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
 	<string>1:956204284378:ios:9324c831c62212945268e3</string>
+	<key>DATABASE_URL</key>
+	<string>https://cashflow-74bcd-default-rtdb.europe-west1.firebasedatabase.app</string>
 </dict>
 </plist>
