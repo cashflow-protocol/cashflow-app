@@ -12,6 +12,7 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import BottomSheet from './BottomSheet';
 import { uploadScreenshot } from '../services/onboardingService';
 import { logScreenshotStoreOpen, logScreenshotImageSelected, logScreenshotSubmit, logScreenshotSuccess, logScreenshotError } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 interface UploadScreenshotSheetProps {
   visible: boolean;
@@ -30,6 +31,7 @@ export default function UploadScreenshotSheet({
   storeUrl,
   onSuccess,
 }: UploadScreenshotSheetProps) {
+  const { colors } = useTheme();
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<{ uri: string; type: string; name: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -93,40 +95,40 @@ export default function UploadScreenshotSheet({
 
   return (
     <BottomSheet visible={visible} onClose={handleClose}>
-      <Text style={styles.title}>Rate us on dApp Store</Text>
-      <Text style={styles.subtitle}>
+      <Text style={[styles.title, { color: colors.textPrimary }]}>Rate us on dApp Store</Text>
+      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
         Give us 5 stars, then upload a screenshot as proof.
       </Text>
 
       <TouchableOpacity
-        style={styles.storeButton}
+        style={[styles.storeButton, { borderColor: colors.accentBlue }]}
         onPress={() => { logScreenshotStoreOpen(); Linking.openURL(storeUrl); }}
         activeOpacity={0.7}
       >
-        <Text style={styles.storeButtonText}>Open dApp Store</Text>
+        <Text style={[styles.storeButtonText, { color: colors.accentBlue }]}>Open dApp Store</Text>
       </TouchableOpacity>
 
       {imageUri ? (
         <View style={styles.previewContainer}>
-          <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="contain" />
+          <Image source={{ uri: imageUri }} style={[styles.preview, { backgroundColor: colors.inputBackground }]} resizeMode="contain" />
           <TouchableOpacity onPress={handlePickImage} activeOpacity={0.7}>
-            <Text style={styles.linkText}>Choose different image</Text>
+            <Text style={[styles.linkText, { color: colors.accentBlue }]}>Choose different image</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <TouchableOpacity
-          style={styles.pickButton}
+          style={[styles.pickButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
           onPress={handlePickImage}
           activeOpacity={0.7}
         >
-          <Text style={styles.pickButtonText}>Select Screenshot</Text>
+          <Text style={[styles.pickButtonText, { color: colors.textSecondary }]}>Select Screenshot</Text>
         </TouchableOpacity>
       )}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={[styles.error, { color: colors.errorText }]}>{error}</Text> : null}
 
       <TouchableOpacity
-        style={[styles.submitButton, (!imageFile || loading) && styles.buttonDisabled]}
+        style={[styles.submitButton, { backgroundColor: colors.accentBlue }, (!imageFile || loading) && styles.buttonDisabled]}
         onPress={handleSubmit}
         disabled={!imageFile || loading}
         activeOpacity={0.7}
@@ -145,35 +147,28 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#000',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
   },
   storeButton: {
     borderWidth: 2,
-    borderColor: '#175DA3',
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
   },
   storeButtonText: {
-    color: '#175DA3',
     fontSize: 15,
     fontWeight: '700',
   },
   pickButton: {
-    backgroundColor: '#F4F6FC',
     borderRadius: 12,
     paddingVertical: 40,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#E0E4ED',
     borderStyle: 'dashed',
   },
   pickButtonText: {
-    color: '#666',
     fontSize: 15,
     fontWeight: '600',
   },
@@ -185,14 +180,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 200,
     borderRadius: 12,
-    backgroundColor: '#F4F6FC',
   },
   error: {
-    color: '#E53E3E',
     fontSize: 13,
   },
   submitButton: {
-    backgroundColor: '#175DA3',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -206,7 +198,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   linkText: {
-    color: '#175DA3',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',

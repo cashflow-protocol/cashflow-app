@@ -16,6 +16,7 @@
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		B70AF146C74A73D44B0B2547 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		D19B8CFD53D019992ACE4D20 /* CashflowSigningImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092ED883571EDF1151AF816F /* CashflowSigningImpl.swift */; };
+		F1A2B3C4D5E6F708A9B0C1D2 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F708A9B0C1D3 /* GoogleService-Info.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -25,6 +26,7 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Cashflow/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = Cashflow/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		153C2621B0DBE7209605B16D /* RCTCashflowSigning.mm */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.objcpp; name = RCTCashflowSigning.mm; path = Cashflow/RCTCashflowSigning.mm; sourceTree = "<group>"; };
+		F1A2B3C4D5E6F708A9B0C1D3 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = GoogleService-Info.plist; sourceTree = "<group>"; };
 		19BD4B818B7C430F950C2310 /* Poppins-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-Medium.ttf"; path = "../assets/fonts/Poppins-Medium.ttf"; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-Cashflow.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Cashflow.debug.xcconfig"; path = "Target Support Files/Pods-Cashflow/Pods-Cashflow.debug.xcconfig"; sourceTree = "<group>"; };
 		4DAD7A285CB44CAE985C6F04 /* Poppins-Light.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-Light.ttf"; path = "../assets/fonts/Poppins-Light.ttf"; sourceTree = "<group>"; };
@@ -92,6 +94,7 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
+				F1A2B3C4D5E6F708A9B0C1D3 /* GoogleService-Info.plist */,
 				13B07FAE1A68108700A75B9A /* Cashflow */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
@@ -187,6 +190,7 @@
 				B70AF146C74A73D44B0B2547 /* PrivacyInfo.xcprivacy in Resources */,
 				4D71D20838784224A76B83A3 /* Poppins-Light.ttf in Resources */,
 				3C6C546221A84946A73B6281 /* Poppins-Medium.ttf in Resources */,
+				F1A2B3C4D5E6F708A9B0C1D2 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

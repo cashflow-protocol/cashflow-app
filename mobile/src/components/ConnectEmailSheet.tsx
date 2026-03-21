@@ -10,6 +10,7 @@ import {
 import BottomSheet from './BottomSheet';
 import { sendEmailCode, verifyEmailCode } from '../services/onboardingService';
 import { logEmailCodeSent, logEmailCodeError, logEmailVerifySuccess, logEmailVerifyError } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 interface ConnectEmailSheetProps {
   visible: boolean;
@@ -19,6 +20,7 @@ interface ConnectEmailSheetProps {
 }
 
 export default function ConnectEmailSheet({ visible, onClose, publicKey, onSuccess }: ConnectEmailSheetProps) {
+  const { colors } = useTheme();
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -83,10 +85,10 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
 
   return (
     <BottomSheet visible={visible} onClose={handleClose} avoidKeyboard>
-      <Text style={styles.title}>
+      <Text style={[styles.title, { color: colors.textPrimary }]}>
         {step === 'email' ? 'Connect your email' : 'Enter verification code'}
       </Text>
-      <Text style={styles.subtitle}>
+      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
         {step === 'email'
           ? 'We\'ll send you a 6-digit verification code.'
           : `Code sent to ${email}`}
@@ -95,11 +97,11 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
       {step === 'email' ? (
         <TextInput
           key="email-input"
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.textPrimary }]}
           value={email}
           onChangeText={setEmail}
           placeholder="your@email.com"
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.placeholderColor}
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
@@ -109,11 +111,11 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
       ) : (
         <TextInput
           key="code-input"
-          style={[styles.input, styles.codeInput]}
+          style={[styles.input, styles.codeInput, { backgroundColor: colors.inputBackground, color: colors.textPrimary }]}
           value={code}
           onChangeText={setCode}
           placeholder="000000"
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.placeholderColor}
           keyboardType="number-pad"
           maxLength={6}
           returnKeyType="done"
@@ -124,7 +126,7 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
+        style={[styles.button, { backgroundColor: colors.accentBlue }, loading && styles.buttonDisabled]}
         onPress={step === 'email' ? handleSendCode : handleVerify}
         disabled={loading || (step === 'email' ? !email.trim() : !code.trim())}
         activeOpacity={0.7}
@@ -140,7 +142,7 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
 
       {step === 'code' && (
         <TouchableOpacity onPress={() => setStep('email')} activeOpacity={0.7}>
-          <Text style={styles.linkText}>Use a different email</Text>
+          <Text style={[styles.linkText, { color: colors.accentBlue }]}>Use a different email</Text>
         </TouchableOpacity>
       )}
     </BottomSheet>
@@ -151,19 +153,15 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#000',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
   },
   input: {
-    backgroundColor: '#F4F6FC',
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: '#000',
   },
   codeInput: {
     textAlign: 'center',
@@ -176,7 +174,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   button: {
-    backgroundColor: '#175DA3',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -190,7 +187,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   linkText: {
-    color: '#175DA3',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',

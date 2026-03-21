@@ -249,7 +249,7 @@ export default function VaultRecoveryExecutionScreen({
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+        colors={colors.onboardingGradient}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -271,7 +271,7 @@ export default function VaultRecoveryExecutionScreen({
           activeOpacity={0.7}
           disabled={step === 'executing'}
         >
-          <ArrowLeft size={24} color={colors.primaryButtonText} />
+          <ArrowLeft size={24} color={colors.onboardingText} />
         </TouchableOpacity>
 
         <ScrollView
@@ -280,10 +280,10 @@ export default function VaultRecoveryExecutionScreen({
           showsVerticalScrollIndicator={false}
         >
           {/* Header */}
-          <Text style={[styles.title, { color: colors.primaryButtonText }]}>
+          <Text style={[styles.title, { color: colors.onboardingText }]}>
             {step === 'done' ? 'Recovery Complete' : 'Vault Recovery'}
           </Text>
-          <Text style={[styles.subtitle, { color: colors.primaryButtonText + 'B3' }]}>
+          <Text style={[styles.subtitle, { color: colors.onboardingTextMuted }]}>
             {step === 'building' || step === 'executing'
               ? statusText
               : step === 'done'
@@ -323,7 +323,7 @@ export default function VaultRecoveryExecutionScreen({
           {externalSigningUrl && step === 'signing' && (
             <View style={[styles.externalCard, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
               <Text style={styles.sectionTitle}>External Wallet Signing</Text>
-              <Text style={[styles.externalDesc, { color: colors.primaryButtonText + '99' }]}>
+              <Text style={[styles.externalDesc, { color: colors.onboardingTextMuted }]}>
                 Share this link with anyone who needs to sign with an external wallet:
               </Text>
               <View style={styles.urlRow}>
@@ -352,12 +352,12 @@ export default function VaultRecoveryExecutionScreen({
         <View style={styles.bottomSection}>
           {step === 'ready' && (
             <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: colors.card }]}
+              style={[styles.primaryButton, { backgroundColor: colors.onboardingButton }]}
               onPress={handleExecute}
               activeOpacity={0.7}
             >
               <Send size={20} color="#6d28d9" />
-              <Text style={[styles.primaryButtonText, { color: '#6d28d9', marginLeft: 8 }]}>
+              <Text style={[styles.primaryButtonText, { color: colors.onboardingButtonText, marginLeft: 8 }]}>
                 Send Recovery Transaction
               </Text>
             </TouchableOpacity>
@@ -365,11 +365,11 @@ export default function VaultRecoveryExecutionScreen({
 
           {step === 'done' && (
             <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: colors.card }]}
+              style={[styles.primaryButton, { backgroundColor: colors.onboardingButton }]}
               onPress={onComplete}
               activeOpacity={0.7}
             >
-              <Text style={[styles.primaryButtonText, { color: '#6d28d9' }]}>Continue</Text>
+              <Text style={[styles.primaryButtonText, { color: colors.onboardingButtonText }]}>Continue</Text>
             </TouchableOpacity>
           )}
         </View>

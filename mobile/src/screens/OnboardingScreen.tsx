@@ -147,8 +147,8 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
     return (
       <View style={[pageStyles.container, { width: SCREEN_WIDTH }]}>
         <View style={pageStyles.iconContainer}>{item.icon}</View>
-        <Text style={[pageStyles.title, { color: colors.primaryButtonText }]}>{item.title}</Text>
-        <Text style={[pageStyles.description, { color: colors.primaryButtonText + 'CC' }]}>{item.description}</Text>
+        <Text style={[pageStyles.title, { color: colors.onboardingText }]}>{item.title}</Text>
+        <Text style={[pageStyles.description, { color: colors.onboardingTextMuted }]}>{item.description}</Text>
       </View>
     );
   };
@@ -156,7 +156,7 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#0D4A82', colors.accentBlueDark, '#347AC0', '#5A9AD5']}
+        colors={colors.onboardingGradient}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -184,8 +184,8 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
                 key={i}
                 style={[
                   styles.dot,
-                  { backgroundColor: colors.primaryButtonText + '4D' },
-                  i === currentPage && [styles.dotActive, { backgroundColor: colors.primaryButtonText }],
+                  { backgroundColor: colors.onboardingText + '4D' },
+                  i === currentPage && [styles.dotActive, { backgroundColor: colors.onboardingText }],
                 ]}
               />
             ))}
@@ -195,28 +195,28 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
           {isLastPage ? (
             <>
               <TouchableOpacity
-                style={[styles.nextButton, { backgroundColor: colors.card }]}
+                style={[styles.nextButton, { backgroundColor: colors.onboardingButton }]}
                 onPress={() => { logOnboardingHaveInviteCode('carousel'); onHaveInviteCode(); }}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.nextButtonText, { color: colors.accentBlueDark }]}>I have an invite code</Text>
+                <Text style={[styles.nextButtonText, { color: colors.onboardingButtonText }]}>I have an invite code</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.secondaryButton, { borderColor: colors.primaryButtonText + '66' }]}
+                style={[styles.secondaryButton, { borderColor: colors.onboardingText + '66' }]}
                 onPress={() => { logOnboardingJoinWaitlist(); onJoinWaitlist(); }}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.secondaryButtonText, { color: colors.primaryButtonText }]}>Join the waitlist</Text>
+                <Text style={[styles.secondaryButtonText, { color: colors.onboardingText }]}>Join the waitlist</Text>
               </TouchableOpacity>
             </>
           ) : (
             <>
               <TouchableOpacity
-                style={[styles.nextButton, { backgroundColor: colors.card }]}
+                style={[styles.nextButton, { backgroundColor: colors.onboardingButton }]}
                 onPress={handleNext}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.nextButtonText, { color: colors.accentBlueDark }]}>Next</Text>
+                <Text style={[styles.nextButtonText, { color: colors.onboardingButtonText }]}>Next</Text>
               </TouchableOpacity>
               {/* Invisible spacer matching the second button height so content doesn't shift */}
               <View style={styles.buttonSpacer} />

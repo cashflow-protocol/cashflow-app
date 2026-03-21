@@ -61,6 +61,13 @@ export interface ColorPalette {
   earnGradient: string[];
   assetsGradient: string[];
 
+  // Onboarding (purple gradient screens)
+  onboardingGradient: string[];
+  onboardingText: string;
+  onboardingTextMuted: string;
+  onboardingButton: string;
+  onboardingButtonText: string;
+
   // Misc
   shadowColor: string;
   overlay: string;
@@ -129,6 +136,13 @@ export const darkColors: ColorPalette = {
   earnGradient: ['#1E8260', '#19C394'],
   assetsGradient: ['#104982', '#3985D8'],
 
+  // Onboarding (purple gradient screens)
+  onboardingGradient: ['#0d0620', '#1a0e3d', '#2d1469', '#4c1d95'],
+  onboardingText: '#FFFFFF',
+  onboardingTextMuted: 'rgba(255, 255, 255, 0.7)',
+  onboardingButton: '#FFFFFF',
+  onboardingButtonText: '#1E293B',
+
   // Misc
   shadowColor: '#000',
   overlay: 'rgba(0, 0, 0, 0.7)',
@@ -196,6 +210,13 @@ export const lightColors: ColorPalette = {
   homeGradient: ['#175DA3', '#347AC0', '#8EB2D8', '#E8EAF1'],
   earnGradient: ['#1E8260', '#19C394'],
   assetsGradient: ['#104982', '#3985D8'],
+
+  // Onboarding (purple gradient screens)
+  onboardingGradient: ['#1a0533', '#2d1b69', '#4c1d95', '#6d28d9'],
+  onboardingText: '#FFFFFF',
+  onboardingTextMuted: 'rgba(255, 255, 255, 0.7)',
+  onboardingButton: '#FFFFFF',
+  onboardingButtonText: '#6d28d9',
 
   // Misc
   shadowColor: '#000',

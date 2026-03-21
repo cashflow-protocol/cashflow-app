@@ -9,6 +9,7 @@ import {
 import Clipboard from '@react-native-clipboard/clipboard';
 import BottomSheet from './BottomSheet';
 import { logTelegramCodeCopy, logTelegramBotOpen } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 interface ConnectTelegramSheetProps {
   visible: boolean;
@@ -18,6 +19,7 @@ interface ConnectTelegramSheetProps {
 }
 
 export default function ConnectTelegramSheet({ visible, onClose, code, botUrl }: ConnectTelegramSheetProps) {
+  const { colors } = useTheme();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -29,39 +31,38 @@ export default function ConnectTelegramSheet({ visible, onClose, code, botUrl }:
 
   const handleOpenBot = () => {
     logTelegramBotOpen();
-    // Append ?start=CODE so Telegram auto-sends "/start CODE" to the bot
     const deepLink = `${botUrl}?start=${code}`;
     Linking.openURL(deepLink);
   };
 
   return (
     <BottomSheet visible={visible} onClose={onClose}>
-      <Text style={styles.title}>Connect Telegram</Text>
-      <Text style={styles.subtitle}>
+      <Text style={[styles.title, { color: colors.textPrimary }]}>Connect Telegram</Text>
+      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
         Tap the button below to open our Telegram bot. The code will be sent automatically.
       </Text>
 
-      <View style={styles.codeBox}>
-        <Text style={styles.codeText}>{code}</Text>
+      <View style={[styles.codeBox, { backgroundColor: colors.inputBackground }]}>
+        <Text style={[styles.codeText, { color: colors.accentBlue }]}>{code}</Text>
       </View>
 
       <TouchableOpacity
-        style={styles.copyButton}
+        style={[styles.copyButton, { backgroundColor: colors.inputBackground }]}
         onPress={handleCopy}
         activeOpacity={0.7}
       >
-        <Text style={styles.copyButtonText}>{copied ? 'Copied!' : 'Copy Code'}</Text>
+        <Text style={[styles.copyButtonText, { color: colors.accentBlue }]}>{copied ? 'Copied!' : 'Copy Code'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.button}
+        style={[styles.button, { backgroundColor: colors.accentBlue }]}
         onPress={handleOpenBot}
         activeOpacity={0.7}
       >
         <Text style={styles.buttonText}>Open Telegram Bot</Text>
       </TouchableOpacity>
 
-      <Text style={styles.hint}>
+      <Text style={[styles.hint, { color: colors.textTertiary }]}>
         After connecting, return here and pull to refresh.
       </Text>
     </BottomSheet>
@@ -72,14 +73,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#000',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
   },
   codeBox: {
-    backgroundColor: '#F4F6FC',
     borderRadius: 12,
     paddingVertical: 20,
     alignItems: 'center',
@@ -88,21 +86,17 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '700',
     letterSpacing: 8,
-    color: '#175DA3',
   },
   copyButton: {
-    backgroundColor: '#F4F6FC',
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
   },
   copyButtonText: {
-    color: '#175DA3',
     fontSize: 15,
     fontWeight: '600',
   },
   button: {
-    backgroundColor: '#175DA3',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -114,7 +108,6 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontSize: 13,
-    color: '#999',
     textAlign: 'center',
   },
 });

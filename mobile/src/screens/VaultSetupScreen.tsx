@@ -127,7 +127,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#1a0533', '#2d1b69', '#4c1d95', '#6d28d9']}
+        colors={colors.onboardingGradient}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -177,7 +177,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
           <Animated.Text
             style={[
               styles.congrats,
-              { color: colors.primaryButtonText },
+              { color: colors.onboardingText },
               {
                 opacity: congratsOpacity,
                 transform: [{ translateY: congratsTranslateY }],
@@ -194,8 +194,8 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
               alignItems: 'center',
             }}
           >
-            <Text style={[styles.title, { color: colors.primaryButtonText }]}>Create Your Vault</Text>
-            <Text style={[styles.description, { color: colors.primaryButtonText + 'B3' }]}>
+            <Text style={[styles.title, { color: colors.onboardingText }]}>Create Your Vault</Text>
+            <Text style={[styles.description, { color: colors.onboardingTextMuted }]}>
               Connect your wallet and set up a secure{'\n'}multisig vault to get started.
             </Text>
           </Animated.View>
@@ -203,7 +203,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
 
         <Animated.View style={[styles.bottomSection, { opacity: buttonOpacity }]}>
           <TouchableOpacity
-            style={[styles.setupButton, { backgroundColor: colors.card }, loading && styles.buttonDisabled]}
+            style={[styles.setupButton, { backgroundColor: colors.onboardingButton }, loading && styles.buttonDisabled]}
             onPress={handleSetup}
             disabled={loading}
             activeOpacity={0.7}
@@ -211,10 +211,10 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
             {loading ? (
               <View style={styles.loadingRow}>
                 <ActivityIndicator color="#6d28d9" />
-                <Text style={[styles.setupButtonText, { color: '#6d28d9' }]}>{statusText}</Text>
+                <Text style={[styles.setupButtonText, { color: colors.onboardingButtonText }]}>{statusText}</Text>
               </View>
             ) : (
-              <Text style={[styles.setupButtonText, { color: '#6d28d9' }]}>Set Up Vault</Text>
+              <Text style={[styles.setupButtonText, { color: colors.onboardingButtonText }]}>Set Up Vault</Text>
             )}
           </TouchableOpacity>
           {onRecovery && (
@@ -223,7 +223,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
               activeOpacity={0.7}
               style={{ alignItems: 'center', marginTop: 16 }}
             >
-              <Text style={{ color: colors.primaryButtonText + '99', fontSize: 13 }}>Recover existing vault</Text>
+              <Text style={{ color: colors.onboardingTextMuted, fontSize: 13 }}>Recover existing vault</Text>
             </TouchableOpacity>
           )}
           {onReset && __DEV__ && (
@@ -232,7 +232,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
               activeOpacity={0.7}
               style={{ alignItems: 'center', marginTop: 12 }}
             >
-              <Text style={{ color: colors.primaryButtonText + '66', fontSize: 12 }}>Reset (test)</Text>
+              <Text style={{ color: colors.onboardingTextMuted, fontSize: 12 }}>Reset (test)</Text>
             </TouchableOpacity>
           )}
         </Animated.View>

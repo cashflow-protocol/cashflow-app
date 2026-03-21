@@ -137,8 +137,8 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
         <Wallet size={40} color="#fff" />
       </View>
-      <Text style={[styles.title, { color: colors.primaryButtonText }]}>Recover Your Vault</Text>
-      <Text style={[styles.description, { color: colors.primaryButtonText + 'B3' }]}>
+      <Text style={[styles.title, { color: colors.onboardingText }]}>Recover Your Vault</Text>
+      <Text style={[styles.description, { color: colors.onboardingTextMuted }]}>
         Connect the wallet you used when creating your Cashflow vault to find and recover it.
       </Text>
     </Animated.View>
@@ -147,8 +147,8 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
   const renderSearching = () => (
     <View style={styles.centerContent}>
       <ActivityIndicator size="large" color="#fff" />
-      <Text style={[styles.title, { color: colors.primaryButtonText, marginTop: 24 }]}>Searching...</Text>
-      <Text style={[styles.description, { color: colors.primaryButtonText + 'B3' }]}>
+      <Text style={[styles.title, { color: colors.onboardingText, marginTop: 24 }]}>Searching...</Text>
+      <Text style={[styles.description, { color: colors.onboardingTextMuted }]}>
         Looking for vaults associated with{'\n'}{truncateAddress(walletAddress)}
       </Text>
     </View>
@@ -159,8 +159,8 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
         <SearchX size={40} color="#fff" />
       </View>
-      <Text style={[styles.title, { color: colors.primaryButtonText }]}>No Vaults Found</Text>
-      <Text style={[styles.description, { color: colors.primaryButtonText + 'B3' }]}>
+      <Text style={[styles.title, { color: colors.onboardingText }]}>No Vaults Found</Text>
+      <Text style={[styles.description, { color: colors.onboardingTextMuted }]}>
         No Cashflow vaults were found for wallet{'\n'}{truncateAddress(walletAddress)}.{'\n\n'}Make sure you're connecting the same wallet you used when creating your vault.
       </Text>
     </View>
@@ -168,10 +168,10 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
 
   const renderSelect = () => (
     <View style={styles.listContent}>
-      <Text style={[styles.title, { color: colors.primaryButtonText, textAlign: 'left', marginBottom: 8 }]}>
+      <Text style={[styles.title, { color: colors.onboardingText, textAlign: 'left', marginBottom: 8 }]}>
         Select Your Vault
       </Text>
-      <Text style={[styles.description, { color: colors.primaryButtonText + 'B3', textAlign: 'left', marginBottom: 24 }]}>
+      <Text style={[styles.description, { color: colors.onboardingTextMuted, textAlign: 'left', marginBottom: 24 }]}>
         Multiple vaults found for this wallet. Select the one you want to recover.
       </Text>
       <FlatList
@@ -209,8 +209,8 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       <View style={[styles.iconCircle, { backgroundColor: 'rgba(74, 222, 128, 0.2)' }]}>
         <CheckCircle2 size={40} color="#4ade80" />
       </View>
-      <Text style={[styles.title, { color: colors.primaryButtonText }]}>Vault Found</Text>
-      <Text style={[styles.description, { color: colors.primaryButtonText + 'B3' }]}>
+      <Text style={[styles.title, { color: colors.onboardingText }]}>Vault Found</Text>
+      <Text style={[styles.description, { color: colors.onboardingTextMuted }]}>
         {truncateAddress(selectedVault?.vaultAddress || '')}
       </Text>
       <View style={[styles.detailCard, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
@@ -247,7 +247,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       case 'connect':
         return (
           <TouchableOpacity
-            style={[styles.primaryButton, { backgroundColor: colors.card }]}
+            style={[styles.primaryButton, { backgroundColor: colors.onboardingButton }]}
             onPress={handleConnect}
             disabled={loading}
             activeOpacity={0.7}
@@ -255,7 +255,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
             {loading ? (
               <ActivityIndicator color="#6d28d9" />
             ) : (
-              <Text style={[styles.primaryButtonText, { color: '#6d28d9' }]}>Connect Wallet</Text>
+              <Text style={[styles.primaryButtonText, { color: colors.onboardingButtonText }]}>Connect Wallet</Text>
             )}
           </TouchableOpacity>
         );
@@ -263,14 +263,14 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
         return (
           <>
             <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: colors.card }]}
+              style={[styles.primaryButton, { backgroundColor: colors.onboardingButton }]}
               onPress={handleTryDifferent}
               activeOpacity={0.7}
             >
-              <Text style={[styles.primaryButtonText, { color: '#6d28d9' }]}>Try Different Wallet</Text>
+              <Text style={[styles.primaryButtonText, { color: colors.onboardingButtonText }]}>Try Different Wallet</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={{ alignItems: 'center', marginTop: 16 }}>
-              <Text style={{ color: colors.primaryButtonText + '99', fontSize: 14 }}>Go Back</Text>
+              <Text style={{ color: colors.onboardingTextMuted, fontSize: 14 }}>Go Back</Text>
             </TouchableOpacity>
           </>
         );
@@ -278,7 +278,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
         return (
           <>
             <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: colors.card }]}
+              style={[styles.primaryButton, { backgroundColor: colors.onboardingButton }]}
               onPress={handleRecover}
               disabled={loading}
               activeOpacity={0.7}
@@ -286,12 +286,12 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
               {loading ? (
                 <ActivityIndicator color="#6d28d9" />
               ) : (
-                <Text style={[styles.primaryButtonText, { color: '#6d28d9' }]}>Recover Vault</Text>
+                <Text style={[styles.primaryButtonText, { color: colors.onboardingButtonText }]}>Recover Vault</Text>
               )}
             </TouchableOpacity>
             {vaults.length > 1 && (
               <TouchableOpacity onPress={() => setStep('select')} activeOpacity={0.7} style={{ alignItems: 'center', marginTop: 16 }}>
-                <Text style={{ color: colors.primaryButtonText + '99', fontSize: 14 }}>Choose Different Vault</Text>
+                <Text style={{ color: colors.onboardingTextMuted, fontSize: 14 }}>Choose Different Vault</Text>
               </TouchableOpacity>
             )}
           </>
@@ -316,7 +316,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+        colors={colors.onboardingGradient}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -330,7 +330,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
 
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7} disabled={loading}>
-          <ArrowLeft size={24} color={colors.primaryButtonText} />
+          <ArrowLeft size={24} color={colors.onboardingText} />
         </TouchableOpacity>
 
         <View style={styles.content}>

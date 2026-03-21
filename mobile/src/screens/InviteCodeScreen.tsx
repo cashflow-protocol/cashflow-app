@@ -70,7 +70,7 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#0D4A82', colors.accentBlueDark, '#347AC0', '#5A9AD5']}
+        colors={colors.onboardingGradient}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -90,21 +90,21 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
         >
           {/* Back button */}
           <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
-            <ArrowLeft size={24} color={colors.primaryButtonText} />
+            <ArrowLeft size={24} color={colors.onboardingText} />
           </TouchableOpacity>
 
           <View style={styles.content}>
-            <Text style={[styles.title, { color: colors.primaryButtonText }]}>Enter Invite Code</Text>
-            <Text style={[styles.description, { color: colors.primaryButtonText + 'CC' }]}>
+            <Text style={[styles.title, { color: colors.onboardingText }]}>Enter Invite Code</Text>
+            <Text style={[styles.description, { color: colors.onboardingText + 'CC' }]}>
               Enter your invite code to unlock early access.
             </Text>
 
             <TextInput
-              style={[styles.input, { backgroundColor: colors.primaryButtonText + '26', color: colors.primaryButtonText }]}
+              style={[styles.input, { backgroundColor: colors.onboardingText + '26', color: colors.onboardingText }]}
               value={code}
               onChangeText={(text) => setCode(text.toUpperCase())}
               placeholder="XXXXXXXX"
-              placeholderTextColor={colors.primaryButtonText + '4D'}
+              placeholderTextColor={colors.onboardingText + '4D'}
               autoCapitalize="characters"
               autoCorrect={false}
               maxLength={16}
@@ -115,15 +115,15 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
 
           <View style={styles.bottomSection}>
             <TouchableOpacity
-              style={[styles.submitButton, { backgroundColor: colors.card }, (loading || code.trim().length === 0) && styles.buttonDisabled]}
+              style={[styles.submitButton, { backgroundColor: colors.onboardingButton }, (loading || code.trim().length === 0) && styles.buttonDisabled]}
               onPress={handleSubmit}
               disabled={loading || code.trim().length === 0}
               activeOpacity={0.7}
             >
               {loading ? (
-                <ActivityIndicator color={colors.accentBlueDark} />
+                <ActivityIndicator color={colors.onboardingButtonText} />
               ) : (
-                <Text style={[styles.submitButtonText, { color: colors.accentBlueDark }]}>Continue</Text>
+                <Text style={[styles.submitButtonText, { color: colors.onboardingButtonText }]}>Continue</Text>
               )}
             </TouchableOpacity>
           </View>

@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
-  View,
   Text,
   TouchableOpacity,
   ActivityIndicator,
@@ -10,6 +9,7 @@ import {
 import BottomSheet from './BottomSheet';
 import { verifyWaitlistAction, type WaitlistTaskItem } from '../services/onboardingService';
 import { logVerifyActionOpen, logVerifyActionAttempt, logVerifyActionSuccess, logVerifyActionError } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 interface VerifyActionSheetProps {
   visible: boolean;
@@ -27,10 +27,10 @@ const FALLBACK_URLS: Record<string, string> = {
 };
 
 export default function VerifyActionSheet({ visible, onClose, task, publicKey, onSuccess }: VerifyActionSheetProps) {
+  const { colors } = useTheme();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Reset state when sheet opens/closes
   useEffect(() => {
     if (!visible) {
       setLoading(false);
@@ -78,21 +78,21 @@ export default function VerifyActionSheet({ visible, onClose, task, publicKey, o
 
   return (
     <BottomSheet visible={visible} onClose={onClose}>
-      <Text style={styles.title}>{task.title}</Text>
-      <Text style={styles.subtitle}>
+      <Text style={[styles.title, { color: colors.textPrimary }]}>{task.title}</Text>
+      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
         Complete this action and tap Verify to earn +{task.xpReward} XP.
       </Text>
 
       <TouchableOpacity
-        style={styles.actionButton}
+        style={[styles.actionButton, { backgroundColor: colors.inputBackground }]}
         onPress={handleOpenAction}
         activeOpacity={0.7}
       >
-        <Text style={styles.actionButtonText}>{actionLabel}</Text>
+        <Text style={[styles.actionButtonText, { color: colors.accentBlue }]}>{actionLabel}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.verifyButton, loading && styles.buttonDisabled]}
+        style={[styles.verifyButton, { backgroundColor: colors.accentBlue }, loading && styles.buttonDisabled]}
         onPress={handleVerify}
         disabled={loading}
         activeOpacity={0.7}
@@ -104,7 +104,7 @@ export default function VerifyActionSheet({ visible, onClose, task, publicKey, o
         )}
       </TouchableOpacity>
 
-      {message ? <Text style={styles.message}>{message}</Text> : null}
+      {message ? <Text style={[styles.message, { color: colors.errorText }]}>{message}</Text> : null}
     </BottomSheet>
   );
 }
@@ -113,25 +113,20 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#000',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
   },
   actionButton: {
-    backgroundColor: '#F4F6FC',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
   },
   actionButtonText: {
-    color: '#175DA3',
     fontSize: 16,
     fontWeight: '700',
   },
   verifyButton: {
-    backgroundColor: '#175DA3',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -146,7 +141,6 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 13,
-    color: '#E53E3E',
     textAlign: 'center',
   },
 });
