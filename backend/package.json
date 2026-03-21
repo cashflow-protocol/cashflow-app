@@ -21,6 +21,7 @@
     "@kamino-finance/klend-sdk": "^7.3.19",
     "@onsol/tldparser": "^1.2.1",
     "@solana/kit": "^6.1.0",
+    "@sqds/multisig": "^2.1.4",
     "@typegoose/typegoose": "^13.1.0",
     "@types/multer": "^2.1.0",
     "axios": "^1.13.5",

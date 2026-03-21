@@ -53,9 +53,10 @@ interface WaitlistDashboardScreenProps {
   onApproved: (inviteCode: string) => void;
   onBack: () => void;
   onHaveInviteCode: () => void;
+  onRecovery?: () => void;
 }
 
-export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInviteCode }: WaitlistDashboardScreenProps) {
+export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInviteCode, onRecovery }: WaitlistDashboardScreenProps) {
   const { colors } = useTheme();
   const { connect: connectWallet } = useWallet();
   const [gradientHeight, setGradientHeight] = useState(255);
@@ -410,6 +411,16 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         >
           <Text style={[styles.inviteCodeButtonText, { color: colors.accentBlue }]}>I have an invite code</Text>
         </TouchableOpacity>
+
+        {onRecovery && (
+          <TouchableOpacity
+            style={styles.inviteCodeButton}
+            onPress={onRecovery}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.inviteCodeButtonText, { color: colors.accentBlue }]}>I have a Cashflow vault</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {publicKey && (

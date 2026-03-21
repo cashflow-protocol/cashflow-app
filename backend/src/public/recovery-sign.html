@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cashflow - Recovery Signing</title>
+  <script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 480px;
+      width: 100%;
+      background: #fff;
+      border-radius: 24px;
+      padding: 32px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+    .logo {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #888;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+    .info-card {
+      background: #f8f8f8;
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+    .info-label { color: #888; font-size: 14px; }
+    .info-value { font-weight: 600; font-size: 14px; font-family: monospace; }
+    .action-card {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .btn {
+      width: 100%;
+      height: 52px;
+      border: none;
+      border-radius: 26px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 24px;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: #fff;
+    }
+    .btn-success { background: #22c55e; color: #fff; }
+    .status {
+      text-align: center;
+      padding: 16px;
+      font-size: 15px;
+      color: #666;
+    }
+    .status.error { color: #ef4444; }
+    .status.success { color: #22c55e; font-weight: 600; }
+    .signer-list { margin-bottom: 24px; }
+    .signer-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .signer-item:last-child { border-bottom: none; }
+    .signer-addr { font-family: monospace; font-size: 13px; }
+    .signer-type { font-size: 12px; color: #888; }
+    .badge {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+    .badge-signed { background: #dcfce7; color: #16a34a; }
+    .badge-pending { background: #fef3c7; color: #d97706; }
+    .badge-you { background: #ede9fe; color: #7c3aed; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">Cashflow</div>
+    <div class="subtitle">Vault Recovery - External Wallet Signing</div>
+
+    <div id="loading" class="status">Loading proposal...</div>
+
+    <div id="content" class="hidden">
+      <div class="info-card">
+        <div class="info-row">
+          <span class="info-label">Vault</span>
+          <span class="info-value" id="vault-addr"></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Threshold</span>
+          <span class="info-value" id="threshold-info"></span>
+        </div>
+      </div>
+
+      <h3 style="font-size:15px; margin-bottom:12px;">Actions</h3>
+      <div id="actions"></div>
+
+      <h3 style="font-size:15px; margin:20px 0 12px;">Signers</h3>
+      <div id="signers" class="signer-list"></div>
+
+      <div id="connect-section">
+        <button class="btn btn-primary" id="connect-btn" onclick="connectWallet()">Connect Wallet</button>
+      </div>
+
+      <div id="sign-section" class="hidden">
+        <button class="btn btn-primary" id="sign-btn" onclick="signTransaction()">Sign Recovery Proposal</button>
+      </div>
+
+      <div id="done-section" class="hidden">
+        <div class="status success">Signed successfully! You can close this page.</div>
+      </div>
+
+      <div id="error-msg" class="status error hidden"></div>
+    </div>
+
+    <div id="not-found" class="hidden">
+      <div class="status error">Proposal not found or has expired.</div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+    const proposalId = window.location.pathname.split('/sign/')[1];
+    let proposal = null;
+    let connectedWallet = null;
+    let provider = null;
+
+    function truncate(addr) {
+      return addr ? addr.slice(0, 4) + '...' + addr.slice(-4) : '';
+    }
+
+    async function loadProposal() {
+      try {
+        const res = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}`);
+        if (!res.ok) throw new Error('Not found');
+        const json = await res.json();
+        proposal = json.data;
+        renderProposal();
+      } catch (err) {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('not-found').classList.remove('hidden');
+      }
+    }
+
+    function renderProposal() {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('content').classList.remove('hidden');
+
+      document.getElementById('vault-addr').textContent = truncate(proposal.vaultAddress);
+      document.getElementById('threshold-info').textContent =
+        `${proposal.signaturesCollected}/${proposal.threshold} signatures`;
+
+      // Actions
+      const actionsEl = document.getElementById('actions');
+      actionsEl.innerHTML = '';
+      (proposal.actions || []).forEach(a => {
+        const div = document.createElement('div');
+        div.className = 'action-card';
+        div.textContent = `Add member: ${truncate(a.memberAddress)} (${a.permissions})`;
+        actionsEl.appendChild(div);
+      });
+
+      // Signers
+      const signersEl = document.getElementById('signers');
+      signersEl.innerHTML = '';
+      proposal.requiredSigners.forEach(s => {
+        const div = document.createElement('div');
+        div.className = 'signer-item';
+
+        const isYou = connectedWallet && s.address === connectedWallet;
+        let badge = '';
+        if (s.signed) {
+          badge = '<span class="badge badge-signed">Signed</span>';
+        } else if (isYou) {
+          badge = '<span class="badge badge-you">You</span>';
+        } else {
+          badge = '<span class="badge badge-pending">Pending</span>';
+        }
+
+        div.innerHTML = `
+          <div>
+            <div class="signer-addr">${truncate(s.address)}</div>
+            <div class="signer-type">${s.type}${s.label ? ' - ' + s.label : ''}</div>
+          </div>
+          ${badge}
+        `;
+        signersEl.appendChild(div);
+      });
+    }
+
+    async function connectWallet() {
+      try {
+        // Try Phantom first, then Solflare
+        if (window.phantom?.solana) {
+          provider = window.phantom.solana;
+        } else if (window.solflare) {
+          provider = window.solflare;
+        } else {
+          showError('No Solana wallet found. Please install Phantom or Solflare.');
+          return;
+        }
+
+        const resp = await provider.connect();
+        connectedWallet = resp.publicKey.toString();
+
+        // Check if this wallet is a required signer
+        const requiredSigner = proposal.requiredSigners.find(s => s.address === connectedWallet);
+        if (!requiredSigner) {
+          showError(`Wallet ${truncate(connectedWallet)} is not a required signer for this proposal.`);
+          return;
+        }
+
+        if (requiredSigner.signed) {
+          showError('This wallet has already signed this proposal.');
+          return;
+        }
+
+        // Show sign button
+        document.getElementById('connect-section').classList.add('hidden');
+        document.getElementById('sign-section').classList.remove('hidden');
+        renderProposal();
+      } catch (err) {
+        showError('Failed to connect wallet: ' + (err.message || err));
+      }
+    }
+
+    async function signTransaction() {
+      const btn = document.getElementById('sign-btn');
+      btn.disabled = true;
+      btn.textContent = 'Signing...';
+
+      try {
+        // Fetch the raw TX1 to sign
+        const txRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/assembled-tx`);
+
+        // If not ready yet, we sign the pending tx1 directly
+        const proposalRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}`);
+        const proposalData = (await proposalRes.json()).data;
+
+        // Get TX1 bytes from the proposal
+        const fullRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/assembled-tx`);
+        let tx1Base64;
+        if (fullRes.ok) {
+          const fullData = (await fullRes.json()).data;
+          tx1Base64 = fullData.tx1Base64;
+        } else {
+          // Proposal not ready, but we can still sign the raw tx
+          // Re-fetch proposal to get tx1 directly
+          const rawRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}`);
+          // We need the tx1Base64 from a dedicated endpoint
+          showError('Cannot sign — threshold not met yet. Try again when more signers have signed.');
+          btn.disabled = false;
+          btn.textContent = 'Sign Recovery Proposal';
+          return;
+        }
+
+        // Deserialize, sign with connected wallet
+        const txBytes = Uint8Array.from(atob(tx1Base64), c => c.charCodeAt(0));
+        const tx = solanaWeb3.VersionedTransaction.deserialize(txBytes);
+
+        // Sign via wallet provider
+        const signedTx = await provider.signTransaction(tx);
+
+        // Extract our signature
+        const accountKeys = tx.message.staticAccountKeys;
+        const walletPubkey = new solanaWeb3.PublicKey(connectedWallet);
+        const walletIndex = accountKeys.findIndex(k => k.equals(walletPubkey));
+
+        if (walletIndex === -1) {
+          showError('Wallet not found in transaction signers');
+          btn.disabled = false;
+          btn.textContent = 'Sign Recovery Proposal';
+          return;
+        }
+
+        const sigBytes = signedTx.signatures[walletIndex];
+        const sigBase64 = btoa(String.fromCharCode(...sigBytes));
+
+        // Submit signature to backend
+        const submitRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: connectedWallet, signature: sigBase64 }),
+        });
+
+        if (!submitRes.ok) {
+          const err = await submitRes.json();
+          throw new Error(err.error || 'Failed to submit signature');
+        }
+
+        // Show success
+        document.getElementById('sign-section').classList.add('hidden');
+        document.getElementById('done-section').classList.remove('hidden');
+
+        // Refresh proposal state
+        await loadProposal();
+      } catch (err) {
+        showError('Signing failed: ' + (err.message || err));
+        btn.disabled = false;
+        btn.textContent = 'Sign Recovery Proposal';
+      }
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error-msg');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 8000);
+    }
+
+    loadProposal();
+  </script>
+</body>
+</html>

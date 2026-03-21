@@ -377,6 +377,112 @@ class ApiService {
     return res.data;
   }
 
+  async findVaultsByMember(
+    memberAddress: string,
+    cloudKey?: string,
+  ): Promise<{
+    multisigs: Array<{
+      multisigAddress: string;
+      vaultAddress: string;
+      threshold: number;
+      memberCount: number;
+      members: Array<{ address: string; permissions: { initiate: boolean; vote: boolean; execute: boolean } }>;
+      matchesCloudKey?: boolean;
+    }>;
+  }> {
+    // No auth — recovering users don't have a JWT yet
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/find-vaults`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberAddress, cloudKey: cloudKey || undefined }),
+    });
+    if (!r.ok) throw new Error(`API error: ${r.status}`);
+    const res = await r.json();
+    return res.data;
+  }
+
+  async createRecoveryProposal(params: {
+    multisigAddress: string;
+    vaultAddress: string;
+    transactionIndex: number;
+    threshold: number;
+    actions: Array<{ memberAddress: string; permissions: string }>;
+    tx1MessageBase64: string;
+    tx1Base64: string;
+    tx2Base64: string;
+    blockhash: string;
+    requiredSigners: Array<{ address: string; type: string; label?: string; email?: string }>;
+    collectedSignatures: Array<{ address: string; signature: string }>;
+    createdByWallet: string;
+  }): Promise<{ proposalId: string; status: string; signaturesCollected: number; signaturesRequired: number }> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/create-proposal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!r.ok) throw new Error(`API error: ${r.status}`);
+    const res = await r.json();
+    return res.data;
+  }
+
+  async getRecoveryProposalStatus(proposalId: string): Promise<{
+    proposalId: string;
+    multisigAddress: string;
+    vaultAddress: string;
+    threshold: number;
+    status: string;
+    signaturesCollected: number;
+    requiredSigners: Array<{ address: string; type: string; label?: string; email?: string; signed: boolean }>;
+  }> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}`);
+    if (!r.ok) throw new Error(`API error: ${r.status}`);
+    const res = await r.json();
+    return res.data;
+  }
+
+  async requestPrivySign(proposalId: string, email: string): Promise<{
+    signaturesCollected: number;
+    status: string;
+    signerAddress: string;
+  }> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}/sign-privy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: 'Failed' }));
+      throw new Error(err.error || `API error: ${r.status}`);
+    }
+    const res = await r.json();
+    return res.data;
+  }
+
+  async getAssembledRecoveryTx(proposalId: string): Promise<{
+    tx1Base64: string;
+    tx2Base64: string;
+    signatures: Array<{ address: string; signature: string }>;
+  }> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}/assembled-tx`);
+    if (!r.ok) throw new Error(`API error: ${r.status}`);
+    const res = await r.json();
+    return res.data;
+  }
+
+  async sendRecoveryBundle(proposalId: string, transactions: string[]): Promise<{ bundleId: string; status: string }> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}/send-bundle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transactions }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: 'Failed' }));
+      throw new Error(err.error || `API error: ${r.status}`);
+    }
+    const res = await r.json();
+    return { bundleId: res.bundleId, status: res.status };
+  }
+
   async sendRecoveryCode(email: string): Promise<void> {
     await this.post<{ success: boolean }>('/recovery/v1/send-code', { email });
   }

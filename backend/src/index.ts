@@ -18,6 +18,7 @@ import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
 import notificationsRouter from './routes/notifications';
 import recoveryRouter from './routes/recovery';
+import vaultRecoveryRouter from './routes/vault-recovery';
 import { initializeFirebase } from './services/firebaseManager';
 import { initializeHeliusListener, verifyWebhookAuth, handleWebhookPayload } from './services/heliusListener';
 
@@ -42,6 +43,9 @@ app.use('/auth/v2', authRouter);
 
 // Onboarding routes (no auth required — pre-wallet users)
 app.use('/onboarding/v1', onboardingRouter);
+
+// Vault recovery routes (no auth required — recovering users)
+app.use('/vault-recovery/v1', vaultRecoveryRouter);
 
 // Admin routes (password-protected)
 app.use('/admin/v1', adminRouter);

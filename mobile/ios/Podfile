@@ -12,6 +12,9 @@ prepare_react_native_project!
 pod 'GoogleUtilities', :modular_headers => true
 pod 'FirebaseAppCheckInterop', :modular_headers => true
 pod 'FirebaseAuthInterop', :modular_headers => true
+pod 'FirebaseAuth', :modular_headers => true
+pod 'FirebaseCore', :modular_headers => true
+pod 'FirebaseCoreInternal', :modular_headers => true
 pod 'RecaptchaInterop', :modular_headers => true
 pod 'leveldb-library', :modular_headers => true
 
