@@ -12,9 +12,6 @@ prepare_react_native_project!
 pod 'GoogleUtilities', :modular_headers => true
 pod 'FirebaseAppCheckInterop', :modular_headers => true
 pod 'FirebaseAuthInterop', :modular_headers => true
-pod 'FirebaseAuth', :modular_headers => true
-pod 'FirebaseCore', :modular_headers => true
-pod 'FirebaseCoreInternal', :modular_headers => true
 pod 'RecaptchaInterop', :modular_headers => true
 pod 'leveldb-library', :modular_headers => true
 
@@ -40,5 +37,24 @@ target 'Cashflow' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Fix Firebase 12.x: FirebaseAuth-Swift.h is generated in DerivedData but
+    # RNFBMessaging/RNFBDatabase need it via <FirebaseAuth/FirebaseAuth-Swift.h>.
+    # Copy it from DerivedData (previous build) into the Pods headers directory.
+    # On first build, a stub is created; running `pod install` after first build
+    # will copy the real header.
+    auth_header_dir = File.join(installer.sandbox.root, 'Headers', 'Private', 'FirebaseAuth')
+    auth_swift_header = File.join(auth_header_dir, 'FirebaseAuth-Swift.h')
+    FileUtils.mkdir_p(auth_header_dir)
+
+    # Try to find the real generated header from DerivedData
+    derived_data = File.expand_path('~/Library/Developer/Xcode/DerivedData')
+    real_header = Dir.glob(File.join(derived_data, 'Cashflow-*/Build/Products/*/FirebaseAuth/Swift Compatibility Header/FirebaseAuth-Swift.h')).first
+    if real_header && File.exist?(real_header)
+      FileUtils.cp(real_header, auth_swift_header)
+    elsif !File.exist?(auth_swift_header)
+      # Create minimal stub for first build — will fail but generate the real header
+      File.write(auth_swift_header, "// Stub — run `pod install` again after first build\n")
+    end
   end
 end
