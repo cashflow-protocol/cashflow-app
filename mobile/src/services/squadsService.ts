@@ -25,7 +25,7 @@ import {
 } from './keypairStorage';
 import { createWithdrawInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
-import { IS_SOLANA_MOBILE, TARGET_CLOUD_BALANCE } from '../config/constants';
+import { IS_SOLANA_MOBILE, TARGET_CLOUD_BALANCE, VAULT_CREATION_FEE } from '../config/constants';
 import { logError } from './analyticsService';
 
 const { Permission, Permissions } = multisig.types;
@@ -347,6 +347,22 @@ export async function createMultisig(
     lamports: TARGET_CLOUD_BALANCE,
   });
 
+  // Build vault creation fee instruction (0.05 SOL → treasury)
+  const instructions: TransactionInstruction[] = [createMultisigIx, fundCloudIx];
+  if (VAULT_CREATION_FEE > 0) {
+    const config = await apiService.getConfig();
+    if (!config.treasuryWallet) {
+      throw new Error('Treasury wallet not configured');
+    }
+    const feeIx = SystemProgram.transfer({
+      fromPubkey: creatorPubkey,
+      toPubkey: new PublicKey(config.treasuryWallet),
+      lamports: VAULT_CREATION_FEE,
+    });
+    instructions.push(feeIx);
+    console.log('[createMultisig] vault creation fee:', VAULT_CREATION_FEE, 'lamports');
+  }
+
   console.log('[createMultisig] fetching LUTs + blockhash...');
   const luts = await getLuts(connection);
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
@@ -354,7 +370,7 @@ export async function createMultisig(
   const msg1 = new TransactionMessage({
     payerKey: creatorPubkey,
     recentBlockhash: blockhash,
-    instructions: [createMultisigIx, fundCloudIx],
+    instructions,
   }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
 

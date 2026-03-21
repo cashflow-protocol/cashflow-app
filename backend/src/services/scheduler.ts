@@ -7,6 +7,7 @@ import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from
 import { NotificationType } from '../models';
 import { dispatchSystemNotification } from './notificationService';
 import { sendWaitlistPushNotification, cleanupExpiredRTDBNotifications } from './firebaseManager';
+import { updateCostBasisOnConfirm, markFeeTransactionFailed } from './feeService';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
@@ -97,6 +98,7 @@ async function confirmTransactions() {
         const updatedAt = new Date((tx as any).updatedAt).getTime();
         if (Date.now() - updatedAt > 5 * 60 * 1000) {
           await dbManager.confirmTransaction(String(tx._id), TransactionStatus.FAILED);
+          await markFeeTransactionFailed(String(tx._id));
           console.log(`[Cron] Transaction ${tx.signature} FAILED (timeout)`);
         }
         continue;
@@ -104,9 +106,11 @@ async function confirmTransactions() {
 
       if (status.err) {
         await dbManager.confirmTransaction(String(tx._id), TransactionStatus.FAILED);
+        await markFeeTransactionFailed(String(tx._id));
         console.log(`[Cron] Transaction ${tx.signature} FAILED`);
       } else if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') {
         await dbManager.confirmTransaction(String(tx._id), TransactionStatus.CONFIRMED);
+        await updateCostBasisOnConfirm(String(tx._id));
         console.log(`[Cron] Transaction ${tx.signature} CONFIRMED`);
       }
     }

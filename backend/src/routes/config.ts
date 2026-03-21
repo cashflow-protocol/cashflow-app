@@ -10,6 +10,7 @@ router.get('/', (req: Request, res: Response) => {
     data: {
       lookupTableAddress: LookupManager.lookupTableAddress ?? null,
       solanaRpcUrl: process.env.MOBILE_SOLANA_RPC ?? null,
+      treasuryWallet: process.env.TREASURY_WALLET_ADDRESS ?? null,
     },
   });
 });

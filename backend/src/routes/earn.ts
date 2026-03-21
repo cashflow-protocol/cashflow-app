@@ -3,9 +3,10 @@ import { DBManager, JupiterManager, KaminoManager, DriftManager, PriceManager } 
 import { LookupManager } from '../managers/LookupManager';
 import { EarnTokenModel } from '../models/EarnToken';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
-import { TransactionAction } from '../models';
+import { TransactionAction, UserCostBasisModel } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
 import { notifyAdmin } from '../services/telegramManager';
+import { calculateFee, buildFeeTransferInstructions, createFeeRecord } from '../services/feeService';
 
 const router = Router();
 const dbManager = new DBManager();
@@ -145,6 +146,177 @@ router.get('/positions', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch wallet positions',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /earn/v1/earnings - Get user earnings and cost basis data
+router.get('/earnings', async (req: Request, res: Response) => {
+  try {
+    const { walletAddress } = req.query;
+    if (!walletAddress || typeof walletAddress !== 'string') {
+      res.status(400).json({ success: false, error: 'walletAddress query param is required' });
+      return;
+    }
+
+    // Fetch cost basis records and current positions in parallel
+    const [costBasisRecords, positionsRes] = await Promise.all([
+      UserCostBasisModel.find({ walletAddress }).lean(),
+      // Re-use the positions logic: fetch from all protocols
+      (async () => {
+        const positionPromises: [string, Promise<any[]>][] = [
+          ['jupiter', jupiterManager.getWalletPositions(walletAddress)],
+          ['kamino', kaminoManager.getWalletPositions(walletAddress)],
+        ];
+        if (driftManager) {
+          positionPromises.push(
+            ['drift', (async () => { await driftReady; return driftManager!.getWalletPositions(walletAddress); })()],
+          );
+        }
+        const results = await Promise.allSettled(positionPromises.map(([, p]) => p));
+        const settled: Record<string, any[]> = {};
+        results.forEach((r, i) => {
+          const name = positionPromises[i][0];
+          settled[name] = r.status === 'fulfilled' ? r.value : [];
+        });
+        return settled;
+      })(),
+    ]);
+
+    // Build current position amounts by mint (sum across protocols)
+    const currentPositionByMint: Record<string, { amount: bigint; usdValue: number }> = {};
+
+    const addPosition = (mint: string, amount: string, symbol: string, decimals: number) => {
+      const uiAmount = Number(amount) / 10 ** decimals;
+      const usdValue = priceManager.getUsdValue(symbol, uiAmount);
+      if (!currentPositionByMint[mint]) {
+        currentPositionByMint[mint] = { amount: 0n, usdValue: 0 };
+      }
+      currentPositionByMint[mint].amount += BigInt(amount);
+      currentPositionByMint[mint].usdValue += usdValue;
+    };
+
+    for (const p of (positionsRes.jupiter ?? [])) {
+      const mint = p.token.assetAddress;
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+      if (Number(p.underlyingAssets) > 0) {
+        addPosition(mint, p.underlyingAssets, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
+      }
+    }
+    for (const p of (positionsRes.kamino ?? [])) {
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
+      addPosition(p.mint, p.amount, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
+    }
+    for (const p of (positionsRes.drift ?? [])) {
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
+      addPosition(p.mint, p.amount, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
+    }
+
+    // Calculate earnings per mint
+    let lifetimeEarnedUsd = 0;
+    const perMint: {
+      mint: string;
+      symbol: string;
+      totalDeposited: string;
+      totalWithdrawn: string;
+      currentPosition: string;
+      realizedProfit: string;
+      unrealizedProfit: string;
+      feesCollected: string;
+      earningsUsd: number;
+    }[] = [];
+
+    // Collect all mints from cost basis + current positions
+    const allMints = new Set([
+      ...costBasisRecords.map((r) => r.mint),
+      ...Object.keys(currentPositionByMint),
+    ]);
+
+    for (const mint of allMints) {
+      const cb = costBasisRecords.find((r) => r.mint === mint);
+      const totalDeposited = BigInt(cb?.totalDeposited ?? '0');
+      const totalWithdrawn = BigInt(cb?.totalWithdrawn ?? '0');
+      const feesCollected = BigInt(cb?.totalFeesCollected ?? '0');
+      const currentPosition = currentPositionByMint[mint]?.amount ?? 0n;
+      const currentUsdValue = currentPositionByMint[mint]?.usdValue ?? 0;
+
+      // Realized profit: what was already withdrawn in profit
+      const realizedProfit = totalWithdrawn > totalDeposited ? totalWithdrawn - totalDeposited : 0n;
+
+      // Unrealized profit: current position value vs remaining principal
+      const remainingPrincipal = totalDeposited > totalWithdrawn ? totalDeposited - totalWithdrawn : 0n;
+      const unrealizedProfit = currentPosition > remainingPrincipal ? currentPosition - remainingPrincipal : 0n;
+
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+      const decimals = tokenInfo?.decimals ?? 6;
+      const symbol = tokenInfo?.symbol ?? mint.slice(0, 6);
+
+      // Convert unrealized + realized profit to USD
+      const unrealizedUsd = priceManager.getUsdValue(symbol, Number(unrealizedProfit) / 10 ** decimals);
+      const realizedUsd = priceManager.getUsdValue(symbol, Number(realizedProfit) / 10 ** decimals);
+      const earningsUsd = unrealizedUsd + realizedUsd;
+      lifetimeEarnedUsd += earningsUsd;
+
+      perMint.push({
+        mint,
+        symbol,
+        totalDeposited: totalDeposited.toString(),
+        totalWithdrawn: totalWithdrawn.toString(),
+        currentPosition: currentPosition.toString(),
+        realizedProfit: realizedProfit.toString(),
+        unrealizedProfit: unrealizedProfit.toString(),
+        feesCollected: feesCollected.toString(),
+        earningsUsd,
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        lifetimeEarnedUsd,
+        perMint,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error fetching earnings:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch earnings',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /earn/v1/fee-preview - Preview the profit fee for a withdrawal
+router.get('/fee-preview', async (req: Request, res: Response) => {
+  try {
+    const { walletAddress, mint, amount } = req.query;
+    if (!walletAddress || !mint || !amount || typeof walletAddress !== 'string' || typeof mint !== 'string' || typeof amount !== 'string') {
+      res.status(400).json({ success: false, error: 'walletAddress, mint, and amount query params are required' });
+      return;
+    }
+
+    const { feeAmount, profitAmount } = await calculateFee(walletAddress, mint, amount);
+    const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+    const decimals = tokenInfo?.decimals ?? 6;
+
+    res.json({
+      success: true,
+      data: {
+        feeAmount: feeAmount.toString(),
+        profitAmount: profitAmount.toString(),
+        feeUiAmount: Number(feeAmount) / 10 ** decimals,
+        profitUiAmount: Number(profitAmount) / 10 ** decimals,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error calculating fee preview:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to calculate fee preview',
       timestamp: new Date().toISOString(),
     });
   }
@@ -338,6 +510,15 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         if (vaultLut) extraLookupTables.push(vaultLut);
       }
 
+      // Calculate and append profit fee instructions
+      const { feeAmount, profitAmount } = await calculateFee(walletAddress, mint, amount);
+      let feeAmountStr: string | undefined;
+      if (feeAmount > 0n) {
+        const feeInstructions = await buildFeeTransferInstructions(mint, feeAmount.toString(), authority);
+        instructions.push(...feeInstructions);
+        feeAmountStr = feeAmount.toString();
+      }
+
       const record = await dbManager.createTransaction({
         action: TransactionAction.WITHDRAW,
         type,
@@ -345,7 +526,19 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         vaultAddress,
         amount,
         walletAddress,
+        feeAmount: feeAmountStr,
       });
+
+      if (feeAmount > 0n) {
+        await createFeeRecord({
+          walletAddress,
+          mint,
+          withdrawTransactionId: String(record._id),
+          withdrawAmount: amount,
+          profitAmount: profitAmount.toString(),
+          feeAmount: feeAmount.toString(),
+        });
+      }
 
       res.json({
         success: true,
@@ -353,6 +546,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         instructions,
         lookupTableAddress: LookupManager.lookupTableAddress,
         extraLookupTables,
+        feeAmount: feeAmountStr,
         timestamp: new Date().toISOString(),
       });
       return;

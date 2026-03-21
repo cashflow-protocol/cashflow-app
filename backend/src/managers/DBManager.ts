@@ -97,6 +97,7 @@ export class DBManager {
     walletAddress: string;
     destinationAddress?: string;
     unsignedTransaction?: string;
+    feeAmount?: string;
   }) {
     return TransactionModel.create(data);
   }

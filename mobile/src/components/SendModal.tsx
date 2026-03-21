@@ -271,8 +271,8 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
               editable={!loading}
             />
             <Text style={[styles.inputSymbol, { color: colors.textSecondary }]}>{selectedToken.symbol}</Text>
-            <TouchableOpacity style={[styles.maxButton, { backgroundColor: colors.primaryButton }]} onPress={handleMaxPress}>
-              <Text style={[styles.maxText, { color: colors.primaryButtonText }]}>MAX</Text>
+            <TouchableOpacity style={[styles.maxButton, { backgroundColor: colors.pillButton }]} onPress={handleMaxPress}>
+              <Text style={[styles.maxText, { color: colors.pillButtonText }]}>MAX</Text>
             </TouchableOpacity>
           </View>
 
@@ -288,8 +288,8 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
               autoCorrect={false}
               editable={!loading}
             />
-            <TouchableOpacity style={[styles.pasteButton, { backgroundColor: colors.primaryButton }]} onPress={handlePaste}>
-              <Text style={[styles.pasteText, { color: colors.primaryButtonText }]}>Paste</Text>
+            <TouchableOpacity style={[styles.pasteButton, { backgroundColor: colors.pillButton }]} onPress={handlePaste}>
+              <Text style={[styles.pasteText, { color: colors.pillButtonText }]}>Paste</Text>
             </TouchableOpacity>
           </View>
 

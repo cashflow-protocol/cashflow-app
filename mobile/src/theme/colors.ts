@@ -37,6 +37,8 @@ export interface ColorPalette {
   primaryButton: string;
   primaryButtonText: string;
   disabledButton: string;
+  pillButton: string;
+  pillButtonText: string;
 
   // Accents (shared across themes)
   accentBlue: string;
@@ -103,6 +105,8 @@ export const darkColors: ColorPalette = {
   primaryButton: '#FFFFFF',
   primaryButtonText: '#111827',
   disabledButton: '#334155',
+  pillButton: '#334155',
+  pillButtonText: '#FFFFFF',
 
   // Accents
   accentBlue: '#3985D8',
@@ -120,10 +124,10 @@ export const darkColors: ColorPalette = {
   errorText: '#F87171',
   infoBackground: '#1E3A5F',
 
-  // Header gradients — darker versions
+  // Header gradients — earn/assets keep original vibrant colors
   homeGradient: ['#0B2545', '#133E6B', '#1B4F7A', '#111827'],
-  earnGradient: ['#0A3022', '#115C3E', '#111827'],
-  assetsGradient: ['#0B2545', '#1B4F7A', '#111827'],
+  earnGradient: ['#1E8260', '#19C394'],
+  assetsGradient: ['#104982', '#3985D8'],
 
   // Misc
   shadowColor: '#000',
@@ -169,6 +173,8 @@ export const lightColors: ColorPalette = {
   primaryButton: '#000000',
   primaryButtonText: '#FFFFFF',
   disabledButton: '#B2B2B2',
+  pillButton: '#000000',
+  pillButtonText: '#FFFFFF',
 
   // Accents
   accentBlue: '#3985D8',

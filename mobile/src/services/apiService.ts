@@ -37,11 +37,11 @@ class ApiService {
     return res.json();
   }
 
-  async getConfig(): Promise<{ lookupTableAddress: string | null; solanaRpcUrl: string | null }> {
+  async getConfig(): Promise<{ lookupTableAddress: string | null; solanaRpcUrl: string | null; treasuryWallet: string | null }> {
     // Config is needed during vault creation (before auth is available) — bypass auth
     const r = await fetch(`${this.baseUrl}/config/v1`);
     if (!r.ok) throw new Error(`API error: ${r.status}`);
-    const res: { success: boolean; data: { lookupTableAddress: string | null; solanaRpcUrl: string | null } } = await r.json();
+    const res: { success: boolean; data: { lookupTableAddress: string | null; solanaRpcUrl: string | null; treasuryWallet: string | null } } = await r.json();
     return res.data;
   }
 
@@ -78,6 +78,30 @@ class ApiService {
     const res = await this.get<{ success: boolean; data: EarnPosition[] }>('/earn/v2/positions', {
       walletAddress,
     });
+    return res.data;
+  }
+
+  async getEarnings(walletAddress: string): Promise<{
+    lifetimeEarnedUsd: number;
+    perMint: { mint: string; symbol: string; earningsUsd: number }[];
+  }> {
+    const res = await this.get<{
+      success: boolean;
+      data: { lifetimeEarnedUsd: number; perMint: { mint: string; symbol: string; earningsUsd: number }[] };
+    }>('/earn/v2/earnings', { walletAddress });
+    return res.data;
+  }
+
+  async getFeePreview(walletAddress: string, mint: string, amount: string): Promise<{
+    feeAmount: string;
+    profitAmount: string;
+    feeUiAmount: number;
+    profitUiAmount: number;
+  }> {
+    const res = await this.get<{
+      success: boolean;
+      data: { feeAmount: string; profitAmount: string; feeUiAmount: number; profitUiAmount: number };
+    }>('/earn/v2/fee-preview', { walletAddress, mint, amount });
     return res.data;
   }
 

@@ -44,7 +44,6 @@ export class LookupManager {
     private owner!: KeyPairSigner;
     private lookupTableAddress: Address = address('7zhwX89SJs1ctA4e57Y6EpSvMuYXVoig2YiLKWFfnzwM');
     private accounts: Address[] = [
-        //TODO: add Cashflow fee wallet
         //TODO: can add LP tokens, if need to reduce tx even more
 
         // programs
@@ -84,6 +83,10 @@ export class LookupManager {
             getBase58Encoder().encode(process.env.ADMIN_PRIVATE_KEY!),
         );
         this.accounts.push(this.owner.address);
+
+        if (process.env.TREASURY_WALLET_ADDRESS) {
+            this.accounts.push(address(process.env.TREASURY_WALLET_ADDRESS));
+        }
 
         console.log('[LookupManager] Accounts:', this.accounts);
     }

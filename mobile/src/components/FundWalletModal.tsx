@@ -311,8 +311,8 @@ export default function FundWalletModal({ visible, onClose, onSuccess }: FundWal
               editable={!loading}
             />
             <Text style={[styles.inputSymbol, { color: colors.textSecondary }]}>{selectedToken.symbol}</Text>
-            <TouchableOpacity style={[styles.maxButton, { backgroundColor: colors.primaryButton }]} onPress={handleMaxPress}>
-              <Text style={[styles.maxText, { color: colors.primaryButtonText }]}>MAX</Text>
+            <TouchableOpacity style={[styles.maxButton, { backgroundColor: colors.pillButton }]} onPress={handleMaxPress}>
+              <Text style={[styles.maxText, { color: colors.pillButtonText }]}>MAX</Text>
             </TouchableOpacity>
           </View>
 

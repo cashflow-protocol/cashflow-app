@@ -25,7 +25,7 @@ const PINNED_FILTERS = [ALL_FILTER, STABLES_FILTER, 'SOL', 'USDC'];
 
 export default function EarnScreen() {
   const { colors } = useTheme();
-  const { tokens, loading, refreshing, error, refresh } = useEarnTokens();
+  const { tokens, earnings, loading, refreshing, error, refresh } = useEarnTokens();
   const [activeFilter, setActiveFilter] = useState(ALL_FILTER);
   const [selectedToken, setSelectedToken] = useState<EarnTokenWithPosition | null>(null);
 
@@ -114,7 +114,9 @@ export default function EarnScreen() {
                 </View>
                 <View>
                   <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Lifetime earned</Text>
-                  <Text style={[styles.statValue, { color: colors.textPrimary }]}>--</Text>
+                  <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+                    {earnings ? `$${formatTotal(earnings.lifetimeEarnedUsd)}` : '--'}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -126,6 +128,7 @@ export default function EarnScreen() {
                 <View>
                   <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Last 7D</Text>
                   <Text style={[styles.statValue, { color: colors.textPrimary }]}>--</Text>
+                  {/* TODO: requires daily position snapshots to calculate 7-day delta */}
                 </View>
               </View>
             </View>

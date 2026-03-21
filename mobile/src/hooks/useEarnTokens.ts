@@ -8,8 +8,14 @@ export interface EarnTokenWithPosition extends EarnToken {
   position?: EarnPosition;
 }
 
+export interface EarningsData {
+  lifetimeEarnedUsd: number;
+  perMint: { mint: string; symbol: string; earningsUsd: number }[];
+}
+
 // Module-level cache — persists across tab switches, cleared on app restart
 let cachedTokens: EarnTokenWithPosition[] | null = null;
+let cachedEarnings: EarningsData | null = null;
 
 // Listeners that get notified when cache should be invalidated
 const refreshListeners = new Set<() => void>();
@@ -17,6 +23,7 @@ const refreshListeners = new Set<() => void>();
 /** Invalidate the earn tokens cache and trigger a refresh on all mounted hooks. */
 export function invalidateEarnTokens(): void {
   cachedTokens = null;
+  cachedEarnings = null;
   refreshListeners.forEach((fn) => fn());
 }
 
@@ -45,6 +52,7 @@ function mergeTokensAndPositions(earnTokens: EarnToken[], positions: EarnPositio
 
 export function useEarnTokens() {
   const [tokens, setTokens] = useState<EarnTokenWithPosition[]>(cachedTokens ?? []);
+  const [earnings, setEarnings] = useState<EarningsData | null>(cachedEarnings);
   const [loading, setLoading] = useState(cachedTokens === null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,14 +67,20 @@ export function useEarnTokens() {
     try {
       const vault = await getVault();
       if (!vault?.vaultAddress) return;
-      const [earnTokens, positions] = await Promise.all([
+      const [earnTokens, positions, earningsData] = await Promise.all([
         apiService.getEarnTokens(),
         apiService.getPositions(vault.vaultAddress),
+        apiService.getEarnings(vault.vaultAddress).catch(() => null),
       ]);
 
       const merged = mergeTokensAndPositions(earnTokens, positions);
       cachedTokens = merged;
       setTokens(merged);
+
+      if (earningsData) {
+        cachedEarnings = earningsData;
+        setEarnings(earningsData);
+      }
     } catch (err: any) {
       logError('earn_tokens_fetch', err.message ?? 'unknown');
       setError(err.message ?? 'Failed to fetch earn tokens');
@@ -91,5 +105,5 @@ export function useEarnTokens() {
 
   const refresh = useCallback(() => fetchData(true), [fetchData]);
 
-  return { tokens, loading, refreshing, error, refresh };
+  return { tokens, earnings, loading, refreshing, error, refresh };
 }

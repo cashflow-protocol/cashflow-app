@@ -87,6 +87,7 @@ export default function VaultModal({
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [walletBalance, setWalletBalance] = useState<bigint | null>(null);
   const [vaultData, setVaultData] = useState<VaultData | null>(null);
+  const [feePreview, setFeePreview] = useState<{ feeUiAmount: number; profitUiAmount: number } | null>(null);
 
   // Convert raw bigint amount to UI display string
   const toUiAmount = (raw: bigint, dec: number): string => {
@@ -146,6 +147,21 @@ export default function VaultModal({
   const parsedAmount = parseFloat(amount);
   const isValidAmount = !isNaN(parsedAmount) && parsedAmount > 0;
   const parsedRaw = isValidAmount ? toRawAmount(amount, decimals) : 0n;
+
+  // Fetch fee preview when withdraw amount changes (debounced)
+  useEffect(() => {
+    if (mode !== 'withdraw' || !isValidAmount || !vaultData?.vaultAddress) {
+      setFeePreview(null);
+      return;
+    }
+    const rawAmount = parsedRaw.toString();
+    const timeout = setTimeout(() => {
+      apiService.getFeePreview(vaultData.vaultAddress, mint, rawAmount)
+        .then((data) => setFeePreview({ feeUiAmount: data.feeUiAmount, profitUiAmount: data.profitUiAmount }))
+        .catch(() => setFeePreview(null));
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [mode, amount, mint, vaultData?.vaultAddress]);
   const exceedsBalance =
     (mode === 'withdraw' && hasPosition && parsedRaw > BigInt(position!.balance.amount)) ||
     (mode === 'deposit' && walletBalance !== null && parsedRaw > walletBalance);
@@ -278,20 +294,20 @@ export default function VaultModal({
               {/* Mode toggle */}
               <View style={styles.modeToggle}>
                 <TouchableOpacity
-                  style={[styles.modeButton, mode === 'deposit' && { backgroundColor: colors.primaryButton }]}
+                  style={[styles.modeButton, mode === 'deposit' && { backgroundColor: colors.pillButton }]}
                   onPress={() => { logVaultModeSwitch('deposit'); setMode('deposit'); setAmount(''); setResult(null); }}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.modeText, { color: colors.textSecondary }, mode === 'deposit' && { color: colors.primaryButtonText }]}>
+                  <Text style={[styles.modeText, { color: colors.textSecondary }, mode === 'deposit' && { color: colors.pillButtonText }]}>
                     Deposit
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modeButton, mode === 'withdraw' && { backgroundColor: colors.primaryButton }]}
+                  style={[styles.modeButton, mode === 'withdraw' && { backgroundColor: colors.pillButton }]}
                   onPress={() => { logVaultModeSwitch('withdraw'); setMode('withdraw'); setAmount(''); setResult(null); }}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.modeText, { color: colors.textSecondary }, mode === 'withdraw' && { color: colors.primaryButtonText }]}>
+                  <Text style={[styles.modeText, { color: colors.textSecondary }, mode === 'withdraw' && { color: colors.pillButtonText }]}>
                     Withdraw
                   </Text>
                 </TouchableOpacity>
@@ -328,8 +344,8 @@ export default function VaultModal({
                 />
                 <Text style={[styles.inputSymbol, { color: colors.textSecondary }]}>{symbol}</Text>
                 {((mode === 'withdraw' && hasPosition) || (mode === 'deposit' && walletBalance !== null)) && (
-                  <TouchableOpacity style={[styles.maxButton, { backgroundColor: colors.primaryButton }]} onPress={handleMaxPress}>
-                    <Text style={[styles.maxText, { color: colors.primaryButtonText }]}>MAX</Text>
+                  <TouchableOpacity style={[styles.maxButton, { backgroundColor: colors.pillButton }]} onPress={handleMaxPress}>
+                    <Text style={[styles.maxText, { color: colors.pillButtonText }]}>MAX</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -344,6 +360,18 @@ export default function VaultModal({
                 <Text style={[styles.validationError, { color: colors.errorText }]}>
                   Minimum {mode} is {toUiAmount(minAmountRaw, decimals)} {symbol}
                 </Text>
+              )}
+
+              {/* Fee disclosure for withdrawals */}
+              {mode === 'withdraw' && feePreview && feePreview.feeUiAmount > 0 && (
+                <View style={[styles.feeBar, { backgroundColor: colors.infoBackground }]}>
+                  <Text style={[styles.feeLabel, { color: colors.textSecondary }]}>
+                    Profit fee (10%)
+                  </Text>
+                  <Text style={[styles.feeAmount, { color: colors.textPrimary }]}>
+                    {formatAmount(feePreview.feeUiAmount)} {symbol}
+                  </Text>
+                </View>
               )}
 
               {/* Result banner */}
@@ -485,6 +513,21 @@ const styles = StyleSheet.create({
   validationError: {
     fontSize: 13,
     marginTop: -8,
+  },
+  feeBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  feeLabel: {
+    fontSize: 13,
+  },
+  feeAmount: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   resultBanner: {
     borderRadius: 10,
