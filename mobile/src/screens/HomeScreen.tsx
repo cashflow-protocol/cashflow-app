@@ -44,6 +44,7 @@ import {
   logReceiveFundFromSeeker,
   logSectionMorePress,
 } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 // Bottom padding to account for floating tab bar
 const TAB_BAR_PADDING = 120;
@@ -58,6 +59,7 @@ interface HomeScreenProps {
 }
 
 export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenProps) {
+  const { colors } = useTheme();
   const { wallet, balance, connect } = useWallet();
   const { assets, totalUsdValue: assetsTotalUsd, loading: assetsLoading, refresh: refreshAssets } = useAssets();
   const { tokens, loading: earnLoading } = useEarnTokens();
@@ -120,12 +122,12 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
 
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
 
 
       {/* Header Gradient */}
       <LinearGradient
-        colors={['#175DA3', '#347AC0', '#8EB2D8', '#E8EAF1']}
+        colors={colors.homeGradient as unknown as string[]}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -153,7 +155,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
                   <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                 </Svg>
                 {unreadCount > 0 && (
-                  <View style={styles.badge}>
+                  <View style={[styles.badge, { backgroundColor: colors.badge }]}>
                     <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
                   </View>
                 )}
@@ -170,7 +172,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
 
         {/* Balance Display */}
         <View style={styles.balanceSection}>
-          <Text style={styles.balanceAmount}>
+          <Text style={[styles.balanceAmount, { color: colors.textPrimary }]}>
             {isLoading ? '...' : formatUsd(totalBalance)}
           </Text>
         </View>
@@ -181,19 +183,19 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
             icon={<ReceiveIcon size={32} />}
             label="Receive"
             onPress={() => { logHomeActionPress('receive'); logReceiveModalOpen(); setReceiveModalVisible(true); }}
-            backgroundColor="#171D26"
+            backgroundColor={colors.cardSecondary}
           />
           <ActionButton
             icon={<SendIcon size={32} />}
             label="Send"
             onPress={() => { logHomeActionPress('send'); logSendModalOpen(); setSendModalVisible(true); }}
-            backgroundColor="#171D26"
+            backgroundColor={colors.cardSecondary}
           />
           <ActionButton
             icon={<ConvertIcon size={32} />}
             label="Convert"
             onPress={() => { logHomeActionPress('convert'); logComingSoonView('convert'); setConvertModalVisible(true); }}
-            backgroundColor="#171D26"
+            backgroundColor={colors.cardSecondary}
           />
         </View>
 
@@ -236,7 +238,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
           onMorePress={() => { logSectionMorePress('assets'); onNavigateToTab?.('assets'); }}
         >
           {assetsLoading ? (
-            <ActivityIndicator size="small" color="#175DA3" />
+            <ActivityIndicator size="small" color={colors.accentBlueDark} />
           ) : (
             topAssets.map((asset) => (
               <AssetRow key={asset.mint} item={asset} compact />
@@ -252,7 +254,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
           onMorePress={() => { logSectionMorePress('earn'); onNavigateToTab?.('earn'); }}
         >
           {earnLoading ? (
-            <ActivityIndicator size="small" color="#19C394" />
+            <ActivityIndicator size="small" color={colors.accentGreen} />
           ) : (
             <>
               <View style={styles.statsRow}>
@@ -290,25 +292,25 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
 
         {/* Useful Section */}
         <SectionCard title="Useful">
-          <View style={styles.solPrice}>
-            <View style={styles.solPriceIconContainer}>
+          <View style={[styles.solPrice, { backgroundColor: colors.cardSecondary }]}>
+            <View style={[styles.solPriceIconContainer, { backgroundColor: colors.card }]}>
               <Image source={getTokenIcon('native')!} style={styles.solPriceIcon} />
             </View>
             <View>
-              <Text style={styles.solPriceLabel}>SOL</Text>
-              <Text style={styles.solPriceValue}>
+              <Text style={[styles.solPriceLabel, { color: colors.textSecondary }]}>SOL</Text>
+              <Text style={[styles.solPriceValue, { color: colors.textPrimary }]}>
                 {solPriceLoading ? '...' : solPrice != null ? formatUsd(solPrice) : '--'}
               </Text>
             </View>
           </View>
           <View style={styles.helpButtons}>
-            <TouchableOpacity style={styles.helpButton} onPress={() => { logSupportLinkPress(); Linking.openURL('https://t.me/heymike777'); }}>
+            <TouchableOpacity style={[styles.helpButton, { backgroundColor: colors.cardSecondary }]} onPress={() => { logSupportLinkPress(); Linking.openURL('https://t.me/heymike777'); }}>
               <SupportIcon size={20} />
-              <Text style={styles.helpButtonText}>Support</Text>
+              <Text style={[styles.helpButtonText, { color: colors.textPrimary }]}>Support</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.helpButton} onPress={() => { logQuestionsLinkPress(); Linking.openURL('https://t.me/heymike777'); }}>
+            <TouchableOpacity style={[styles.helpButton, { backgroundColor: colors.cardSecondary }]} onPress={() => { logQuestionsLinkPress(); Linking.openURL('https://t.me/heymike777'); }}>
               <QuestionsIcon size={20} />
-              <Text style={styles.helpButtonText}>Questions</Text>
+              <Text style={[styles.helpButtonText, { color: colors.textPrimary }]}>Questions</Text>
             </TouchableOpacity>
           </View>
         </SectionCard>
@@ -366,7 +368,6 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8EAF1',
   },
   headerGradient: {
     position: 'absolute',
@@ -399,7 +400,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 4,
     right: 2,
-    backgroundColor: '#DC3545',
     borderRadius: 10,
     minWidth: 18,
     height: 18,
@@ -428,7 +428,6 @@ const styles = StyleSheet.create({
   balanceAmount: {
     fontSize: 48,
     fontWeight: '500',
-    color: '#fff',
     textAlign: 'center',
   },
   actionButtons: {
@@ -460,12 +459,10 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#808080',
     textAlign: 'center',
     paddingVertical: 8,
   },
   notification: {
-    backgroundColor: '#fff',
     borderRadius: 20,
     borderWidth: 1.5,
     borderColor: '#9C42FF',
@@ -478,7 +475,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#14F195',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -487,14 +483,11 @@ const styles = StyleSheet.create({
   },
   notificationTitle: {
     fontSize: 14,
-    color: '#000',
   },
   notificationSubtitle: {
     fontSize: 14,
-    color: '#808080',
   },
   solPrice: {
-    backgroundColor: '#F4F4F4',
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
@@ -506,7 +499,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#fff',
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
   },
@@ -516,11 +508,9 @@ const styles = StyleSheet.create({
   },
   solPriceLabel: {
     fontSize: 14,
-    color: '#808080',
   },
   solPriceValue: {
     fontSize: 14,
-    color: '#000',
     fontWeight: '500',
   },
   helpButtons: {
@@ -529,7 +519,6 @@ const styles = StyleSheet.create({
   },
   helpButton: {
     flex: 1,
-    backgroundColor: '#F4F4F4',
     borderRadius: 12,
     height: 60,
     justifyContent: 'center',
@@ -541,6 +530,5 @@ const styles = StyleSheet.create({
   },
   helpButtonText: {
     fontSize: 14,
-    color: '#000',
   },
 });

@@ -2,11 +2,9 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
+import { useTheme } from '../theme/ThemeContext';
 
 export type TabName = 'home' | 'earn' | 'assets' | 'more';
-
-const INACTIVE_COLOR = '#B2B2B2';
-const ACTIVE_COLOR = '#F95357';
 
 const ICON_PATHS: Record<TabName, string[]> = {
   home: [
@@ -51,16 +49,21 @@ const TAB_LABELS: Record<TabName, string> = {
 const TAB_ORDER: TabName[] = ['home', 'earn', 'assets', 'more'];
 
 export default function TabBar({ activeTab, onTabPress }: TabBarProps) {
+  const { colors } = useTheme();
+
   return (
     <View style={styles.tabBarContainer}>
       <LinearGradient
-        colors={['rgba(165, 165, 165, 0)', 'rgba(165, 165, 165, 0.3)']}
+        colors={colors.tabBarGlow}
         style={styles.tabBarGlow}
       />
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, {
+        backgroundColor: colors.tabBarBackground,
+        borderColor: colors.tabBarBorder,
+      }]}>
         {TAB_ORDER.map((tab) => {
           const isActive = activeTab === tab;
-          const color = isActive ? ACTIVE_COLOR : INACTIVE_COLOR;
+          const color = isActive ? colors.tabActiveColor : colors.tabInactiveColor;
           return (
             <TouchableOpacity
               key={tab}
@@ -68,7 +71,7 @@ export default function TabBar({ activeTab, onTabPress }: TabBarProps) {
               onPress={() => onTabPress(tab)}
             >
               <TabIcon tab={tab} color={color} />
-              <Text style={isActive ? styles.tabLabelActive : styles.tabLabel}>
+              <Text style={{ fontSize: 10, fontWeight: '500', color }}>
                 {TAB_LABELS[tab]}
               </Text>
             </TouchableOpacity>
@@ -101,10 +104,8 @@ const styles = StyleSheet.create({
     transform: [{ translateX: -154.5 }],
     width: 309,
     height: 56,
-    backgroundColor: '#FDFDFE',
     borderRadius: 28,
     borderWidth: 0.5,
-    borderColor: '#EEECEC',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
@@ -116,15 +117,5 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 10,
     gap: 2,
-  },
-  tabLabel: {
-    fontSize: 10,
-    color: INACTIVE_COLOR,
-    fontWeight: '500',
-  },
-  tabLabelActive: {
-    fontSize: 10,
-    color: ACTIVE_COLOR,
-    fontWeight: '500',
   },
 });

@@ -28,6 +28,7 @@ import {
   logRemoveVaultPress,
   logRemoveVaultConfirm,
 } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
@@ -50,6 +51,7 @@ function formatSol(amount: number | null): string {
 }
 
 export default function MoreScreen({ onNavigate }: MoreScreenProps) {
+  const { colors } = useTheme();
   const [vault, setVault] = useState<VaultData | null>(null);
   const [cloudPubkey, setCloudPubkey] = useState<string | null>(null);
   const [devicePubkey, setDevicePubkey] = useState<string | null>(null);
@@ -172,11 +174,11 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
   }, []);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
 
 
       <LinearGradient
-        colors={['#1E8260', '#19C394']}
+        colors={colors.earnGradient as unknown as string[]}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -198,25 +200,25 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
           contentContainerStyle={styles.statsContainer}
           style={styles.statsScroll}
         >
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
             <View style={styles.statRow}>
               <View style={styles.statIconCircle}>
                 <LifetimeEarnedIcon size={20} />
               </View>
               <View>
-                <Text style={styles.statLabel}>Transactions</Text>
-                <Text style={styles.statValue}>0</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Transactions</Text>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>0</Text>
               </View>
             </View>
           </View>
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
             <View style={styles.statRow}>
               <View style={styles.statIconCircle}>
                 <Last7DIcon size={20} />
               </View>
               <View>
-                <Text style={styles.statLabel}>Active since</Text>
-                <Text style={styles.statValue}>Today</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active since</Text>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>Today</Text>
               </View>
             </View>
           </View>
@@ -229,14 +231,14 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
           {vault ? (
             <>
             <TouchableOpacity
-              style={styles.vaultCard}
+              style={[styles.vaultCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}
               onPress={() => { logMoreNavigate('squads'); onNavigate?.('squads'); }}
               activeOpacity={0.7}
             >
               <View style={styles.vaultHeader}>
                 <Image source={squadAvatar} style={styles.vaultAvatar} />
                 <View style={styles.vaultHeaderInfo}>
-                  <Text style={styles.vaultName}>{vault.label}</Text>
+                  <Text style={[styles.vaultName, { color: colors.textPrimary }]}>{vault.label}</Text>
                   <TouchableOpacity
                     onPress={() => copyAddress(vault.vaultAddress, 'vault')}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -247,7 +249,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
                     </Text>
                   </TouchableOpacity>
                   {vaultBalance !== null && (
-                    <Text style={styles.balanceText}>{formatSol(vaultBalance)}</Text>
+                    <Text style={[styles.balanceText, { color: colors.textPrimary }]}>{formatSol(vaultBalance)}</Text>
                   )}
                   {emptyAccounts !== null && emptyAccounts.empty > 0 && (
                     <Text style={styles.emptyAccountsText}>
@@ -255,26 +257,26 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
                     </Text>
                   )}
                 </View>
-                <Text style={styles.menuArrow}>{'>'}</Text>
+                <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>{'>'}</Text>
               </View>
 
               {/* Keypairs */}
               {keysLoaded && (
-                <View style={styles.keypairSection}>
+                <View style={[styles.keypairSection, { borderTopColor: colors.border }]}>
                   <TouchableOpacity
                     style={styles.keypairRow}
                     onPress={() => cloudPubkey && copyAddress(cloudPubkey, 'cloud')}
                     activeOpacity={cloudPubkey ? 0.6 : 1}
                   >
-                    <Text style={styles.keypairLabel}>Cloud Key</Text>
+                    <Text style={[styles.keypairLabel, { color: colors.textSecondary }]}>Cloud Key</Text>
                     {cloudPubkey ? (
                       <View style={styles.keypairRight}>
-                        <Text style={styles.keypairValue}>
+                        <Text style={[styles.keypairValue, { color: colors.textPrimary }]}>
                           {truncateAddress(cloudPubkey)}
                           {copiedField === 'cloud' ? '  Copied!' : ''}
                         </Text>
                         {cloudBalance !== null && (
-                          <Text style={styles.keypairBalance}>{formatSol(cloudBalance)}</Text>
+                          <Text style={[styles.keypairBalance, { color: colors.textSecondary }]}>{formatSol(cloudBalance)}</Text>
                         )}
                       </View>
                     ) : (
@@ -297,15 +299,15 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
                     onPress={() => devicePubkey && copyAddress(devicePubkey, 'device')}
                     activeOpacity={devicePubkey ? 0.6 : 1}
                   >
-                    <Text style={styles.keypairLabel}>Device Key</Text>
+                    <Text style={[styles.keypairLabel, { color: colors.textSecondary }]}>Device Key</Text>
                     {devicePubkey ? (
                       <View style={styles.keypairRight}>
-                        <Text style={styles.keypairValue}>
+                        <Text style={[styles.keypairValue, { color: colors.textPrimary }]}>
                           {truncateAddress(devicePubkey)}
                           {copiedField === 'device' ? '  Copied!' : ''}
                         </Text>
                         {deviceBalance !== null && (
-                          <Text style={styles.keypairBalance}>{formatSol(deviceBalance)}</Text>
+                          <Text style={[styles.keypairBalance, { color: colors.textSecondary }]}>{formatSol(deviceBalance)}</Text>
                         )}
                       </View>
                     ) : (
@@ -336,7 +338,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.reclaimButton}
+              style={[styles.reclaimButton, { backgroundColor: colors.card }]}
               onPress={handleReclaimRent}
               activeOpacity={0.7}
               disabled={reclaimStatus !== null}
@@ -347,24 +349,24 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.changePinButton}
+              style={[styles.changePinButton, { backgroundColor: colors.card, borderColor: colors.textSecondary }]}
               onPress={() => { logMoreNavigate('change-pin'); onNavigate?.('change-pin'); }}
               activeOpacity={0.7}
             >
-              <Text style={styles.changePinButtonText}>Change PIN</Text>
+              <Text style={[styles.changePinButtonText, { color: colors.textSecondary }]}>Change PIN</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.removeButton}
+              style={[styles.removeButton, { backgroundColor: colors.card, borderColor: colors.accentRed }]}
               onPress={handleRemoveVault}
               activeOpacity={0.7}
             >
-              <Text style={styles.removeButtonText}>Remove Vault</Text>
+              <Text style={[styles.removeButtonText, { color: colors.accentRed }]}>Remove Vault</Text>
             </TouchableOpacity>
             </>
           ) : (
             <TouchableOpacity
-              style={styles.menuCard}
+              style={[styles.menuCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}
               onPress={() => { logMoreNavigate('squads'); onNavigate?.('squads'); }}
               activeOpacity={0.7}
             >
@@ -372,18 +374,18 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
                 <Text style={styles.menuIcon}>+</Text>
               </View>
               <View style={styles.menuInfo}>
-                <Text style={styles.menuTitle}>Create Vault</Text>
-                <Text style={styles.menuSubtitle}>Set up a multisig self-custody vault</Text>
+                <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Create Vault</Text>
+                <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>Set up a multisig self-custody vault</Text>
               </View>
-              <Text style={styles.menuArrow}>{'>'}</Text>
+              <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>{'>'}</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        <Text style={styles.devNotice}>
+        <Text style={[styles.devNotice, { color: colors.textTertiary }]}>
           This screen is only for testing during development. It will be changed before launch in dApp Store.
         </Text>
-        <Text style={styles.versionText}>App version: {APP_VERSION} ({BUILD_NUMBER})</Text>
+        <Text style={[styles.versionText, { color: colors.textTertiary }]}>App version: {APP_VERSION} ({BUILD_NUMBER})</Text>
       </ScrollView>
     </View>
   );
@@ -392,7 +394,6 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8EAF1',
   },
   headerGradient: {
     position: 'absolute',
@@ -428,12 +429,10 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   statCard: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
     minWidth: 150,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -454,13 +453,11 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 13,
-    color: '#6B7B8D',
     marginBottom: 4,
   },
   statValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
   },
   content: {
     paddingHorizontal: 14,
@@ -475,10 +472,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   vaultCard: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -500,7 +495,6 @@ const styles = StyleSheet.create({
   vaultName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
     marginBottom: 2,
   },
   vaultAddress: {
@@ -511,7 +505,6 @@ const styles = StyleSheet.create({
   keypairSection: {
     marginTop: 14,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
     paddingTop: 12,
     gap: 10,
   },
@@ -523,7 +516,6 @@ const styles = StyleSheet.create({
   keypairLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6B7B8D',
   },
   keypairRight: {
     alignItems: 'flex-end' as const,
@@ -531,18 +523,15 @@ const styles = StyleSheet.create({
   keypairValue: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#1A1A1A',
   },
   keypairBalance: {
     fontSize: 11,
     fontWeight: '500',
-    color: '#6B7B8D',
     marginTop: 2,
   },
   balanceText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#1A1A1A',
     marginTop: 2,
   },
   emptyAccountsText: {
@@ -580,7 +569,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#19C394',
   },
@@ -594,36 +582,28 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#6B7B8D',
   },
   changePinButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#6B7B8D',
   },
   removeButton: {
     marginTop: 12,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#F95357',
   },
   removeButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#F95357',
   },
   menuCard: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -649,21 +629,17 @@ const styles = StyleSheet.create({
   menuTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
     marginBottom: 2,
   },
   menuSubtitle: {
     fontSize: 13,
-    color: '#6B7B8D',
   },
   menuArrow: {
     fontSize: 18,
-    color: '#B2B2B2',
     fontWeight: '600',
   },
   devNotice: {
     fontSize: 12,
-    color: '#B2B2B2',
     textAlign: 'center',
     marginTop: 24,
     marginHorizontal: 32,
@@ -671,7 +647,6 @@ const styles = StyleSheet.create({
   },
   versionText: {
     fontSize: 12,
-    color: '#B2B2B2',
     textAlign: 'center',
     marginTop: 8,
   },

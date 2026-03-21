@@ -13,15 +13,16 @@ import Svg, { Path } from 'react-native-svg';
 import { useNotifications } from '../hooks/useNotifications';
 import type { AppNotification } from '../types/notification';
 import { logScreenView, logNotificationPress, logNotificationLoadMore } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 interface NotificationsScreenProps {
   onBack: () => void;
 }
 
-function BackArrow() {
+function BackArrow({ color }: { color: string }) {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-      <Path d="M19 12H5m0 0l7 7m-7-7l7-7" stroke="#1F2937" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M19 12H5m0 0l7 7m-7-7l7-7" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -84,29 +85,32 @@ function formatTimeAgo(dateStr: string): string {
 function NotificationItem({
   notification,
   onPress,
+  colors,
 }: {
   notification: AppNotification;
   onPress: () => void;
+  colors: any;
 }) {
   return (
-    <TouchableOpacity style={styles.notificationRow} activeOpacity={0.7} onPress={onPress}>
+    <TouchableOpacity style={[styles.notificationRow, { backgroundColor: colors.card }]} activeOpacity={0.7} onPress={onPress}>
       <NotificationIcon type={notification.type} />
       <View style={styles.notificationContent}>
-        <Text style={[styles.notificationTitle, !notification.read && styles.unreadTitle]}>
+        <Text style={[styles.notificationTitle, { color: colors.textPrimary }, !notification.read && styles.unreadTitle]}>
           {notification.title}
         </Text>
         {notification.body ? (
-          <Text style={styles.notificationBody} numberOfLines={2}>
+          <Text style={[styles.notificationBody, { color: colors.textSecondary }]} numberOfLines={2}>
             {notification.body}
           </Text>
         ) : null}
-        <Text style={styles.notificationTime}>{formatTimeAgo(notification.createdAt)}</Text>
+        <Text style={[styles.notificationTime, { color: colors.textTertiary }]}>{formatTimeAgo(notification.createdAt)}</Text>
       </View>
     </TouchableOpacity>
   );
 }
 
 export default function NotificationsScreen({ onBack }: NotificationsScreenProps) {
+  const { colors } = useTheme();
   const { notifications, loading, hasMore, loadMore, markAsRead, refresh } = useNotifications();
 
   useEffect(() => { logScreenView('NotificationsScreen'); }, []);
@@ -129,32 +133,32 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
 
   const renderItem = useCallback(
     ({ item }: { item: AppNotification }) => (
-      <NotificationItem notification={item} onPress={() => handlePress(item)} />
+      <NotificationItem notification={item} onPress={() => handlePress(item)} colors={colors} />
     ),
-    [handlePress],
+    [handlePress, colors],
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SafeAreaView edges={['top']} style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <BackArrow />
+          <BackArrow color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Notifications</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Notifications</Text>
         <View style={styles.backButton} />
       </SafeAreaView>
 
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#3985D8" />
+          <ActivityIndicator size="large" color={colors.accentBlue} />
         </View>
       ) : notifications.length === 0 ? (
         <View style={styles.centered}>
           <Svg width={48} height={48} viewBox="0 0 24 24" fill="none" style={{ marginBottom: 12 }}>
-            <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="#D1D5DB" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+            <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke={colors.textTertiary} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
           </Svg>
-          <Text style={styles.emptyTitle}>No notifications yet</Text>
-          <Text style={styles.emptySubtitle}>We'll notify you about transactions{'\n'}and important updates</Text>
+          <Text style={[styles.emptyTitle, { color: colors.textSecondary }]}>No notifications yet</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textTertiary }]}>We'll notify you about transactions{'\n'}and important updates</Text>
         </View>
       ) : (
         <FlatList
@@ -162,7 +166,7 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
           keyExtractor={(item) => item._id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor="#3985D8" />}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={colors.accentBlue} />}
           onEndReached={hasMore ? () => { logNotificationLoadMore(); loadMore(); } : undefined}
           onEndReachedThreshold={0.3}
         />
@@ -174,7 +178,6 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8EAF1',
   },
   header: {
     flexDirection: 'row',
@@ -192,7 +195,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1F2937',
   },
   centered: {
     flex: 1,
@@ -203,11 +205,9 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#6B7280',
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#9CA3AF',
     textAlign: 'center',
     marginTop: 6,
     lineHeight: 20,
@@ -220,7 +220,6 @@ const styles = StyleSheet.create({
   notificationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 14,
     marginBottom: 8,
@@ -239,19 +238,16 @@ const styles = StyleSheet.create({
   notificationTitle: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#1F2937',
   },
   unreadTitle: {
     fontWeight: '700',
   },
   notificationBody: {
     fontSize: 13,
-    color: '#6B7280',
     marginTop: 2,
   },
   notificationTime: {
     fontSize: 12,
-    color: '#9CA3AF',
     marginTop: 4,
   },
 });

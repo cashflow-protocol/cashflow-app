@@ -6,6 +6,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, StatusBar, StyleSheet, AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ThemeProvider } from './src/theme/ThemeContext';
 import { WalletProvider } from './src/hooks/useWallet';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import InviteCodeScreen from './src/screens/InviteCodeScreen';
@@ -241,10 +242,12 @@ function App() {
 
   if (locked) {
     return (
-      <SafeAreaProvider>
-        <StatusBar translucent backgroundColor="transparent" />
-        <BiometricLockScreen onUnlock={() => setLocked(false)} />
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+          <BiometricLockScreen onUnlock={() => setLocked(false)} />
+        </SafeAreaProvider>
+      </ThemeProvider>
     );
   }
 
@@ -309,50 +312,58 @@ function App() {
     }
 
     return (
-      <SafeAreaProvider>
-        <StatusBar translucent backgroundColor="transparent" />
-        <WalletProvider>
-          {onboardingContent}
-        </WalletProvider>
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+          <WalletProvider>
+            {onboardingContent}
+          </WalletProvider>
+        </SafeAreaProvider>
+      </ThemeProvider>
     );
   }
 
   if (needsPinSetup) {
     return (
-      <SafeAreaProvider>
-        <StatusBar translucent backgroundColor="transparent" />
-        <PinSetupScreen onComplete={() => setNeedsPinSetup(false)} />
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+          <PinSetupScreen onComplete={() => setNeedsPinSetup(false)} />
+        </SafeAreaProvider>
+      </ThemeProvider>
     );
   }
 
   if (subScreen === 'change-pin') {
     return (
-      <SafeAreaProvider>
-        <StatusBar translucent backgroundColor="transparent" />
-        <ChangePinScreen onComplete={() => setSubScreen(null)} onBack={() => setSubScreen(null)} />
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+          <ChangePinScreen onComplete={() => setSubScreen(null)} onBack={() => setSubScreen(null)} />
+        </SafeAreaProvider>
+      </ThemeProvider>
     );
   }
 
   return (
-    <SafeAreaProvider>
-      <StatusBar translucent backgroundColor="transparent" />
-      <WalletProvider>
-        <View style={styles.root}>
-          {renderScreen()}
-          <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
-          <Toast
-            visible={toastVisible}
-            message={toastMessage}
-            description={toastDescription}
-            type="success"
-            onDismiss={() => setToastVisible(false)}
-          />
-        </View>
-      </WalletProvider>
-    </SafeAreaProvider>
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+        <WalletProvider>
+          <View style={styles.root}>
+            {renderScreen()}
+            <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
+            <Toast
+              visible={toastVisible}
+              message={toastMessage}
+              description={toastDescription}
+              type="success"
+              onDismiss={() => setToastVisible(false)}
+            />
+          </View>
+        </WalletProvider>
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }
 

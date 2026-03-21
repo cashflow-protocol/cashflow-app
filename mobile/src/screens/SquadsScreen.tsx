@@ -22,6 +22,7 @@ import {
 import { useWallet } from '../hooks/useWallet';
 import type { VaultData } from '../services/vaultStorage';
 import { logScreenView, logSquadsCreateVaultPress, logSquadsCreateVaultSuccess, logSquadsCreateVaultError, logSquadsCopyAddress, logSquadsAddMemberPress } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 const squadAvatar = require('../assets/squad-avatar.webp');
 
@@ -36,6 +37,7 @@ function truncateAddress(addr: string): string {
 }
 
 export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) {
+  const { colors } = useTheme();
   const { wallet } = useWallet();
   const walletAddress = wallet?.publicKey as string | undefined;
   const [vaultData, setVaultData] = useState<VaultData | null>(null);
@@ -133,10 +135,10 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
 
         <LinearGradient
-          colors={['#1E8260', '#19C394']}
+          colors={colors.earnGradient as [string, string]}
           style={styles.headerGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
@@ -148,7 +150,7 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
           <Text style={styles.title}>Squads Vault</Text>
         </SafeAreaView>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#19C394" />
+          <ActivityIndicator size="large" color={colors.accentGreen} />
         </View>
       </View>
     );
@@ -157,10 +159,10 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
   // No vault exists — show onboarding
   if (!vaultData) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
 
         <LinearGradient
-          colors={['#1E8260', '#19C394']}
+          colors={colors.earnGradient as [string, string]}
           style={styles.headerGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
@@ -172,26 +174,26 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
           <Text style={styles.title}>Squads Vault</Text>
         </SafeAreaView>
         <View style={styles.onboardingContainer}>
-          <View style={styles.onboardingCard}>
+          <View style={[styles.onboardingCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
             <Image source={squadAvatar} style={styles.avatar} />
-            <Text style={styles.onboardingTitle}>Cashflow Vault</Text>
-            <Text style={styles.onboardingDescription}>
+            <Text style={[styles.onboardingTitle, { color: colors.textPrimary }]}>Cashflow Vault</Text>
+            <Text style={[styles.onboardingDescription, { color: colors.textSecondary }]}>
               Create a Squads multisig vault for enhanced security.
               Add multiple signing wallets so no single device
               controls your funds.
             </Text>
             <TouchableOpacity
-              style={[styles.createButton, creating && styles.createButtonDisabled]}
+              style={[styles.createButton, { backgroundColor: colors.accentGreen }, creating && styles.createButtonDisabled]}
               onPress={handleCreate}
               disabled={creating}
             >
               {creating ? (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator size="small" color="#fff" />
-                  <Text style={styles.createButtonText}>Creating Vault...</Text>
+                  <ActivityIndicator size="small" color={colors.primaryButtonText} />
+                  <Text style={[styles.createButtonText, { color: colors.primaryButtonText }]}>Creating Vault...</Text>
                 </View>
               ) : (
-                <Text style={styles.createButtonText}>Create Vault</Text>
+                <Text style={[styles.createButtonText, { color: colors.primaryButtonText }]}>Create Vault</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -206,10 +208,10 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
   const threshold = multisigInfo?.threshold ?? 0;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
 
       <LinearGradient
-        colors={['#1E8260', '#19C394']}
+        colors={colors.earnGradient as [string, string]}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -236,10 +238,10 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
         showsVerticalScrollIndicator={false}
       >
         {/* Vault Address Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Vault Address</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
+          <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Vault Address</Text>
           <TouchableOpacity onPress={() => copyAddress(vaultData.vaultAddress)}>
-            <Text style={styles.addressText}>
+            <Text style={[styles.addressText, { color: colors.accentGreen }]}>
               {truncateAddress(vaultData.vaultAddress)}
               {copied ? '  Copied!' : '  Tap to copy'}
             </Text>
@@ -247,11 +249,11 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
         </View>
 
         {isConfirming ? (
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
             <View style={styles.confirmingCard}>
-              <ActivityIndicator size="large" color="#19C394" />
-              <Text style={styles.confirmingCardTitle}>Setting up your vault</Text>
-              <Text style={styles.confirmingCardText}>
+              <ActivityIndicator size="large" color={colors.accentGreen} />
+              <Text style={[styles.confirmingCardTitle, { color: colors.textPrimary }]}>Setting up your vault</Text>
+              <Text style={[styles.confirmingCardText, { color: colors.textSecondary }]}>
                 Waiting for the transaction to confirm on Solana...
               </Text>
             </View>
@@ -259,12 +261,12 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
         ) : (
           <>
             {/* Threshold Card */}
-            <View style={styles.card}>
-              <Text style={styles.cardLabel}>Approval Threshold</Text>
-              <Text style={styles.thresholdText}>
+            <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
+              <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Approval Threshold</Text>
+              <Text style={[styles.thresholdText, { color: colors.textPrimary }]}>
                 {threshold} of {memberCount}
               </Text>
-              <Text style={styles.thresholdHint}>
+              <Text style={[styles.thresholdHint, { color: colors.textSecondary }]}>
                 {threshold === 1
                   ? 'Any single member can approve transactions'
                   : `${threshold} members must approve each transaction`}
@@ -272,27 +274,27 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
             </View>
 
             {/* Members */}
-            <View style={styles.card}>
-              <Text style={styles.cardLabel}>
+            <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
+              <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>
                 Signing Wallets ({memberCount})
               </Text>
               {multisigInfo?.members.map((member, idx) => (
-                <View key={member.address} style={styles.memberRow}>
+                <View key={member.address} style={[styles.memberRow, { borderTopColor: colors.border }]}>
                   <View style={styles.memberInfo}>
-                    <Text style={styles.memberAddress}>
+                    <Text style={[styles.memberAddress, { color: colors.textPrimary }]}>
                       {truncateAddress(member.address)}
                     </Text>
                     <View style={styles.badgeRow}>
                       {permissionBadges(member.permissions).map((badge) => (
-                        <View key={badge} style={styles.badge}>
-                          <Text style={styles.badgeText}>{badge}</Text>
+                        <View key={badge} style={[styles.badge, { backgroundColor: colors.successBackground }]}>
+                          <Text style={[styles.badgeText, { color: colors.accentGreen }]}>{badge}</Text>
                         </View>
                       ))}
                     </View>
                   </View>
                   {idx === 0 && (
-                    <View style={styles.youBadge}>
-                      <Text style={styles.youBadgeText}>You</Text>
+                    <View style={[styles.youBadge, { backgroundColor: colors.accentGreen }]}>
+                      <Text style={[styles.youBadgeText, { color: colors.primaryButtonText }]}>You</Text>
                     </View>
                   )}
                 </View>
@@ -301,10 +303,10 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
 
             {/* Add Member Button */}
             <TouchableOpacity
-              style={styles.addMemberButton}
+              style={[styles.addMemberButton, { backgroundColor: colors.primaryButton }]}
               onPress={() => { logSquadsAddMemberPress(); onNavigate('add-member'); }}
             >
-              <Text style={styles.addMemberButtonText}>Add Signing Wallet</Text>
+              <Text style={[styles.addMemberButtonText, { color: colors.primaryButtonText }]}>Add Signing Wallet</Text>
             </TouchableOpacity>
           </>
         )}
@@ -316,7 +318,6 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8EAF1',
   },
   headerGradient: {
     position: 'absolute',
@@ -364,11 +365,9 @@ const styles = StyleSheet.create({
     marginTop: -40,
   },
   onboardingCard: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 28,
     alignItems: 'center',
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -377,12 +376,10 @@ const styles = StyleSheet.create({
   onboardingTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1A1A1A',
     marginBottom: 12,
   },
   onboardingDescription: {
     fontSize: 15,
-    color: '#6B7B8D',
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 24,
@@ -417,15 +414,12 @@ const styles = StyleSheet.create({
   confirmingCardTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#1A1A1A',
   },
   confirmingCardText: {
     fontSize: 14,
-    color: '#6B7B8D',
     textAlign: 'center',
   },
   createButton: {
-    backgroundColor: '#19C394',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 12,
@@ -436,7 +430,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   createButtonText: {
-    color: '#fff',
     fontWeight: '700',
     fontSize: 16,
   },
@@ -455,10 +448,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   card: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -467,25 +458,21 @@ const styles = StyleSheet.create({
   cardLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6B7B8D',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   addressText: {
     fontSize: 15,
-    color: '#19C394',
     fontWeight: '500',
   },
   thresholdText: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1A1A1A',
     marginBottom: 4,
   },
   thresholdHint: {
     fontSize: 13,
-    color: '#6B7B8D',
   },
   memberRow: {
     flexDirection: 'row',
@@ -493,7 +480,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
   },
   memberInfo: {
     flex: 1,
@@ -501,7 +487,6 @@ const styles = StyleSheet.create({
   memberAddress: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1A1A1A',
     marginBottom: 4,
   },
   badgeRow: {
@@ -509,7 +494,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   badge: {
-    backgroundColor: '#E8F5E9',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -517,10 +501,8 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#19C394',
   },
   youBadge: {
-    backgroundColor: '#19C394',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
@@ -528,17 +510,14 @@ const styles = StyleSheet.create({
   youBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#fff',
   },
   addMemberButton: {
-    backgroundColor: '#1A1A1A',
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
     marginTop: 4,
   },
   addMemberButtonText: {
-    color: '#fff',
     fontWeight: '700',
     fontSize: 16,
   },

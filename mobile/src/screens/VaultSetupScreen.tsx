@@ -22,6 +22,7 @@ import { deleteAllKeypairs } from '../services/keypairStorage';
 import Toast from '../components/Toast';
 import { MIN_LAMPORTS_FOR_VAULT } from '../config/constants';
 import { logScreenView, logVaultSetupStart, logVaultSetupWalletConnected, logVaultSetupSuccess, logVaultSetupError, logVaultSetupInsufficientBalance } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 interface VaultSetupScreenProps {
   inviteCode: string;
@@ -33,6 +34,7 @@ interface VaultSetupScreenProps {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onReset }: VaultSetupScreenProps) {
+  const { colors } = useTheme();
   const { connect: connectWallet } = useWallet();
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
@@ -102,7 +104,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
         return;
       }
 
-      // Code already redeemed in InviteCodeScreen — just set for auth
+      // Code already redeemed in InviteCodeScreen -- just set for auth
       authService.setInviteCode(inviteCode);
 
       setStatusText('Creating vault...');
@@ -151,7 +153,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         {onBack && (
           <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7} disabled={loading}>
-            <ArrowLeft size={24} color="#fff" />
+            <ArrowLeft size={24} color={colors.primaryButtonText} />
           </TouchableOpacity>
         )}
 
@@ -174,6 +176,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
           <Animated.Text
             style={[
               styles.congrats,
+              { color: colors.primaryButtonText },
               {
                 opacity: congratsOpacity,
                 transform: [{ translateY: congratsTranslateY }],
@@ -190,8 +193,8 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
               alignItems: 'center',
             }}
           >
-            <Text style={styles.title}>Create Your Vault</Text>
-            <Text style={styles.description}>
+            <Text style={[styles.title, { color: colors.primaryButtonText }]}>Create Your Vault</Text>
+            <Text style={[styles.description, { color: colors.primaryButtonText + 'B3' }]}>
               Connect your wallet and set up a secure{'\n'}multisig vault to get started.
             </Text>
           </Animated.View>
@@ -199,7 +202,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
 
         <Animated.View style={[styles.bottomSection, { opacity: buttonOpacity }]}>
           <TouchableOpacity
-            style={[styles.setupButton, loading && styles.buttonDisabled]}
+            style={[styles.setupButton, { backgroundColor: colors.card }, loading && styles.buttonDisabled]}
             onPress={handleSetup}
             disabled={loading}
             activeOpacity={0.7}
@@ -207,10 +210,10 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
             {loading ? (
               <View style={styles.loadingRow}>
                 <ActivityIndicator color="#6d28d9" />
-                <Text style={styles.setupButtonText}>{statusText}</Text>
+                <Text style={[styles.setupButtonText, { color: '#6d28d9' }]}>{statusText}</Text>
               </View>
             ) : (
-              <Text style={styles.setupButtonText}>Set Up Vault</Text>
+              <Text style={[styles.setupButtonText, { color: '#6d28d9' }]}>Set Up Vault</Text>
             )}
           </TouchableOpacity>
           {onReset && __DEV__ && (
@@ -219,7 +222,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
               activeOpacity={0.7}
               style={{ alignItems: 'center', marginTop: 12 }}
             >
-              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Reset (test)</Text>
+              <Text style={{ color: colors.primaryButtonText + '66', fontSize: 12 }}>Reset (test)</Text>
             </TouchableOpacity>
           )}
         </Animated.View>
@@ -252,7 +255,6 @@ const styles = StyleSheet.create({
   congrats: {
     fontSize: 36,
     fontWeight: '800',
-    color: '#fff',
     marginBottom: 32,
     letterSpacing: -0.5,
   },
@@ -270,13 +272,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#fff',
     textAlign: 'center',
     marginBottom: 12,
   },
   description: {
     fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -285,7 +285,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   setupButton: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
@@ -293,7 +292,6 @@ const styles = StyleSheet.create({
   setupButtonText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#6d28d9',
   },
   buttonDisabled: {
     opacity: 0.7,

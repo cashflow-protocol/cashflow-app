@@ -19,6 +19,7 @@ import { executeVaultTransaction } from '../services/squadsService';
 import { useAssets } from '../hooks/useAssets';
 import type { WalletAsset } from '../types/earn';
 import { logSendTokenSelect, logSendMaxPress, logSendPasteAddress, logSendSubmit, logSendSuccess, logSendError } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 import { TARGET_CLOUD_BALANCE as TARGET_CLOUD_BALANCE_NUM } from '../config/constants';
 
@@ -34,6 +35,7 @@ interface SendModalProps {
 }
 
 export default function SendModal({ visible, onClose, onSuccess }: SendModalProps) {
+  const { colors } = useTheme();
   const { assets } = useAssets();
   const [step, setStep] = useState<Step>('select');
   const [selectedToken, setSelectedToken] = useState<WalletAsset | null>(null);
@@ -192,49 +194,49 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
                 fillRule="evenodd"
                 clipRule="evenodd"
                 d="M26.3328 16.0001C26.3328 15.4478 25.885 15.0001 25.3328 15.0001L9.08041 15.0001L15.3733 8.70723C15.7638 8.3167 15.7638 7.68354 15.3733 7.29302C14.9828 6.90249 14.3496 6.90249 13.9591 7.29302L5.95909 15.293C5.56857 15.6835 5.56857 16.3167 5.95909 16.7072L13.9591 24.7072C14.3496 25.0978 14.9828 25.0978 15.3733 24.7072C15.7638 24.3167 15.7638 23.6835 15.3733 23.293L9.08041 17.0001L25.3328 17.0001C25.885 17.0001 26.3328 16.5524 26.3328 16.0001Z"
-                fill="#242729"
+                fill={colors.textPrimary}
               />
             </Svg>
           </TouchableOpacity>
         )}
-        <Text style={styles.title}>Send</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Send</Text>
       </View>
 
       {step === 'select' ? (
         <>
           <View style={styles.searchRow}>
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { backgroundColor: colors.inputBackground, color: colors.textPrimary }]}
               value={search}
               onChangeText={setSearch}
               placeholder="Search by name, symbol, or mint"
-              placeholderTextColor="#B2B2B2"
+              placeholderTextColor={colors.placeholderColor}
               autoCapitalize="none"
               autoCorrect={false}
             />
           </View>
           <ScrollView style={styles.tokenList} showsVerticalScrollIndicator={false}>
             {sendableAssets.length === 0 ? (
-              <Text style={styles.emptyText}>{search ? 'No matching tokens' : 'No tokens available'}</Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{search ? 'No matching tokens' : 'No tokens available'}</Text>
             ) : (
               sendableAssets.map((asset) => {
                 const localIcon = getTokenIcon(asset.mint);
                 return (
                   <TouchableOpacity
                     key={asset.mint}
-                    style={styles.tokenRow}
+                    style={[styles.tokenRow, { borderBottomColor: colors.border }]}
                     onPress={() => handleSelectToken(asset)}
                     activeOpacity={0.7}
                   >
                     <Image
                       source={localIcon ?? { uri: asset.logoUrl }}
-                      style={styles.tokenIcon}
+                      style={[styles.tokenIcon, { backgroundColor: colors.cardSecondary }]}
                     />
                     <View style={styles.tokenInfo}>
-                      <Text style={styles.tokenSymbol}>{asset.symbol}</Text>
-                      <Text style={styles.tokenName}>{asset.name}</Text>
+                      <Text style={[styles.tokenSymbol, { color: colors.textPrimary }]}>{asset.symbol}</Text>
+                      <Text style={[styles.tokenName, { color: colors.textSecondary }]}>{asset.name}</Text>
                     </View>
-                    <Text style={styles.tokenBalance}>
+                    <Text style={[styles.tokenBalance, { color: colors.textPrimary }]}>
                       {asset.uiAmount.toLocaleString('en-US', { maximumFractionDigits: 4 })}
                     </Text>
                   </TouchableOpacity>
@@ -246,65 +248,65 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
       ) : selectedToken ? (
         <View style={styles.amountStep}>
           {/* Selected token header */}
-          <View style={styles.selectedHeader}>
+          <View style={[styles.selectedHeader, { backgroundColor: colors.infoBackground }]}>
             <Image
               source={getTokenIcon(selectedToken.mint) ?? { uri: selectedToken.logoUrl }}
               style={styles.selectedIcon}
             />
-            <Text style={styles.selectedSymbol}>{selectedToken.symbol}</Text>
-            <Text style={styles.selectedBalance}>
+            <Text style={[styles.selectedSymbol, { color: colors.textPrimary }]}>{selectedToken.symbol}</Text>
+            <Text style={[styles.selectedBalance, { color: colors.textSecondary }]}>
               {selectedToken.uiAmount.toLocaleString('en-US', { maximumFractionDigits: 4 })} available
             </Text>
           </View>
 
           {/* Amount input */}
-          <View style={styles.inputRow}>
+          <View style={[styles.inputRow, { backgroundColor: colors.inputBackground }]}>
             <TextInput
-              style={styles.amountInput}
+              style={[styles.amountInput, { color: colors.textPrimary }]}
               value={amount}
               onChangeText={sanitizeAmount}
               placeholder="0.00"
-              placeholderTextColor="#B2B2B2"
+              placeholderTextColor={colors.placeholderColor}
               keyboardType="decimal-pad"
               editable={!loading}
             />
-            <Text style={styles.inputSymbol}>{selectedToken.symbol}</Text>
-            <TouchableOpacity style={styles.maxButton} onPress={handleMaxPress}>
-              <Text style={styles.maxText}>MAX</Text>
+            <Text style={[styles.inputSymbol, { color: colors.textSecondary }]}>{selectedToken.symbol}</Text>
+            <TouchableOpacity style={[styles.maxButton, { backgroundColor: colors.primaryButton }]} onPress={handleMaxPress}>
+              <Text style={[styles.maxText, { color: colors.primaryButtonText }]}>MAX</Text>
             </TouchableOpacity>
           </View>
 
           {/* Recipient input */}
-          <View style={styles.inputRow}>
+          <View style={[styles.inputRow, { backgroundColor: colors.inputBackground }]}>
             <TextInput
-              style={styles.recipientInput}
+              style={[styles.recipientInput, { color: colors.textPrimary }]}
               value={recipient}
               onChangeText={setRecipient}
               placeholder="Recipient address"
-              placeholderTextColor="#B2B2B2"
+              placeholderTextColor={colors.placeholderColor}
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
             />
-            <TouchableOpacity style={styles.pasteButton} onPress={handlePaste}>
-              <Text style={styles.pasteText}>Paste</Text>
+            <TouchableOpacity style={[styles.pasteButton, { backgroundColor: colors.primaryButton }]} onPress={handlePaste}>
+              <Text style={[styles.pasteText, { color: colors.primaryButtonText }]}>Paste</Text>
             </TouchableOpacity>
           </View>
 
           {/* Validation errors */}
           {exceedsBalance && selectedToken && (
-            <Text style={styles.validationError}>
+            <Text style={[styles.validationError, { color: colors.errorText }]}>
               Max you can send is {toUiAmount(maxSendable, selectedToken.decimals)} {selectedToken.symbol}
             </Text>
           )}
           {recipient.length > 0 && !isValidRecipient && (
-            <Text style={styles.validationError}>Invalid Solana address</Text>
+            <Text style={[styles.validationError, { color: colors.errorText }]}>Invalid Solana address</Text>
           )}
 
           {/* Result banner */}
           {result && (
-            <View style={[styles.resultBanner, result.success ? styles.resultSuccess : styles.resultError]}>
-              <Text style={[styles.resultText, result.success ? styles.resultTextSuccess : styles.resultTextError]}>
+            <View style={[styles.resultBanner, result.success ? { backgroundColor: colors.successBackground } : { backgroundColor: colors.errorBackground }]}>
+              <Text style={[styles.resultText, result.success ? { color: colors.successText } : { color: colors.errorText }]}>
                 {result.message}
               </Text>
             </View>
@@ -312,15 +314,15 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
 
           {/* Submit button */}
           <TouchableOpacity
-            style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
+            style={[styles.submitButton, { backgroundColor: colors.primaryButton }, !canSubmit && { backgroundColor: colors.disabledButton }]}
             onPress={handleSubmit}
             activeOpacity={0.7}
             disabled={!canSubmit}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.primaryButtonText} />
             ) : (
-              <Text style={styles.submitText}>Send</Text>
+              <Text style={[styles.submitText, { color: colors.primaryButtonText }]}>Send</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -344,25 +346,21 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#000',
   },
   searchRow: {
     marginBottom: 8,
   },
   searchInput: {
-    backgroundColor: '#F4F4F4',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#000',
   },
   tokenList: {
     height: 350,
   },
   emptyText: {
     fontSize: 15,
-    color: '#6B7B8D',
     textAlign: 'center',
     paddingVertical: 32,
   },
@@ -372,13 +370,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E8EAF1',
   },
   tokenIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F4F4F4',
   },
   tokenInfo: {
     flex: 1,
@@ -387,16 +383,13 @@ const styles = StyleSheet.create({
   tokenSymbol: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
   },
   tokenName: {
     fontSize: 13,
-    color: '#6B7B8D',
   },
   tokenBalance: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#000',
   },
   amountStep: {
     gap: 12,
@@ -405,7 +398,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#EEF4FB',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -418,18 +410,15 @@ const styles = StyleSheet.create({
   selectedSymbol: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
   },
   selectedBalance: {
     flex: 1,
     fontSize: 13,
-    color: '#6B7B8D',
     textAlign: 'right',
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F4F4F4',
     borderRadius: 12,
     paddingHorizontal: 16,
     gap: 8,
@@ -438,16 +427,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 18,
     fontWeight: '600',
-    color: '#000',
     paddingVertical: 14,
   },
   inputSymbol: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#6B7B8D',
   },
   maxButton: {
-    backgroundColor: '#000',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -455,16 +441,13 @@ const styles = StyleSheet.create({
   maxText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#fff',
   },
   recipientInput: {
     flex: 1,
     fontSize: 15,
-    color: '#000',
     paddingVertical: 14,
   },
   pasteButton: {
-    backgroundColor: '#000',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -472,11 +455,9 @@ const styles = StyleSheet.create({
   pasteText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#fff',
   },
   validationError: {
     fontSize: 13,
-    color: '#F95357',
     marginTop: -4,
   },
   resultBanner: {
@@ -484,34 +465,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  resultSuccess: {
-    backgroundColor: '#E8F5E9',
-  },
-  resultError: {
-    backgroundColor: '#FFEBEE',
-  },
   resultText: {
     fontSize: 14,
     fontWeight: '500',
   },
-  resultTextSuccess: {
-    color: '#2E7D32',
-  },
-  resultTextError: {
-    color: '#F95357',
-  },
   submitButton: {
-    backgroundColor: '#000',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
   },
-  submitButtonDisabled: {
-    backgroundColor: '#B2B2B2',
-  },
   submitText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#fff',
   },
 });

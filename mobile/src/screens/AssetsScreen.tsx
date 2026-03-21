@@ -14,22 +14,24 @@ import { useAssets } from '../hooks/useAssets';
 import { LifetimeEarnedIcon, Last7DIcon } from '../assets/stat-icons';
 import AssetRow from '../components/AssetRow';
 import { logScreenView } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 function formatUsd(value: number): string {
   return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export default function AssetsScreen() {
+  const { colors } = useTheme();
   const { assets, totalUsdValue, loading, refreshing, refresh } = useAssets();
 
   React.useEffect(() => { logScreenView('AssetsScreen'); }, []);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
 
 
       <LinearGradient
-        colors={['#104982', '#3985D8']}
+        colors={colors.assetsGradient as unknown as string[]}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -46,25 +48,25 @@ export default function AssetsScreen() {
         contentContainerStyle={styles.statsContainer}
         style={styles.statsScroll}
       >
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
           <View style={styles.statRow}>
-            <View style={styles.statIconCircle}>
+            <View style={[styles.statIconCircle, { backgroundColor: colors.accentBlue }]}>
               <LifetimeEarnedIcon size={20} />
             </View>
             <View>
-              <Text style={styles.statLabel}>Balance</Text>
-              <Text style={styles.statValue}>{formatUsd(totalUsdValue)}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Balance</Text>
+              <Text style={[styles.statValue, { color: colors.textPrimary }]}>{formatUsd(totalUsdValue)}</Text>
             </View>
           </View>
         </View>
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
           <View style={styles.statRow}>
-            <View style={styles.statIconCircle}>
+            <View style={[styles.statIconCircle, { backgroundColor: colors.accentBlue }]}>
               <Last7DIcon size={20} />
             </View>
             <View>
-              <Text style={styles.statLabel}>24h change</Text>
-              <Text style={styles.statValue}>--</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>24h change</Text>
+              <Text style={[styles.statValue, { color: colors.textPrimary }]}>--</Text>
             </View>
           </View>
         </View>
@@ -72,11 +74,11 @@ export default function AssetsScreen() {
 
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#3985D8" />
+          <ActivityIndicator size="large" color={colors.accentBlue} />
         </View>
       ) : assets.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={styles.emptyText}>No assets found</Text>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No assets found</Text>
         </View>
       ) : (
         <FlatList
@@ -85,7 +87,7 @@ export default function AssetsScreen() {
           renderItem={({ item }) => <AssetRow item={item} />}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#3985D8" />
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accentBlue} />
           }
         />
       )}
@@ -96,7 +98,6 @@ export default function AssetsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8EAF1',
   },
   headerGradient: {
     position: 'absolute',
@@ -131,12 +132,10 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   statCard: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
     minWidth: 150,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -151,19 +150,16 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#3985D8',
     justifyContent: 'center',
     alignItems: 'center',
   },
   statLabel: {
     fontSize: 13,
-    color: '#6B7B8D',
     marginBottom: 4,
   },
   statValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
   },
   centered: {
     flex: 1,
@@ -173,7 +169,6 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#6B7B8D',
   },
   listContent: {
     paddingHorizontal: 14,

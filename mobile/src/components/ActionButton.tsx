@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 
 interface ActionButtonProps {
   icon: any;
@@ -14,6 +15,8 @@ export default function ActionButton({
   onPress,
   backgroundColor = '#171D26'
 }: ActionButtonProps) {
+  const { colors } = useTheme();
+
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
       <View style={[styles.iconContainer, { backgroundColor }]}>
@@ -23,7 +26,7 @@ export default function ActionButton({
           icon
         )}
       </View>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -48,7 +51,6 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    color: '#171D26',
     fontWeight: '500',
   },
 });

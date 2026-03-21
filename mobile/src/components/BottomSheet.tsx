@@ -9,6 +9,7 @@ import {
   Keyboard,
   Platform,
 } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -25,6 +26,7 @@ export default function BottomSheet({
   children,
   avoidKeyboard = false,
 }: BottomSheetProps) {
+  const { colors } = useTheme();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const keyboardOffset = useRef(new Animated.Value(0)).current;
@@ -98,9 +100,9 @@ export default function BottomSheet({
 
   const sheetContent = (
     <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-      <View style={styles.sheetContent}>
+      <View style={[styles.sheetContent, { backgroundColor: colors.sheetBackground }]}>
         <View style={styles.handleContainer}>
-          <View style={styles.handle} />
+          <View style={[styles.handle, { backgroundColor: colors.sheetHandle }]} />
         </View>
         {children}
       </View>
@@ -117,7 +119,7 @@ export default function BottomSheet({
     >
       <View style={styles.container}>
         {/* Fading overlay */}
-        <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+        <Animated.View style={[styles.overlay, { opacity: fadeAnim, backgroundColor: colors.overlay }]}>
           <TouchableOpacity
             style={styles.overlayTouchable}
             activeOpacity={1}
@@ -154,7 +156,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   overlayTouchable: {
     flex: 1,
@@ -166,7 +167,6 @@ const styles = StyleSheet.create({
     right: 0,
   },
   sheetContent: {
-    backgroundColor: '#fff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
@@ -181,6 +181,5 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#D0D0D0',
   },
 });

@@ -11,6 +11,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import BottomSheet from './BottomSheet';
 import { getVault } from '../services/vaultStorage';
 import { logReceiveAddressCopy, logError } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 const cashflowLogo = require('../assets/cashflow-logo-rounded.png');
 
@@ -23,6 +24,7 @@ interface ReceiveModalProps {
 }
 
 export default function ReceiveModal({ visible, onClose, onFundFromSeeker }: ReceiveModalProps) {
+  const { colors } = useTheme();
   const [address, setAddress] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -55,23 +57,23 @@ export default function ReceiveModal({ visible, onClose, onFundFromSeeker }: Rec
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <View style={styles.content}>
-        <Text style={styles.title}>Receive</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Receive</Text>
 
         {error ? (
           <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>
+            <Text style={[styles.errorText, { color: colors.errorText }]}>
               Unable to load vault address. Please set up your Squad vault first.
             </Text>
           </View>
         ) : !address ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#175DA3" />
+            <ActivityIndicator size="large" color={colors.accentBlueDark} />
           </View>
         ) : (
           <>
             {/* QR Code */}
             <View style={styles.qrContainer}>
-              <View style={styles.qrWrapper}>
+              <View style={[styles.qrWrapper, { borderColor: colors.border }]}>
                 <QRCodeStyled
                   data={address}
                   style={styles.qrCode}
@@ -100,40 +102,40 @@ export default function ReceiveModal({ visible, onClose, onFundFromSeeker }: Rec
             </View>
 
             {/* Address label */}
-            <Text style={styles.addressLabel}>Solana Deposit address:</Text>
+            <Text style={[styles.addressLabel, { color: colors.textSecondary }]}>Solana Deposit address:</Text>
 
             {/* Address - tap to copy */}
             <TouchableOpacity
-              style={styles.addressContainer}
+              style={[styles.addressContainer, { backgroundColor: colors.inputBackground }]}
               onPress={handleCopy}
               activeOpacity={0.7}
             >
-              <Text style={styles.addressText}>
+              <Text style={[styles.addressText, { color: colors.textPrimary }]}>
                 {address}
               </Text>
             </TouchableOpacity>
 
             {copied && (
-              <Text style={styles.copiedText}>Copied to clipboard</Text>
+              <Text style={[styles.copiedText, { color: colors.successText }]}>Copied to clipboard</Text>
             )}
 
             {/* Copy button */}
             <TouchableOpacity
-              style={styles.copyButton}
+              style={[styles.copyButton, { backgroundColor: colors.primaryButton }]}
               onPress={handleCopy}
               activeOpacity={0.7}
             >
-              <Text style={styles.copyButtonText}>Copy address</Text>
+              <Text style={[styles.copyButtonText, { color: colors.primaryButtonText }]}>Copy address</Text>
             </TouchableOpacity>
 
             {/* From Seeker button — Solana Mobile only */}
             {IS_SOLANA_MOBILE && onFundFromSeeker && (
               <TouchableOpacity
-                style={styles.fromSeekerButton}
+                style={[styles.fromSeekerButton, { backgroundColor: colors.inputBackground }]}
                 onPress={onFundFromSeeker}
                 activeOpacity={0.7}
               >
-                <Text style={styles.fromSeekerButtonText}>From Seeker</Text>
+                <Text style={[styles.fromSeekerButtonText, { color: colors.textPrimary }]}>From Seeker</Text>
               </TouchableOpacity>
             )}
           </>
@@ -151,7 +153,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#000',
   },
   loadingContainer: {
     height: 280,
@@ -165,7 +166,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 15,
-    color: '#F95357',
     textAlign: 'center',
   },
   qrContainer: {
@@ -176,7 +176,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E8EAF1',
     overflow: 'hidden',
   },
   qrCode: {
@@ -184,11 +183,9 @@ const styles = StyleSheet.create({
   },
   addressLabel: {
     fontSize: 13,
-    color: '#6B7B8D',
     marginTop: 4,
   },
   addressContainer: {
-    backgroundColor: '#F4F4F4',
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -197,16 +194,13 @@ const styles = StyleSheet.create({
   addressText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#000',
     textAlign: 'center',
   },
   copiedText: {
     fontSize: 13,
-    color: '#2E7D32',
     marginTop: -8,
   },
   copyButton: {
-    backgroundColor: '#000',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -215,10 +209,8 @@ const styles = StyleSheet.create({
   copyButtonText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#fff',
   },
   fromSeekerButton: {
-    backgroundColor: '#F4F4F4',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -227,6 +219,5 @@ const styles = StyleSheet.create({
   fromSeekerButtonText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#000',
   },
 });

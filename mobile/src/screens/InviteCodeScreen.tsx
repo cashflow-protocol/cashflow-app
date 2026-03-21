@@ -16,6 +16,7 @@ import { validateInviteCode, redeemInviteCode } from '../services/onboardingServ
 import { getCloudPublicKey, generateAndStoreCloudKeypair } from '../services/keypairStorage';
 import Toast from '../components/Toast';
 import { logScreenView, logInviteCodeSubmit, logInviteCodeSuccess, logInviteCodeError } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 interface InviteCodeScreenProps {
   onValidCode: (code: string) => void;
@@ -23,6 +24,7 @@ interface InviteCodeScreenProps {
 }
 
 export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScreenProps) {
+  const { colors } = useTheme();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
@@ -68,7 +70,7 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#0D4A82', '#175DA3', '#347AC0', '#5A9AD5']}
+        colors={['#0D4A82', colors.accentBlueDark, '#347AC0', '#5A9AD5']}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -88,21 +90,21 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
         >
           {/* Back button */}
           <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
-            <ArrowLeft size={24} color="#fff" />
+            <ArrowLeft size={24} color={colors.primaryButtonText} />
           </TouchableOpacity>
 
           <View style={styles.content}>
-            <Text style={styles.title}>Enter Invite Code</Text>
-            <Text style={styles.description}>
+            <Text style={[styles.title, { color: colors.primaryButtonText }]}>Enter Invite Code</Text>
+            <Text style={[styles.description, { color: colors.primaryButtonText + 'CC' }]}>
               Enter your invite code to unlock early access.
             </Text>
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.primaryButtonText + '26', color: colors.primaryButtonText }]}
               value={code}
               onChangeText={(text) => setCode(text.toUpperCase())}
               placeholder="XXXXXXXX"
-              placeholderTextColor="rgba(255, 255, 255, 0.3)"
+              placeholderTextColor={colors.primaryButtonText + '4D'}
               autoCapitalize="characters"
               autoCorrect={false}
               maxLength={16}
@@ -113,15 +115,15 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
 
           <View style={styles.bottomSection}>
             <TouchableOpacity
-              style={[styles.submitButton, (loading || code.trim().length === 0) && styles.buttonDisabled]}
+              style={[styles.submitButton, { backgroundColor: colors.card }, (loading || code.trim().length === 0) && styles.buttonDisabled]}
               onPress={handleSubmit}
               disabled={loading || code.trim().length === 0}
               activeOpacity={0.7}
             >
               {loading ? (
-                <ActivityIndicator color="#175DA3" />
+                <ActivityIndicator color={colors.accentBlueDark} />
               ) : (
-                <Text style={styles.submitButtonText}>Continue</Text>
+                <Text style={[styles.submitButtonText, { color: colors.accentBlueDark }]}>Continue</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -148,7 +150,6 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 17,
-    color: '#fff',
     fontWeight: '600',
   },
   content: {
@@ -160,25 +161,21 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#fff',
     textAlign: 'center',
     marginBottom: 12,
   },
   description: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 32,
   },
   input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 14,
     paddingVertical: 16,
     paddingHorizontal: 20,
     fontSize: 24,
     fontWeight: '700',
-    color: '#fff',
     textAlign: 'center',
     letterSpacing: 4,
     width: '100%',
@@ -188,7 +185,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   submitButton: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
@@ -196,7 +192,6 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#175DA3',
   },
   buttonDisabled: {
     opacity: 0.5,

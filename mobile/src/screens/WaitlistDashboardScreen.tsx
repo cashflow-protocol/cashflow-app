@@ -31,6 +31,7 @@ import ConnectTelegramSheet from '../components/ConnectTelegramSheet';
 import VerifyActionSheet from '../components/VerifyActionSheet';
 import UploadScreenshotSheet from '../components/UploadScreenshotSheet';
 import { logScreenView, logWaitlistTaskPress, logWaitlistApproved, logOnboardingHaveInviteCode, logError } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 function getCountdown(): string {
   const now = new Date();
@@ -55,6 +56,7 @@ interface WaitlistDashboardScreenProps {
 }
 
 export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInviteCode }: WaitlistDashboardScreenProps) {
+  const { colors } = useTheme();
   const { connect: connectWallet } = useWallet();
   const [gradientHeight, setGradientHeight] = useState(255);
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -244,15 +246,15 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <LinearGradient
-          colors={['#104982', '#3985D8']}
+          colors={['#104982', colors.accentBlue]}
           style={styles.headerGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
         />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3985D8" />
+          <ActivityIndicator size="large" color={colors.accentBlue} />
         </View>
       </View>
     );
@@ -261,9 +263,9 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
   const completedCount = tasks.filter((t) => t.completed).length;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient
-        colors={['#104982', '#3985D8']}
+        colors={['#104982', colors.accentBlue]}
         style={[styles.headerGradient, { height: gradientHeight }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -275,10 +277,10 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         onLayout={(e) => setGradientHeight(Math.max(255, e.nativeEvent.layout.height + 34))}
       >
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton}>
-          <ArrowLeft size={24} color="#fff" />
+          <ArrowLeft size={24} color={colors.primaryButtonText} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Waitlist</Text>
-        <Text style={styles.headerSubtitle}>
+        <Text style={[styles.headerTitle, { color: colors.primaryButtonText }]}>Waitlist</Text>
+        <Text style={[styles.headerSubtitle, { color: colors.primaryButtonText + 'B3' }]}>
           Complete tasks to earn XP{'\n'}and move up the queue
         </Text>
       </SafeAreaView>
@@ -290,36 +292,36 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         contentContainerStyle={styles.statsContainer}
         style={styles.statsScroll}
       >
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
           <View style={styles.statRow}>
-            <View style={styles.statIconCircle}>
-              <Zap size={20} color="#fff" />
+            <View style={[styles.statIconCircle, { backgroundColor: colors.accentBlue }]}>
+              <Zap size={20} color={colors.primaryButtonText} />
             </View>
             <View>
-              <Text style={styles.statLabel}>Your XP</Text>
-              <Text style={styles.statValue}>{xp}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Your XP</Text>
+              <Text style={[styles.statValue, { color: colors.textPrimary }]}>{xp}</Text>
             </View>
           </View>
         </View>
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
           <View style={styles.statRow}>
-            <View style={styles.statIconCircle}>
-              <Hash size={20} color="#fff" />
+            <View style={[styles.statIconCircle, { backgroundColor: colors.accentBlue }]}>
+              <Hash size={20} color={colors.primaryButtonText} />
             </View>
             <View>
-              <Text style={styles.statLabel}>Queue Position</Text>
-              <Text style={styles.statValue}>#{rank}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Queue Position</Text>
+              <Text style={[styles.statValue, { color: colors.textPrimary }]}>#{rank}</Text>
             </View>
           </View>
         </View>
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
           <View style={styles.statRow}>
-            <View style={styles.statIconCircle}>
-              <Clock size={20} color="#fff" />
+            <View style={[styles.statIconCircle, { backgroundColor: colors.accentBlue }]}>
+              <Clock size={20} color={colors.primaryButtonText} />
             </View>
             <View>
-              <Text style={styles.statLabel}>Next Invite Batch</Text>
-              <Text style={styles.statValue}>{countdown}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Next Invite Batch</Text>
+              <Text style={[styles.statValue, { color: colors.textPrimary }]}>{countdown}</Text>
             </View>
           </View>
         </View>
@@ -333,19 +335,20 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#3985D8"
+            tintColor={colors.accentBlue}
           />
         }
       >
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Tasks</Text>
-          <Text style={styles.sectionCount}>{completedCount}/{tasks.length}</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Tasks</Text>
+          <Text style={[styles.sectionCount, { color: colors.textSecondary }]}>{completedCount}/{tasks.length}</Text>
         </View>
         {tasks.map((task) => (
           <TouchableOpacity
             key={task.taskId}
             style={[
               styles.taskRow,
+              { backgroundColor: colors.card, shadowColor: colors.shadowColor },
               task.locked && styles.taskRowLocked,
             ]}
             onPress={() => handleTaskPress(task)}
@@ -354,28 +357,29 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
           >
             <View style={styles.taskLeft}>
               {task.completed ? (
-                <View style={[styles.taskIconCircle, styles.taskIconCompleted]}>
-                  <Check size={14} color="#fff" />
+                <View style={[styles.taskIconCircle, styles.taskIconCompleted, { backgroundColor: colors.accentGreen, borderColor: colors.accentGreen }]}>
+                  <Check size={14} color={colors.primaryButtonText} />
                 </View>
               ) : task.locked ? (
-                <View style={[styles.taskIconCircle, styles.taskIconLocked]}>
-                  <Lock size={14} color="#999" />
+                <View style={[styles.taskIconCircle, styles.taskIconLocked, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}>
+                  <Lock size={14} color={colors.textTertiary} />
                 </View>
               ) : (
-                <View style={styles.taskIconCircle} />
+                <View style={[styles.taskIconCircle, { borderColor: colors.border }]} />
               )}
               <View style={styles.taskInfo}>
                 <Text
                   style={[
                     styles.taskTitle,
-                    task.completed && styles.taskTitleCompleted,
-                    task.locked && styles.taskTitleLocked,
+                    { color: colors.textPrimary },
+                    task.completed && [styles.taskTitleCompleted, { color: colors.accentGreen }],
+                    task.locked && [styles.taskTitleLocked, { color: colors.textTertiary }],
                   ]}
                 >
                   {task.title}
                 </Text>
                 {task.locked && task.requiresTask && (
-                  <Text style={styles.taskRequires}>
+                  <Text style={[styles.taskRequires, { color: colors.textTertiary }]}>
                     Requires: {tasks.find((t) => t.taskId === task.requiresTask)?.title ?? task.requiresTask}
                   </Text>
                 )}
@@ -385,14 +389,15 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
               <Text
                 style={[
                   styles.taskXp,
-                  task.completed && styles.taskXpCompleted,
-                  task.locked && styles.taskXpLocked,
+                  { color: colors.accentBlue },
+                  task.completed && [styles.taskXpCompleted, { color: colors.accentGreen }],
+                  task.locked && [styles.taskXpLocked, { color: colors.textTertiary }],
                 ]}
               >
                 +{task.xpReward} XP
               </Text>
               {!task.completed && !task.locked && (
-                <ChevronRight size={16} color="#CCC" />
+                <ChevronRight size={16} color={colors.border} />
               )}
             </View>
           </TouchableOpacity>
@@ -403,7 +408,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
           onPress={() => { logOnboardingHaveInviteCode('waitlist'); onHaveInviteCode(); }}
           activeOpacity={0.7}
         >
-          <Text style={styles.inviteCodeButtonText}>I have an invite code</Text>
+          <Text style={[styles.inviteCodeButtonText, { color: colors.accentBlue }]}>I have an invite code</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -449,7 +454,6 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8EAF1',
   },
   loadingContainer: {
     flex: 1,
@@ -477,12 +481,10 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#fff',
     marginBottom: 6,
   },
   headerSubtitle: {
     fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -495,12 +497,10 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   statCard: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
     minWidth: 150,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -515,19 +515,16 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#3985D8',
     justifyContent: 'center',
     alignItems: 'center',
   },
   statLabel: {
     fontSize: 13,
-    color: '#6B7B8D',
     marginBottom: 4,
   },
   statValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
     fontVariant: ['tabular-nums'],
   },
   taskList: {
@@ -547,22 +544,18 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1A1A1A',
   },
   sectionCount: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6B7B8D',
   },
   taskRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 14,
     marginBottom: 8,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
@@ -582,17 +575,12 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: '#D0D5DD',
     justifyContent: 'center',
     alignItems: 'center',
   },
   taskIconCompleted: {
-    backgroundColor: '#22C55E',
-    borderColor: '#22C55E',
   },
   taskIconLocked: {
-    backgroundColor: '#F2F4F7',
-    borderColor: '#E4E7EC',
   },
   taskInfo: {
     flex: 1,
@@ -600,17 +588,13 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1A1A1A',
   },
   taskTitleCompleted: {
-    color: '#22C55E',
   },
   taskTitleLocked: {
-    color: '#999',
   },
   taskRequires: {
     fontSize: 12,
-    color: '#999',
     marginTop: 2,
   },
   taskRight: {
@@ -621,13 +605,10 @@ const styles = StyleSheet.create({
   taskXp: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#3985D8',
   },
   taskXpCompleted: {
-    color: '#22C55E',
   },
   taskXpLocked: {
-    color: '#999',
   },
   inviteCodeButton: {
     alignItems: 'center',
@@ -637,6 +618,5 @@ const styles = StyleSheet.create({
   inviteCodeButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#3985D8',
   },
 });

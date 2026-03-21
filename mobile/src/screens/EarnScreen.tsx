@@ -16,6 +16,7 @@ import VaultModal from '../components/VaultModal';
 import { LifetimeEarnedIcon, Last7DIcon, AvgApyIcon } from '../assets/stat-icons';
 import type { EarnTokenWithPosition } from '../hooks/useEarnTokens';
 import { logScreenView, logEarnFilterSelect, logEarnVaultPress, logEarnRetry } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 const ALL_FILTER = 'All';
 const STABLES_FILTER = 'Stables';
@@ -23,6 +24,7 @@ const STABLECOIN_SYMBOLS = new Set(['USDC', 'USDT', 'JupUSD', 'USDG', 'USDS', 'P
 const PINNED_FILTERS = [ALL_FILTER, STABLES_FILTER, 'SOL', 'USDC'];
 
 export default function EarnScreen() {
+  const { colors } = useTheme();
   const { tokens, loading, refreshing, error, refresh } = useEarnTokens();
   const [activeFilter, setActiveFilter] = useState(ALL_FILTER);
   const [selectedToken, setSelectedToken] = useState<EarnTokenWithPosition | null>(null);
@@ -65,12 +67,12 @@ export default function EarnScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
 
 
       {/* Header Gradient */}
       <LinearGradient
-        colors={['#1E8260', '#19C394']}
+        colors={colors.earnGradient as unknown as string[]}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -85,15 +87,15 @@ export default function EarnScreen() {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#19C394" />
-          <Text style={styles.loadingText}>Loading vaults...</Text>
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading vaults...</Text>
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>
-          <Text style={styles.errorEmoji}>!</Text>
-          <Text style={styles.errorTitle}>Something went wrong</Text>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => { logEarnRetry(); refresh(); }}>
-            <Text style={styles.retryText}>Try again</Text>
+          <Text style={[styles.errorEmoji, { color: colors.errorText, backgroundColor: colors.errorBackground }]}>!</Text>
+          <Text style={[styles.errorTitle, { color: colors.textPrimary }]}>Something went wrong</Text>
+          <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
+          <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primaryButton }]} onPress={() => { logEarnRetry(); refresh(); }}>
+            <Text style={[styles.retryText, { color: colors.primaryButtonText }]}>Try again</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -105,37 +107,37 @@ export default function EarnScreen() {
             contentContainerStyle={styles.statsContainer}
             style={styles.statsScroll}
           >
-            <View style={styles.statCard}>
+            <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
               <View style={styles.statRow}>
                 <View style={styles.statIconCircle}>
                   <LifetimeEarnedIcon size={20} />
                 </View>
                 <View>
-                  <Text style={styles.statLabel}>Lifetime earned</Text>
-                  <Text style={styles.statValue}>--</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Lifetime earned</Text>
+                  <Text style={[styles.statValue, { color: colors.textPrimary }]}>--</Text>
                 </View>
               </View>
             </View>
-            <View style={styles.statCard}>
+            <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
               <View style={styles.statRow}>
                 <View style={styles.statIconCircle}>
                   <Last7DIcon size={20} />
                 </View>
                 <View>
-                  <Text style={styles.statLabel}>Last 7D</Text>
-                  <Text style={styles.statValue}>--</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Last 7D</Text>
+                  <Text style={[styles.statValue, { color: colors.textPrimary }]}>--</Text>
                 </View>
               </View>
             </View>
             {avgApy !== null && (
-              <View style={styles.statCard}>
+              <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
                 <View style={styles.statRow}>
                   <View style={styles.statIconCircle}>
                     <AvgApyIcon size={20} />
                   </View>
                   <View>
-                    <Text style={styles.statLabel}>Your avg APY</Text>
-                    <Text style={styles.statValue}>{avgApy.toFixed(2)}%</Text>
+                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Your avg APY</Text>
+                    <Text style={[styles.statValue, { color: colors.textPrimary }]}>{avgApy.toFixed(2)}%</Text>
                   </View>
                 </View>
               </View>
@@ -154,6 +156,7 @@ export default function EarnScreen() {
                 key={filter}
                 style={[
                   styles.filterChip,
+                  { backgroundColor: colors.cardSecondary },
                   activeFilter === filter && styles.filterChipActive,
                 ]}
                 onPress={() => { logEarnFilterSelect(filter); setActiveFilter(filter); }}
@@ -162,6 +165,7 @@ export default function EarnScreen() {
                 <Text
                   style={[
                     styles.filterText,
+                    { color: colors.textSecondary },
                     activeFilter === filter && styles.filterTextActive,
                   ]}
                 >
@@ -194,7 +198,7 @@ export default function EarnScreen() {
               )}
               ListEmptyComponent={
                 <View style={styles.centered}>
-                  <Text style={styles.emptyText}>No earn opportunities available</Text>
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No earn opportunities available</Text>
                 </View>
               }
             />
@@ -231,7 +235,6 @@ export default function EarnScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8EAF1',
   },
   headerGradient: {
     position: 'absolute',
@@ -266,12 +269,10 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   statCard: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
     minWidth: 150,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -292,13 +293,11 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 13,
-    color: '#6B7B8D',
     marginBottom: 4,
   },
   statValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
   },
   filtersScroll: {
     maxHeight: 36,
@@ -313,7 +312,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
   },
   filterChipActive: {
     backgroundColor: '#19C394',
@@ -321,7 +319,6 @@ const styles = StyleSheet.create({
   filterText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6B7B8D',
   },
   filterTextActive: {
     color: '#fff',
@@ -344,7 +341,6 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#6B7B8D',
   },
   errorContainer: {
     flex: 1,
@@ -357,8 +353,6 @@ const styles = StyleSheet.create({
   errorEmoji: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#F95357',
-    backgroundColor: '#FFEBEE',
     width: 52,
     height: 52,
     lineHeight: 52,
@@ -370,22 +364,18 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
   },
   errorText: {
     fontSize: 14,
-    color: '#6B7B8D',
     textAlign: 'center',
     marginBottom: 8,
   },
   retryButton: {
-    backgroundColor: '#000',
     paddingHorizontal: 28,
     paddingVertical: 12,
     borderRadius: 12,
   },
   retryText: {
-    color: '#fff',
     fontWeight: '600',
     fontSize: 15,
   },
@@ -397,6 +387,5 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    color: '#808080',
   },
 });

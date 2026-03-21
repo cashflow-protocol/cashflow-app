@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 
 interface SectionCardProps {
   title: string;
@@ -14,17 +15,19 @@ export default function SectionCard({
   onMorePress,
   height
 }: SectionCardProps) {
+  const { colors } = useTheme();
+
   return (
-    <View style={[styles.container, height ? { height } : {}]}>
+    <View style={[styles.container, { backgroundColor: colors.card }, height ? { height } : {}]}>
       <View style={styles.header}>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
         {onMorePress && (
           <TouchableOpacity
-            style={styles.moreButton}
+            style={[styles.moreButton, { backgroundColor: colors.moreButtonBg }]}
             onPress={onMorePress}
           >
-            <Text style={styles.moreText}>More</Text>
-            <Text style={styles.arrow}>›</Text>
+            <Text style={[styles.moreText, { color: colors.moreButtonText }]}>More</Text>
+            <Text style={[styles.arrow, { color: colors.moreButtonText }]}>›</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -37,7 +40,6 @@ export default function SectionCard({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
     borderRadius: 20,
     overflow: 'hidden',
     width: '100%',
@@ -53,12 +55,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#000',
   },
   moreButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E9EDF4',
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 12,
@@ -67,11 +67,9 @@ const styles = StyleSheet.create({
   moreText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#294E90',
   },
   arrow: {
     fontSize: 16,
-    color: '#294E90',
   },
   content: {
     paddingHorizontal: 16,

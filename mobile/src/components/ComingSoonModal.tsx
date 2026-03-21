@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import BottomSheet from './BottomSheet';
+import { useTheme } from '../theme/ThemeContext';
 
 interface ComingSoonModalProps {
   visible: boolean;
@@ -22,24 +23,26 @@ export default function ComingSoonModal({
   title = 'Coming soon',
   subtitle = 'This feature is under development and will be available soon.',
 }: ComingSoonModalProps) {
+  const { colors } = useTheme();
+
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <View style={styles.content}>
         {icon && (
-          <View style={styles.iconContainer}>
+          <View style={[styles.iconContainer, { backgroundColor: colors.infoBackground }]}>
             {icon}
           </View>
         )}
 
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>{subtitle}</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
 
         <TouchableOpacity
-          style={styles.closeButton}
+          style={[styles.closeButton, { backgroundColor: colors.primaryButton }]}
           onPress={onClose}
           activeOpacity={0.7}
         >
-          <Text style={styles.closeButtonText}>Got it</Text>
+          <Text style={[styles.closeButtonText, { color: colors.primaryButtonText }]}>Got it</Text>
         </TouchableOpacity>
       </View>
     </BottomSheet>
@@ -55,7 +58,6 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#EEF4FB',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
@@ -63,16 +65,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#000',
   },
   subtitle: {
     fontSize: 15,
-    color: '#6B7B8D',
     textAlign: 'center',
     paddingHorizontal: 20,
   },
   closeButton: {
-    backgroundColor: '#000000',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -82,6 +81,5 @@ const styles = StyleSheet.create({
   closeButtonText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#fff',
   },
 });

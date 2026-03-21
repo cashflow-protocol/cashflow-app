@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Image, ImageSourcePropType, StyleSheet, TouchableOpacity } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 import type { EarnTokenType } from '../types/earn';
 import { getTokenIcon } from '../assets/token-icons';
 
@@ -52,6 +53,7 @@ export default function EarnTokenItem({
   compact,
   onPress,
 }: EarnTokenItemProps) {
+  const { colors } = useTheme();
   const apyPercent = (rewardsRate / 100).toFixed(2);
   const protocolIcon = PROTOCOL_ICONS[type];
   const protocolLabel = PROTOCOL_LABELS[type];
@@ -59,29 +61,29 @@ export default function EarnTokenItem({
   const hasPosition = positionAmount != null && positionAmount > 0;
 
   return (
-    <TouchableOpacity style={[styles.container, compact && styles.containerCompact]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.container, { backgroundColor: colors.card, shadowColor: colors.shadowColor }, compact && styles.containerCompact]} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.row}>
         {/* Icon stack: stablecoin icon with protocol badge */}
         <View style={styles.iconStack}>
-          <View style={styles.tokenIconContainer}>
+          <View style={[styles.tokenIconContainer, { backgroundColor: colors.cardSecondary }]}>
             <Image source={localIcon ?? { uri: logoUrl }} style={styles.tokenIcon} />
           </View>
-          <View style={styles.protocolBadge}>
+          <View style={[styles.protocolBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Image source={protocolIcon} style={styles.protocolIcon} />
           </View>
         </View>
 
         {/* Info */}
         <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={1}>{vaultTitle || `${protocolLabel} - ${symbol}`}</Text>
-          <Text style={styles.protocol}>{protocolLabel} · {symbol}</Text>
+          <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>{vaultTitle || `${protocolLabel} - ${symbol}`}</Text>
+          <Text style={[styles.protocol, { color: colors.textSecondary }]}>{protocolLabel} · {symbol}</Text>
         </View>
 
         {/* Right side: APY or deposit value */}
         {compact && hasPosition ? (
           <View style={styles.depositRight}>
-            <Text style={styles.depositUsd}>{positionUsdValue != null ? formatUsd(positionUsdValue) : ''}</Text>
-            <Text style={styles.depositAmount}>{formatAmount(positionAmount)} {symbol}</Text>
+            <Text style={[styles.depositUsd, { color: colors.textPrimary }]}>{positionUsdValue != null ? formatUsd(positionUsdValue) : ''}</Text>
+            <Text style={[styles.depositAmount, { color: colors.textSecondary }]}>{formatAmount(positionAmount)} {symbol}</Text>
           </View>
         ) : (
           <Text style={styles.apy}>{apyPercent}%</Text>
@@ -89,9 +91,9 @@ export default function EarnTokenItem({
       </View>
 
       {!compact && hasPosition && (
-        <View style={styles.positionBar}>
-          <Text style={styles.positionLabel}>Your deposit</Text>
-          <Text style={styles.positionAmount}>{formatAmount(positionAmount)} {symbol}</Text>
+        <View style={[styles.positionBar, { backgroundColor: colors.infoBackground }]}>
+          <Text style={[styles.positionLabel, { color: colors.textSecondary }]}>Your deposit</Text>
+          <Text style={[styles.positionAmount, { color: colors.accentBlueDark }]}>{formatAmount(positionAmount)} {symbol}</Text>
         </View>
       )}
     </TouchableOpacity>
@@ -100,11 +102,9 @@ export default function EarnTokenItem({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 14,
     gap: 10,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -129,7 +129,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F4F4F4',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -146,11 +145,9 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#E8EAF1',
     overflow: 'hidden',
   },
   protocolIcon: {
@@ -165,11 +162,9 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#000',
   },
   protocol: {
     fontSize: 13,
-    color: '#808080',
   },
   apy: {
     fontSize: 17,
@@ -182,29 +177,24 @@ const styles = StyleSheet.create({
   depositUsd: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
   },
   depositAmount: {
     fontSize: 13,
-    color: '#6B7B8D',
     marginTop: 2,
   },
   positionBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#EEF4FB',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   positionLabel: {
     fontSize: 13,
-    color: '#6B7B8D',
   },
   positionAmount: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#175DA3',
   },
 });

@@ -15,6 +15,7 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { addMember } from '../services/squadsService';
 import { getVault } from '../services/vaultStorage';
 import { logScreenView, logError, logAddMemberSubmit, logAddMemberSuccess } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 
 interface AddMemberScreenProps {
@@ -31,6 +32,7 @@ const PERMISSION_OPTIONS: Array<{ value: PermissionType; label: string; descript
 ];
 
 export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenProps) {
+  const { colors } = useTheme();
   const [memberAddress, setMemberAddress] = useState('');
   const [permissionType, setPermissionType] = useState<PermissionType>('all');
   const [submitting, setSubmitting] = useState(false);
@@ -83,10 +85,10 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
 
       <LinearGradient
-        colors={['#1E8260', '#19C394']}
+        colors={colors.earnGradient as [string, string]}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -103,14 +105,14 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* Wallet Address Input */}
-        <View style={styles.card}>
-          <Text style={styles.inputLabel}>Wallet Address</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
+          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Wallet Address</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.textPrimary, borderBottomColor: colors.border }]}
             value={memberAddress}
             onChangeText={setMemberAddress}
             placeholder="Paste Solana wallet address"
-            placeholderTextColor="#B2B2B2"
+            placeholderTextColor={colors.placeholderColor}
             editable={!submitting}
             autoCapitalize="none"
             autoCorrect={false}
@@ -118,24 +120,25 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
         </View>
 
         {/* Permission Selector */}
-        <View style={styles.card}>
-          <Text style={styles.inputLabel}>Permissions</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
+          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Permissions</Text>
           {PERMISSION_OPTIONS.map((option) => (
             <TouchableOpacity
               key={option.value}
               style={[
                 styles.permissionRow,
+                { borderBottomColor: colors.border },
                 permissionType === option.value && styles.permissionRowActive,
               ]}
               onPress={() => setPermissionType(option.value)}
               disabled={submitting}
             >
-              <View style={styles.radioOuter}>
-                {permissionType === option.value && <View style={styles.radioInner} />}
+              <View style={[styles.radioOuter, { borderColor: colors.textTertiary }]}>
+                {permissionType === option.value && <View style={[styles.radioInner, { backgroundColor: colors.accentGreen }]} />}
               </View>
               <View style={styles.permissionInfo}>
-                <Text style={styles.permissionLabel}>{option.label}</Text>
-                <Text style={styles.permissionDescription}>{option.description}</Text>
+                <Text style={[styles.permissionLabel, { color: colors.textPrimary }]}>{option.label}</Text>
+                <Text style={[styles.permissionDescription, { color: colors.textSecondary }]}>{option.description}</Text>
               </View>
             </TouchableOpacity>
           ))}
@@ -143,17 +146,17 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
 
         {/* Submit Button */}
         <TouchableOpacity
-          style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+          style={[styles.submitButton, { backgroundColor: colors.accentGreen }, submitting && styles.submitButtonDisabled]}
           onPress={handleAddMember}
           disabled={submitting}
         >
           {submitting ? (
             <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" color="#fff" />
-              <Text style={styles.submitButtonText}>{step || 'Processing...'}</Text>
+              <ActivityIndicator size="small" color={colors.primaryButtonText} />
+              <Text style={[styles.submitButtonText, { color: colors.primaryButtonText }]}>{step || 'Processing...'}</Text>
             </View>
           ) : (
-            <Text style={styles.submitButtonText}>Add Member</Text>
+            <Text style={[styles.submitButtonText, { color: colors.primaryButtonText }]}>Add Member</Text>
           )}
         </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -164,7 +167,6 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8EAF1',
   },
   headerGradient: {
     position: 'absolute',
@@ -202,10 +204,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   card: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -214,7 +214,6 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6B7B8D',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -222,9 +221,7 @@ const styles = StyleSheet.create({
   input: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#1A1A1A',
     borderBottomWidth: 1,
-    borderBottomColor: '#E8EAF1',
     paddingBottom: 8,
   },
   permissionRow: {
@@ -232,7 +229,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
     gap: 12,
   },
   permissionRowActive: {
@@ -246,7 +242,6 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 2,
-    borderColor: '#B2B2B2',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -254,7 +249,6 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#19C394',
   },
   permissionInfo: {
     flex: 1,
@@ -262,15 +256,12 @@ const styles = StyleSheet.create({
   permissionLabel: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1A1A1A',
     marginBottom: 2,
   },
   permissionDescription: {
     fontSize: 13,
-    color: '#6B7B8D',
   },
   submitButton: {
-    backgroundColor: '#19C394',
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
@@ -280,7 +271,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   submitButtonText: {
-    color: '#fff',
     fontWeight: '700',
     fontSize: 16,
   },

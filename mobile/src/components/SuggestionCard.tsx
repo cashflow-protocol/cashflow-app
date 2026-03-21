@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 import type { Suggestion } from '../types/earn';
 import { logSuggestionCardPress } from '../services/analyticsService';
 
@@ -12,6 +13,7 @@ interface SuggestionCardProps {
 }
 
 export default function SuggestionCard({ suggestion, compact, onFundWallet, onTransferPosition, onAddRecovery }: SuggestionCardProps) {
+  const { colors } = useTheme();
   const accent = suggestion.color;
 
   const handlePress = () => {
@@ -33,10 +35,10 @@ export default function SuggestionCard({ suggestion, compact, onFundWallet, onTr
   };
 
   return (
-    <View style={[styles.card, { borderLeftColor: accent }, compact && styles.cardCompact]}>
+    <View style={[styles.card, { backgroundColor: colors.card, borderLeftColor: accent }, compact && styles.cardCompact]}>
       <View style={styles.content}>
-        <Text style={styles.title}>{suggestion.title}</Text>
-        <Text style={styles.description}>{suggestion.description}</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>{suggestion.title}</Text>
+        <Text style={[styles.description, { color: colors.textSecondary }]}>{suggestion.description}</Text>
       </View>
       {suggestion.buttonTitle && (
         <TouchableOpacity
@@ -52,7 +54,6 @@ export default function SuggestionCard({ suggestion, compact, onFundWallet, onTr
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     borderLeftWidth: 4,
     padding: 16,
@@ -67,11 +68,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#000',
   },
   description: {
     fontSize: 13,
-    color: '#6B7B8D',
     lineHeight: 18,
   },
   button: {

@@ -20,6 +20,7 @@ import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey } from '../se
 import { getVault, getRecoveryEmails, saveRecoveryEmail } from '../services/vaultStorage';
 import apiService from '../services/apiService';
 import { logScreenView, logAddRecoveryKeySubmit, logAddRecoveryKeySuccess, logAddRecoveryKeyError } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 interface KeysRecoveryScreenProps {
   onNavigate: (screen: string) => void;
@@ -82,6 +83,7 @@ function getKeyIcon(label: MemberLabel, color?: string) {
 }
 
 export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryScreenProps) {
+  const { colors } = useTheme();
   const [loading, setLoading] = useState(true);
   const [multisigInfo, setMultisigInfo] = useState<MultisigInfo | null>(null);
   const [cloudPubkey, setCloudPubkey] = useState<string | null>(null);
@@ -366,16 +368,16 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       return {
         title: "What's a Recovery Key?",
         items: [
-          { icon: <KeyRound size={20} color="#1A1A1A" />, title: 'Wallet recovery', desc: `A Recovery Key can restore access to your wallet when paired with your Device or Cloud Key. Linked to ${emailMap[address]}` },
-          { icon: <RotateCcw size={20} color="#1A1A1A" />, title: 'Recovery only', desc: 'Recovery Keys have limited rights and can never access your Cashflow Vault without an associated Active Key' },
+          { icon: <KeyRound size={20} color={colors.textPrimary} />, title: 'Wallet recovery', desc: `A Recovery Key can restore access to your wallet when paired with your Device or Cloud Key. Linked to ${emailMap[address]}` },
+          { icon: <RotateCcw size={20} color={colors.textPrimary} />, title: 'Recovery only', desc: 'Recovery Keys have limited rights and can never access your Cashflow Vault without an associated Active Key' },
         ],
       };
     }
     return {
       title: "What's a Recovery Key?",
       items: [
-        { icon: <KeyRound size={20} color="#1A1A1A" />, title: 'Wallet recovery', desc: 'A Recovery Key can restore access to your wallet when paired with your Device or Cloud Key. Cashflow supports up to 3 Recovery Keys' },
-        { icon: <RotateCcw size={20} color="#1A1A1A" />, title: 'Recovery only', desc: 'Recovery Keys have limited rights and can never access your Cashflow Vault without an associated Active Key' },
+        { icon: <KeyRound size={20} color={colors.textPrimary} />, title: 'Wallet recovery', desc: 'A Recovery Key can restore access to your wallet when paired with your Device or Cloud Key. Cashflow supports up to 3 Recovery Keys' },
+        { icon: <RotateCcw size={20} color={colors.textPrimary} />, title: 'Recovery only', desc: 'Recovery Keys have limited rights and can never access your Cashflow Vault without an associated Active Key' },
       ],
     };
   };
@@ -400,35 +402,35 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
         return {
           title: "What's a Device Key?",
           items: [
-            { icon: <KeyRound size={20} color="#1A1A1A" />, title: 'Active Key', desc: 'Used to approve transactions' },
-            { icon: <ShieldCheck size={20} color="#1A1A1A" />, title: 'Secure', desc: 'Stored on your device and protected by biometrics' },
-            { icon: <RotateCcw size={20} color="#1A1A1A" />, title: 'Recovery', desc: 'If lost, can be recovered by pairing your Cloud Key and Recovery Key' },
+            { icon: <KeyRound size={20} color={colors.textPrimary} />, title: 'Active Key', desc: 'Used to approve transactions' },
+            { icon: <ShieldCheck size={20} color={colors.textPrimary} />, title: 'Secure', desc: 'Stored on your device and protected by biometrics' },
+            { icon: <RotateCcw size={20} color={colors.textPrimary} />, title: 'Recovery', desc: 'If lost, can be recovered by pairing your Cloud Key and Recovery Key' },
           ],
         };
       case 'Cloud':
         return {
           title: "What's a Cloud Key?",
           items: [
-            { icon: <KeyRound size={20} color="#1A1A1A" />, title: 'Active Key', desc: 'Used to approve transactions' },
-            { icon: <Cloud size={20} color="#1A1A1A" />, title: 'Cloud-backed', desc: 'Encrypted and stored securely in your cloud account' },
-            { icon: <RotateCcw size={20} color="#1A1A1A" />, title: 'Recovery', desc: 'If lost, can be recovered by pairing your Device Key and Recovery Key' },
+            { icon: <KeyRound size={20} color={colors.textPrimary} />, title: 'Active Key', desc: 'Used to approve transactions' },
+            { icon: <Cloud size={20} color={colors.textPrimary} />, title: 'Cloud-backed', desc: 'Encrypted and stored securely in your cloud account' },
+            { icon: <RotateCcw size={20} color={colors.textPrimary} />, title: 'Recovery', desc: 'If lost, can be recovered by pairing your Device Key and Recovery Key' },
           ],
         };
       default:
         return {
           title: "What's a Wallet Key?",
           items: [
-            { icon: <KeyRound size={20} color="#1A1A1A" />, title: 'Active Key', desc: 'Used to approve transactions' },
-            { icon: <Wallet size={20} color="#1A1A1A" />, title: 'External', desc: 'Connected from an external wallet' },
+            { icon: <KeyRound size={20} color={colors.textPrimary} />, title: 'Active Key', desc: 'Used to approve transactions' },
+            { icon: <Wallet size={20} color={colors.textPrimary} />, title: 'External', desc: 'Connected from an external wallet' },
           ],
         };
     }
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient
-        colors={['#1E8260', '#19C394']}
+        colors={colors.earnGradient as [string, string]}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -452,35 +454,35 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
-          <ActivityIndicator size="large" color="#19C394" style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={colors.accentGreen} style={{ marginTop: 40 }} />
         ) : (
           <>
             {/* Active Keys */}
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Active Keys</Text>
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Active Keys</Text>
               <View style={styles.keysRow}>
                 {coreMembers.map((m) => (
                   <TouchableOpacity
                     key={m.address}
-                    style={styles.keyCard}
+                    style={[styles.keyCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}
                     onPress={() => copyAddress(m.address, m.address)}
                     activeOpacity={0.7}
                   >
                     {getKeyIcon(m.label)}
                     <View style={styles.keyCardInfo}>
-                      <Text style={styles.keyCardLabel}>{m.label}</Text>
-                      <Text style={styles.keyCardAddress}>
+                      <Text style={[styles.keyCardLabel, { color: colors.textPrimary }]}>{m.label}</Text>
+                      <Text style={[styles.keyCardAddress, { color: colors.textTertiary }]}>
                         {domainMap[m.address] || truncateAddress(m.address)}
                         {copiedField === m.address ? '  Copied!' : ''}
                       </Text>
                     </View>
                     <TouchableOpacity style={styles.menuButton} activeOpacity={0.5} onPress={() => setMenuMember(m)}>
-                      <MoreHorizontal size={18} color="#B2B2B2" />
+                      <MoreHorizontal size={18} color={colors.textTertiary} />
                     </TouchableOpacity>
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={styles.keysHint}>
+              <Text style={[styles.keysHint, { color: colors.textTertiary }]}>
                 Your wallet requires all Active Keys to authorize transactions. If you lose access to one Active key, your Recovery Keys can help restore full access to your account.
               </Text>
             </View>
@@ -489,16 +491,16 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
             <View style={styles.section}>
               <View style={styles.recoverySectionHeader}>
                 <View style={styles.recoverySectionLeft}>
-                  <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>Recovery Keys</Text>
+                  <Text style={[styles.sectionLabel, { marginBottom: 0, color: colors.textSecondary }]}>Recovery Keys</Text>
                   {recoveryMembers.length > 0 && (
-                    <View style={styles.countBadge}>
-                      <Text style={styles.countBadgeText}>{recoveryMembers.length}/{MAX_RECOVERY_KEYS}</Text>
+                    <View style={[styles.countBadge, { backgroundColor: colors.background }]}>
+                      <Text style={[styles.countBadgeText, { color: colors.textSecondary }]}>{recoveryMembers.length}/{MAX_RECOVERY_KEYS}</Text>
                     </View>
                   )}
                 </View>
                 {canAddRecovery && (
                   <TouchableOpacity onPress={openAddRecovery} activeOpacity={0.6}>
-                    <CirclePlus size={22} color="#1A1A1A" />
+                    <CirclePlus size={22} color={colors.textPrimary} />
                   </TouchableOpacity>
                 )}
               </View>
@@ -506,30 +508,30 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
               <View style={styles.keysRow}>
                 {recoveryMembers.length === 0 ? (
                   <TouchableOpacity
-                    style={styles.addRecoveryEmptyCard}
+                    style={[styles.addRecoveryEmptyCard, { backgroundColor: colors.card, borderColor: colors.accentGreen }]}
                     onPress={openAddRecovery}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.addButtonText}>+ Add Recovery Key</Text>
+                    <Text style={[styles.addButtonText, { color: colors.accentGreen }]}>+ Add Recovery Key</Text>
                   </TouchableOpacity>
                 ) : (
                   recoveryMembers.map((m) => (
                     <TouchableOpacity
                       key={m.address}
-                      style={styles.keyCard}
+                      style={[styles.keyCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}
                       onPress={() => copyAddress(m.address, m.address)}
                       activeOpacity={0.7}
                     >
                       {getRecoveryIcon(m.address)}
                       <View style={styles.keyCardInfo}>
-                        <Text style={styles.keyCardLabel}>{getRecoveryLabel(m.address)}</Text>
+                        <Text style={[styles.keyCardLabel, { color: colors.textPrimary }]}>{getRecoveryLabel(m.address)}</Text>
                       </View>
-                      <Text style={styles.recoveryDetail}>
+                      <Text style={[styles.recoveryDetail, { color: colors.textTertiary }]}>
                         {getRecoveryDetail(m.address)}
                         {copiedField === m.address ? '  Copied!' : ''}
                       </Text>
                       <TouchableOpacity style={styles.menuButton} activeOpacity={0.5} onPress={() => setRecoveryMenuMember(m)}>
-                        <MoreHorizontal size={18} color="#B2B2B2" />
+                        <MoreHorizontal size={18} color={colors.textTertiary} />
                       </TouchableOpacity>
                     </TouchableOpacity>
                   ))
@@ -537,7 +539,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
               </View>
 
               {!canAddRecovery && recoveryMembers.length > 0 && (
-                <Text style={styles.maxText}>Maximum recovery keys reached</Text>
+                <Text style={[styles.maxText, { color: colors.textTertiary }]}>Maximum recovery keys reached</Text>
               )}
 
               {recoveryMembers.length < 2 && (
@@ -546,10 +548,10 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
                     <ShieldCheck size={18} color="#F59E0B" />
                   </View>
                   <View style={styles.recoverySuggestionText}>
-                    <Text style={styles.recoverySuggestionTitle}>
+                    <Text style={[styles.recoverySuggestionTitle, { color: colors.textPrimary }]}>
                       {recoveryMembers.length === 0 ? 'Add a Recovery Key' : 'Add one more Recovery Key'}
                     </Text>
-                    <Text style={styles.recoverySuggestionDesc}>
+                    <Text style={[styles.recoverySuggestionDesc, { color: colors.textTertiary }]}>
                       {recoveryMembers.length === 0
                         ? 'Protect your wallet by adding at least 2 recovery keys in case you lose access to your device.'
                         : 'We recommend at least 2 recovery keys for better security.'}
@@ -558,7 +560,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
                 </TouchableOpacity>
               )}
 
-              <Text style={styles.keysHint}>
+              <Text style={[styles.keysHint, { color: colors.textTertiary }]}>
                 Recovery Keys help you regain access to your wallet if you lose access to one of the Active Keys. You can choose between a key tied to your email or an external crypto wallet.
               </Text>
             </View>
@@ -570,16 +572,16 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       <BottomSheet visible={!!recoveryMenuMember} onClose={() => setRecoveryMenuMember(null)}>
         <View style={styles.menuSheet}>
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.6} onPress={handleRecoveryMenuInfo}>
-            <Info size={20} color="#1A1A1A" />
-            <Text style={styles.menuItemText}>More info</Text>
+            <Info size={20} color={colors.textPrimary} />
+            <Text style={[styles.menuItemText, { color: colors.textPrimary }]}>More info</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.6} onPress={handleRecoveryMenuExplorer}>
-            <Compass size={20} color="#1A1A1A" />
-            <Text style={styles.menuItemText}>Explorer</Text>
+            <Compass size={20} color={colors.textPrimary} />
+            <Text style={[styles.menuItemText, { color: colors.textPrimary }]}>Explorer</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.6} onPress={handleDeleteRecoveryKey}>
-            <Trash2 size={20} color="#EF4444" />
-            <Text style={[styles.menuItemText, { color: '#EF4444' }]}>Delete key</Text>
+            <Trash2 size={20} color={colors.accentRed} />
+            <Text style={[styles.menuItemText, { color: colors.accentRed }]}>Delete key</Text>
           </TouchableOpacity>
         </View>
       </BottomSheet>
@@ -588,17 +590,17 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       <BottomSheet visible={!!menuMember} onClose={() => setMenuMember(null)}>
         <View style={styles.menuSheet}>
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.6} onPress={handleMenuMoreInfo}>
-            <Info size={20} color="#1A1A1A" />
-            <Text style={styles.menuItemText}>More info</Text>
+            <Info size={20} color={colors.textPrimary} />
+            <Text style={[styles.menuItemText, { color: colors.textPrimary }]}>More info</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.6} onPress={handleMenuExplorer}>
-            <Compass size={20} color="#1A1A1A" />
-            <Text style={styles.menuItemText}>Explorer</Text>
+            <Compass size={20} color={colors.textPrimary} />
+            <Text style={[styles.menuItemText, { color: colors.textPrimary }]}>Explorer</Text>
           </TouchableOpacity>
           {menuMember?.label === 'Cloud' && (
             <TouchableOpacity style={styles.menuItem} activeOpacity={0.6} onPress={handleMenuBackup}>
-              <Download size={20} color="#1A1A1A" />
-              <Text style={styles.menuItemText}>Backup key</Text>
+              <Download size={20} color={colors.textPrimary} />
+              <Text style={[styles.menuItemText, { color: colors.textPrimary }]}>Backup key</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -613,34 +615,35 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
           return (
             <View style={styles.infoSheet}>
               <TouchableOpacity style={styles.infoClose} activeOpacity={0.6} onPress={() => setInfoMember(null)}>
-                <X size={20} color="#9CA3AF" />
+                <X size={20} color={colors.textTertiary} />
               </TouchableOpacity>
               <View style={[
                 styles.infoIconWrapper,
-                infoMember.label === 'Recovery' && { backgroundColor: '#19C394' },
+                { backgroundColor: colors.textPrimary },
+                infoMember.label === 'Recovery' && { backgroundColor: colors.accentGreen },
               ]}>
                 {infoMember.label === 'Recovery'
                   ? <Wallet size={28} color="#fff" />
                   : getKeyIcon(infoMember.label, '#fff')}
               </View>
-              <Text style={styles.infoTitle}>{content.title}</Text>
+              <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>{content.title}</Text>
               <View style={styles.infoItems}>
                 {content.items.map((item, i) => (
                   <View key={i} style={styles.infoItem}>
                     {item.icon}
                     <View style={styles.infoItemText}>
-                      <Text style={styles.infoItemTitle}>{item.title}</Text>
-                      <Text style={styles.infoItemDesc}>{item.desc}</Text>
+                      <Text style={[styles.infoItemTitle, { color: colors.textPrimary }]}>{item.title}</Text>
+                      <Text style={[styles.infoItemDesc, { color: colors.textTertiary }]}>{item.desc}</Text>
                     </View>
                   </View>
                 ))}
               </View>
               <TouchableOpacity
-                style={styles.infoButton}
+                style={[styles.infoButton, { backgroundColor: colors.cardSecondary }]}
                 activeOpacity={0.7}
                 onPress={() => setInfoMember(null)}
               >
-                <Text style={styles.infoButtonText}>Got it</Text>
+                <Text style={[styles.infoButtonText, { color: colors.textPrimary }]}>Got it</Text>
               </TouchableOpacity>
             </View>
           );
@@ -650,18 +653,18 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       {/* Backup Key Modal */}
       <BottomSheet visible={backupVisible} onClose={() => setBackupVisible(false)}>
         <View style={styles.backupSheet}>
-          <Text style={styles.backupTitle}>Private Key</Text>
-          <Text style={styles.backupDesc}>
+          <Text style={[styles.backupTitle, { color: colors.textPrimary }]}>Private Key</Text>
+          <Text style={[styles.backupDesc, { color: colors.textTertiary }]}>
             Your Private Key is used to recover access to your Cloud key in case iCloud services are not accessible for any reason.
           </Text>
 
           <TouchableOpacity
-            style={styles.backupRevealBox}
+            style={[styles.backupRevealBox, { backgroundColor: colors.cardSecondary }]}
             activeOpacity={0.7}
             onPress={backupRevealed ? handleCopyBackup : handleRevealBackup}
           >
             {backupRevealed ? (
-              <Text style={styles.backupKeyText} selectable>
+              <Text style={[styles.backupKeyText, { color: colors.textPrimary }]} selectable>
                 {backupKey}
                 {copiedField === 'backup' ? '\n\nCopied!' : ''}
               </Text>
@@ -675,29 +678,29 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
           <View style={styles.backupWarnings}>
             <View style={styles.backupWarningItem}>
-              <TriangleAlert size={18} color="#EF4444" />
-              <Text style={styles.backupWarningText}>Never share this Key with anyone.</Text>
+              <TriangleAlert size={18} color={colors.accentRed} />
+              <Text style={[styles.backupWarningText, { color: colors.textTertiary }]}>Never share this Key with anyone.</Text>
             </View>
             <View style={styles.backupWarningItem}>
-              <MessageSquareText size={18} color="#9CA3AF" />
-              <Text style={styles.backupWarningText}>
+              <MessageSquareText size={18} color={colors.textTertiary} />
+              <Text style={[styles.backupWarningText, { color: colors.textTertiary }]}>
                 By continuing, you acknowledge that if a person has your Device Key and Private Key of your Cloud key, they control your Cashflow wallet.
               </Text>
             </View>
             <View style={styles.backupWarningItem}>
-              <Cloud size={18} color="#9CA3AF" />
-              <Text style={styles.backupWarningText}>
+              <Cloud size={18} color={colors.textTertiary} />
+              <Text style={[styles.backupWarningText, { color: colors.textTertiary }]}>
                 In case your Private Key gets compromised, your Cashflow wallet is still safe as long your device is with you. Nevertheless, change the Cloud Key immediately as soon as you become aware of the incident.
               </Text>
             </View>
           </View>
 
           <TouchableOpacity
-            style={styles.infoButton}
+            style={[styles.infoButton, { backgroundColor: colors.cardSecondary }]}
             activeOpacity={0.7}
             onPress={() => { setBackupVisible(false); setBackupRevealed(false); setBackupKey(null); }}
           >
-            <Text style={styles.infoButtonText}>Cancel</Text>
+            <Text style={[styles.infoButtonText, { color: colors.textPrimary }]}>Cancel</Text>
           </TouchableOpacity>
         </View>
       </BottomSheet>
@@ -710,23 +713,23 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       >
         {addRecoveryStep === 'choose' ? (
           <View style={styles.addRecoverySheet}>
-            <Text style={styles.addRecoveryTitle}>Add{'\n'}Recovery Key</Text>
+            <Text style={[styles.addRecoveryTitle, { color: colors.textPrimary }]}>Add{'\n'}Recovery Key</Text>
 
             <View style={styles.addRecoveryInfo}>
               <View style={styles.addRecoveryInfoItem}>
-                <CircleCheck size={20} color="#1A1A1A" />
+                <CircleCheck size={20} color={colors.textPrimary} />
                 <View style={styles.addRecoveryInfoText}>
-                  <Text style={styles.addRecoveryInfoTitle}>Wallet recovery</Text>
-                  <Text style={styles.addRecoveryInfoDesc}>
+                  <Text style={[styles.addRecoveryInfoTitle, { color: colors.textPrimary }]}>Wallet recovery</Text>
+                  <Text style={[styles.addRecoveryInfoDesc, { color: colors.textTertiary }]}>
                     A Recovery Key can restore access to your wallet when paired with your Device or Cloud Key. Cashflow supports up to 3 Recovery Keys
                   </Text>
                 </View>
               </View>
               <View style={styles.addRecoveryInfoItem}>
-                <CircleCheck size={20} color="#1A1A1A" />
+                <CircleCheck size={20} color={colors.textPrimary} />
                 <View style={styles.addRecoveryInfoText}>
-                  <Text style={styles.addRecoveryInfoTitle}>Recovery only</Text>
-                  <Text style={styles.addRecoveryInfoDesc}>
+                  <Text style={[styles.addRecoveryInfoTitle, { color: colors.textPrimary }]}>Recovery only</Text>
+                  <Text style={[styles.addRecoveryInfoDesc, { color: colors.textTertiary }]}>
                     Recovery Keys have limited rights and can never access your Cashflow Vault without an Active Key
                   </Text>
                 </View>
@@ -735,22 +738,22 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
             <View style={styles.addRecoveryMethods}>
               <TouchableOpacity
-                style={styles.addRecoveryMethodCard}
+                style={[styles.addRecoveryMethodCard, { backgroundColor: colors.cardSecondary }]}
                 activeOpacity={0.7}
                 onPress={() => setAddRecoveryStep('crypto')}
               >
-                <Wallet size={22} color="#9CA3AF" />
-                <Text style={styles.addRecoveryMethodLabel}>Crypto wallet</Text>
-                <ChevronRight size={20} color="#9CA3AF" />
+                <Wallet size={22} color={colors.textTertiary} />
+                <Text style={[styles.addRecoveryMethodLabel, { color: colors.textPrimary }]}>Crypto wallet</Text>
+                <ChevronRight size={20} color={colors.textTertiary} />
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.addRecoveryMethodCard}
+                style={[styles.addRecoveryMethodCard, { backgroundColor: colors.cardSecondary }]}
                 activeOpacity={0.7}
                 onPress={() => setAddRecoveryStep('email')}
               >
-                <Mail size={22} color="#9CA3AF" />
-                <Text style={styles.addRecoveryMethodLabel}>Email</Text>
-                <ChevronRight size={20} color="#9CA3AF" />
+                <Mail size={22} color={colors.textTertiary} />
+                <Text style={[styles.addRecoveryMethodLabel, { color: colors.textPrimary }]}>Email</Text>
+                <ChevronRight size={20} color={colors.textTertiary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -759,52 +762,52 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
             <TouchableOpacity
               onPress={() => !addingKey && setAddRecoveryStep('choose')}
               activeOpacity={0.7}
-              style={styles.cryptoBackButton}
+              style={[styles.cryptoBackButton, { backgroundColor: colors.cardSecondary }]}
             >
-              <ArrowLeft size={20} color="#1A1A1A" />
+              <ArrowLeft size={20} color={colors.textPrimary} />
             </TouchableOpacity>
 
-            <Text style={styles.addRecoveryTitle}>Crypto Wallet</Text>
-            <Text style={styles.cryptoSubtitle}>
+            <Text style={[styles.addRecoveryTitle, { color: colors.textPrimary }]}>Crypto Wallet</Text>
+            <Text style={[styles.cryptoSubtitle, { color: colors.textPrimary }]}>
               Enter a wallet address{'\n'}in the field below
             </Text>
 
-            <View style={styles.cryptoInputRow}>
+            <View style={[styles.cryptoInputRow, { backgroundColor: colors.cardSecondary }]}>
               <TextInput
-                style={styles.cryptoInput}
+                style={[styles.cryptoInput, { color: colors.textPrimary }]}
                 value={newWalletAddress}
                 onChangeText={setNewWalletAddress}
                 placeholder="Enter public key"
-                placeholderTextColor="#C5C5C5"
+                placeholderTextColor={colors.placeholderColor}
                 editable={!addingKey}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
               <TouchableOpacity onPress={handlePasteAddress} activeOpacity={0.6} style={styles.cryptoPasteButton}>
-                <Text style={styles.cryptoPasteText}>Paste</Text>
+                <Text style={[styles.cryptoPasteText, { color: colors.textPrimary }]}>Paste</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.cryptoHintRow}>
-              <Info size={16} color="#B2B2B2" />
-              <Text style={styles.cryptoHintText}>
+              <Info size={16} color={colors.textTertiary} />
+              <Text style={[styles.cryptoHintText, { color: colors.textTertiary }]}>
                 Do not use addresses from centralized exchanges.{'\n'}This must be a self-custody wallet that you can sign with.
               </Text>
             </View>
 
             <TouchableOpacity
-              style={[styles.cryptoNextButton, (!newWalletAddress.trim() || addingKey) && styles.cryptoNextButtonDisabled]}
+              style={[styles.cryptoNextButton, { backgroundColor: colors.primaryButton }, (!newWalletAddress.trim() || addingKey) && styles.cryptoNextButtonDisabled]}
               activeOpacity={0.7}
               onPress={handleAddRecoverySubmit}
               disabled={!newWalletAddress.trim() || addingKey}
             >
               {addingKey ? (
                 <View style={styles.addRecoveryLoading}>
-                  <ActivityIndicator size="small" color="#fff" />
-                  <Text style={styles.cryptoNextText}>{addingStep || 'Processing...'}</Text>
+                  <ActivityIndicator size="small" color={colors.primaryButtonText} />
+                  <Text style={[styles.cryptoNextText, { color: colors.primaryButtonText }]}>{addingStep || 'Processing...'}</Text>
                 </View>
               ) : (
-                <Text style={styles.cryptoNextText}>Next</Text>
+                <Text style={[styles.cryptoNextText, { color: colors.primaryButtonText }]}>Next</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -813,46 +816,46 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
             <TouchableOpacity
               onPress={() => !sendingCode && setAddRecoveryStep('choose')}
               activeOpacity={0.7}
-              style={styles.cryptoBackButton}
+              style={[styles.cryptoBackButton, { backgroundColor: colors.cardSecondary }]}
             >
-              <ArrowLeft size={20} color="#1A1A1A" />
+              <ArrowLeft size={20} color={colors.textPrimary} />
             </TouchableOpacity>
 
-            <Text style={styles.addRecoveryTitle}>Email</Text>
-            <Text style={styles.cryptoSubtitle}>
+            <Text style={[styles.addRecoveryTitle, { color: colors.textPrimary }]}>Email</Text>
+            <Text style={[styles.cryptoSubtitle, { color: colors.textPrimary }]}>
               Enter email address{'\n'}in the field below
             </Text>
 
-            <View style={styles.cryptoInputRow}>
+            <View style={[styles.cryptoInputRow, { backgroundColor: colors.cardSecondary }]}>
               <TextInput
-                style={styles.cryptoInput}
+                style={[styles.cryptoInput, { color: colors.textPrimary }]}
                 value={recoveryEmail}
                 onChangeText={setRecoveryEmail}
                 placeholder="Email address"
-                placeholderTextColor="#C5C5C5"
+                placeholderTextColor={colors.placeholderColor}
                 editable={!sendingCode}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="email-address"
               />
               <TouchableOpacity onPress={handlePasteEmail} activeOpacity={0.6} style={styles.cryptoPasteButton}>
-                <Text style={styles.cryptoPasteText}>Paste</Text>
+                <Text style={[styles.cryptoPasteText, { color: colors.textPrimary }]}>Paste</Text>
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity
-              style={[styles.cryptoNextButton, (!recoveryEmail.trim().includes('@') || sendingCode) && styles.cryptoNextButtonDisabled]}
+              style={[styles.cryptoNextButton, { backgroundColor: colors.primaryButton }, (!recoveryEmail.trim().includes('@') || sendingCode) && styles.cryptoNextButtonDisabled]}
               activeOpacity={0.7}
               onPress={handleSendEmailCode}
               disabled={!recoveryEmail.trim().includes('@') || sendingCode}
             >
               {sendingCode ? (
                 <View style={styles.addRecoveryLoading}>
-                  <ActivityIndicator size="small" color="#fff" />
-                  <Text style={styles.cryptoNextText}>Sending...</Text>
+                  <ActivityIndicator size="small" color={colors.primaryButtonText} />
+                  <Text style={[styles.cryptoNextText, { color: colors.primaryButtonText }]}>Sending...</Text>
                 </View>
               ) : (
-                <Text style={styles.cryptoNextText}>Send code</Text>
+                <Text style={[styles.cryptoNextText, { color: colors.primaryButtonText }]}>Send code</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -861,23 +864,23 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
             <TouchableOpacity
               onPress={() => !addingKey && setAddRecoveryStep('email')}
               activeOpacity={0.7}
-              style={styles.cryptoBackButton}
+              style={[styles.cryptoBackButton, { backgroundColor: colors.cardSecondary }]}
             >
-              <ArrowLeft size={20} color="#1A1A1A" />
+              <ArrowLeft size={20} color={colors.textPrimary} />
             </TouchableOpacity>
 
-            <Text style={styles.addRecoveryTitle}>Verify Email</Text>
-            <Text style={styles.cryptoSubtitle}>
+            <Text style={[styles.addRecoveryTitle, { color: colors.textPrimary }]}>Verify Email</Text>
+            <Text style={[styles.cryptoSubtitle, { color: colors.textPrimary }]}>
               Enter the 6-digit code sent to{'\n'}{recoveryEmail.trim()}
             </Text>
 
-            <View style={styles.cryptoInputRow}>
+            <View style={[styles.cryptoInputRow, { backgroundColor: colors.cardSecondary }]}>
               <TextInput
-                style={styles.cryptoInput}
+                style={[styles.cryptoInput, { color: colors.textPrimary }]}
                 value={emailCode}
                 onChangeText={setEmailCode}
                 placeholder="000000"
-                placeholderTextColor="#C5C5C5"
+                placeholderTextColor={colors.placeholderColor}
                 editable={!addingKey}
                 keyboardType="number-pad"
                 maxLength={6}
@@ -885,18 +888,18 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
             </View>
 
             <TouchableOpacity
-              style={[styles.cryptoNextButton, (emailCode.length !== 6 || addingKey) && styles.cryptoNextButtonDisabled]}
+              style={[styles.cryptoNextButton, { backgroundColor: colors.primaryButton }, (emailCode.length !== 6 || addingKey) && styles.cryptoNextButtonDisabled]}
               activeOpacity={0.7}
               onPress={handleVerifyEmailCode}
               disabled={emailCode.length !== 6 || addingKey}
             >
               {addingKey ? (
                 <View style={styles.addRecoveryLoading}>
-                  <ActivityIndicator size="small" color="#fff" />
-                  <Text style={styles.cryptoNextText}>{addingStep || 'Processing...'}</Text>
+                  <ActivityIndicator size="small" color={colors.primaryButtonText} />
+                  <Text style={[styles.cryptoNextText, { color: colors.primaryButtonText }]}>{addingStep || 'Processing...'}</Text>
                 </View>
               ) : (
-                <Text style={styles.cryptoNextText}>Verify</Text>
+                <Text style={[styles.cryptoNextText, { color: colors.primaryButtonText }]}>Verify</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -909,7 +912,6 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8EAF1',
   },
   headerGradient: {
     paddingBottom: 24,
@@ -951,7 +953,6 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6B7B8D',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 10,
@@ -960,10 +961,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   keyCard: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -978,7 +977,6 @@ const styles = StyleSheet.create({
   keyCardLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1A1A1A',
   },
   menuButton: {
     padding: 4,
@@ -986,7 +984,6 @@ const styles = StyleSheet.create({
   keyCardAddress: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#B2B2B2',
     marginTop: 2,
   },
   recoverySectionHeader: {
@@ -1001,7 +998,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   countBadge: {
-    backgroundColor: '#E8EAF1',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -1009,27 +1005,22 @@ const styles = StyleSheet.create({
   countBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6B7B8D',
   },
   addPlusButton: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#1A1A1A',
     paddingHorizontal: 4,
   },
   addRecoveryEmptyCard: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#19C394',
     borderStyle: 'dashed',
   },
   recoveryDetail: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#B2B2B2',
   },
   recoverySuggestion: {
     flexDirection: 'row',
@@ -1054,26 +1045,21 @@ const styles = StyleSheet.create({
   recoverySuggestionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1A1A1A',
     marginBottom: 3,
   },
   recoverySuggestionDesc: {
     fontSize: 13,
-    color: '#9CA3AF',
     lineHeight: 18,
   },
   keysHint: {
     fontSize: 13,
-    color: '#9CA3AF',
     lineHeight: 18,
     marginTop: 14,
     paddingHorizontal: 2,
   },
   card: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -1092,42 +1078,34 @@ const styles = StyleSheet.create({
   memberLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1A1A1A',
     marginBottom: 2,
   },
   memberDomain: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#19C394',
     marginBottom: 1,
   },
   memberAddress: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#6B7B8D',
   },
   emptyText: {
     fontSize: 13,
-    color: '#6B7B8D',
     lineHeight: 18,
   },
   addButton: {
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
-    backgroundColor: '#F5FFF8',
     borderWidth: 1,
-    borderColor: '#19C394',
     borderStyle: 'dashed',
   },
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#19C394',
   },
   maxText: {
     fontSize: 12,
-    color: '#B2B2B2',
     textAlign: 'center',
   },
   // Menu bottom sheet
@@ -1144,7 +1122,6 @@ const styles = StyleSheet.create({
   menuItemText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1A1A1A',
   },
   // Info bottom sheet
   infoSheet: {
@@ -1162,7 +1139,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 14,
-    backgroundColor: '#1A1A1A',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
@@ -1170,7 +1146,6 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
     marginBottom: 20,
   },
   infoItems: {
@@ -1189,25 +1164,21 @@ const styles = StyleSheet.create({
   infoItemTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1A1A1A',
     marginBottom: 2,
   },
   infoItemDesc: {
     fontSize: 14,
-    color: '#9CA3AF',
     lineHeight: 20,
   },
   infoButton: {
     width: '100%',
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#F3F4F6',
     alignItems: 'center',
   },
   infoButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
   },
   // Backup key modal
   backupSheet: {
@@ -1216,17 +1187,14 @@ const styles = StyleSheet.create({
   backupTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1A1A1A',
     marginBottom: 8,
   },
   backupDesc: {
     fontSize: 14,
-    color: '#9CA3AF',
     lineHeight: 20,
     marginBottom: 20,
   },
   backupRevealBox: {
-    backgroundColor: '#F3F4F6',
     borderRadius: 14,
     padding: 20,
     alignItems: 'center',
@@ -1247,7 +1215,6 @@ const styles = StyleSheet.create({
   backupKeyText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#1A1A1A',
     lineHeight: 20,
     textAlign: 'center',
   },
@@ -1263,7 +1230,6 @@ const styles = StyleSheet.create({
   backupWarningText: {
     flex: 1,
     fontSize: 14,
-    color: '#9CA3AF',
     lineHeight: 20,
   },
   // Add Recovery Key modal
@@ -1274,7 +1240,6 @@ const styles = StyleSheet.create({
   addRecoveryTitle: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#1A1A1A',
   },
   addRecoveryInfo: {
     gap: 20,
@@ -1290,12 +1255,10 @@ const styles = StyleSheet.create({
   addRecoveryInfoTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1A1A1A',
     marginBottom: 4,
   },
   addRecoveryInfoDesc: {
     fontSize: 14,
-    color: '#9CA3AF',
     lineHeight: 20,
   },
   addRecoveryMethods: {
@@ -1305,7 +1268,6 @@ const styles = StyleSheet.create({
   addRecoveryMethodCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F7F7F8',
     borderRadius: 14,
     paddingVertical: 18,
     paddingHorizontal: 16,
@@ -1314,7 +1276,6 @@ const styles = StyleSheet.create({
   addRecoveryMethodLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
     flex: 1,
   },
   comingSoonBadge: {
@@ -1337,21 +1298,18 @@ const styles = StyleSheet.create({
   cryptoBackButton: {
     alignSelf: 'flex-start',
     padding: 6,
-    backgroundColor: '#F3F4F6',
     borderRadius: 20,
     marginBottom: 8,
   },
   cryptoSubtitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1A1A1A',
     lineHeight: 22,
     marginTop: -4,
   },
   cryptoInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F7F7F8',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 4,
@@ -1361,7 +1319,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '500',
-    color: '#1A1A1A',
     paddingVertical: 12,
   },
   cryptoPasteButton: {
@@ -1371,7 +1328,6 @@ const styles = StyleSheet.create({
   cryptoPasteText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1A1A1A',
   },
   cryptoHintRow: {
     flexDirection: 'row',
@@ -1382,11 +1338,9 @@ const styles = StyleSheet.create({
   cryptoHintText: {
     flex: 1,
     fontSize: 13,
-    color: '#B2B2B2',
     lineHeight: 18,
   },
   cryptoNextButton: {
-    backgroundColor: '#1A1A1A',
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
@@ -1396,7 +1350,6 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   cryptoNextText: {
-    color: '#fff',
     fontWeight: '700',
     fontSize: 16,
   },

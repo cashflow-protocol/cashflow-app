@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { logScreenView, logOnboardingNext, logOnboardingHaveInviteCode, logOnboardingJoinWaitlist, logOnboardingPageView } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -117,6 +118,7 @@ const PAGES: PageData[] = [
 ];
 
 export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: OnboardingScreenProps) {
+  const { colors } = useTheme();
   const flatListRef = useRef<FlatList>(null);
   const [currentPage, setCurrentPage] = useState(0);
 
@@ -145,8 +147,8 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
     return (
       <View style={[pageStyles.container, { width: SCREEN_WIDTH }]}>
         <View style={pageStyles.iconContainer}>{item.icon}</View>
-        <Text style={pageStyles.title}>{item.title}</Text>
-        <Text style={pageStyles.description}>{item.description}</Text>
+        <Text style={[pageStyles.title, { color: colors.primaryButtonText }]}>{item.title}</Text>
+        <Text style={[pageStyles.description, { color: colors.primaryButtonText + 'CC' }]}>{item.description}</Text>
       </View>
     );
   };
@@ -154,7 +156,7 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#0D4A82', '#175DA3', '#347AC0', '#5A9AD5']}
+        colors={['#0D4A82', colors.accentBlueDark, '#347AC0', '#5A9AD5']}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -180,37 +182,41 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
             {PAGES.map((_, i) => (
               <View
                 key={i}
-                style={[styles.dot, i === currentPage && styles.dotActive]}
+                style={[
+                  styles.dot,
+                  { backgroundColor: colors.primaryButtonText + '4D' },
+                  i === currentPage && [styles.dotActive, { backgroundColor: colors.primaryButtonText }],
+                ]}
               />
             ))}
           </View>
 
-          {/* Action buttons — changes based on page */}
+          {/* Action buttons -- changes based on page */}
           {isLastPage ? (
             <>
               <TouchableOpacity
-                style={styles.nextButton}
+                style={[styles.nextButton, { backgroundColor: colors.card }]}
                 onPress={() => { logOnboardingHaveInviteCode('carousel'); onHaveInviteCode(); }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.nextButtonText}>I have an invite code</Text>
+                <Text style={[styles.nextButtonText, { color: colors.accentBlueDark }]}>I have an invite code</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.secondaryButton}
+                style={[styles.secondaryButton, { borderColor: colors.primaryButtonText + '66' }]}
                 onPress={() => { logOnboardingJoinWaitlist(); onJoinWaitlist(); }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.secondaryButtonText}>Join the waitlist</Text>
+                <Text style={[styles.secondaryButtonText, { color: colors.primaryButtonText }]}>Join the waitlist</Text>
               </TouchableOpacity>
             </>
           ) : (
             <>
               <TouchableOpacity
-                style={styles.nextButton}
+                style={[styles.nextButton, { backgroundColor: colors.card }]}
                 onPress={handleNext}
                 activeOpacity={0.7}
               >
-                <Text style={styles.nextButtonText}>Next</Text>
+                <Text style={[styles.nextButtonText, { color: colors.accentBlueDark }]}>Next</Text>
               </TouchableOpacity>
               {/* Invisible spacer matching the second button height so content doesn't shift */}
               <View style={styles.buttonSpacer} />
@@ -243,14 +249,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
   dotActive: {
-    backgroundColor: '#fff',
     width: 24,
   },
   nextButton: {
-    backgroundColor: '#fff',
     borderRadius: 14,
     paddingVertical: 16,
     width: '100%',
@@ -259,7 +262,6 @@ const styles = StyleSheet.create({
   nextButtonText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#175DA3',
   },
   buttonSpacer: {
     // Matches the secondary button height: borderWidth(2) + paddingVertical(16) + text(~20) + paddingVertical(16) + borderWidth(2)
@@ -267,7 +269,6 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
     borderRadius: 14,
     paddingVertical: 16,
     width: '100%',
@@ -276,7 +277,6 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#fff',
   },
 });
 
@@ -293,13 +293,11 @@ const pageStyles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#fff',
     textAlign: 'center',
     marginBottom: 16,
   },
   description: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     lineHeight: 24,
   },

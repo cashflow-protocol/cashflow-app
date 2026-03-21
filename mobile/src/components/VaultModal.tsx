@@ -21,6 +21,7 @@ import { getCloudPublicKey } from '../services/keypairStorage';
 import { Buffer } from 'buffer';
 import bs58 from 'bs58';
 import { logVaultModalOpen, logVaultModeSwitch, logVaultMaxPress, logVaultSubmit, logVaultSuccess, logVaultError } from '../services/analyticsService';
+import { useTheme } from '../theme/ThemeContext';
 
 const PROTOCOL_LABELS: Record<EarnTokenType, string> = {
   jupiter: 'Jupiter',
@@ -77,6 +78,7 @@ export default function VaultModal({
   minDepositAmount,
   minWithdrawAmount,
 }: VaultModalProps) {
+  const { colors } = useTheme();
   const { wallet, connect, isConnecting } = useWallet();
   const walletAddress = wallet?.publicKey as string | undefined;
   const [mode, setMode] = useState<Mode>('deposit');
@@ -260,36 +262,36 @@ export default function VaultModal({
               {/* Vault header */}
               <View style={styles.vaultHeader}>
                 <View style={styles.iconStack}>
-                  <View style={styles.tokenIconContainer}>
+                  <View style={[styles.tokenIconContainer, { backgroundColor: colors.cardSecondary }]}>
                     <Image source={localIcon ?? { uri: logoUrl }} style={styles.tokenIcon} />
                   </View>
-                  <View style={styles.protocolBadge}>
+                  <View style={[styles.protocolBadge, { backgroundColor: colors.sheetBackground, borderColor: colors.border }]}>
                     <Image source={PROTOCOL_ICONS[type]} style={styles.protocolIcon} />
                   </View>
                 </View>
                 <View style={styles.vaultInfo}>
-                  <Text style={styles.vaultTitle} numberOfLines={1}>{vaultTitle || `${PROTOCOL_LABELS[type]} - ${symbol}`}</Text>
-                  <Text style={styles.vaultApy}>{apyPercent}% APY</Text>
+                  <Text style={[styles.vaultTitle, { color: colors.textPrimary }]} numberOfLines={1}>{vaultTitle || `${PROTOCOL_LABELS[type]} - ${symbol}`}</Text>
+                  <Text style={[styles.vaultApy, { color: colors.accentGreenDark }]}>{apyPercent}% APY</Text>
                 </View>
               </View>
 
               {/* Mode toggle */}
               <View style={styles.modeToggle}>
                 <TouchableOpacity
-                  style={[styles.modeButton, mode === 'deposit' && styles.modeButtonActive]}
+                  style={[styles.modeButton, mode === 'deposit' && { backgroundColor: colors.primaryButton }]}
                   onPress={() => { logVaultModeSwitch('deposit'); setMode('deposit'); setAmount(''); setResult(null); }}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.modeText, mode === 'deposit' && styles.modeTextActive]}>
+                  <Text style={[styles.modeText, { color: colors.textSecondary }, mode === 'deposit' && { color: colors.primaryButtonText }]}>
                     Deposit
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modeButton, mode === 'withdraw' && styles.modeButtonActive]}
+                  style={[styles.modeButton, mode === 'withdraw' && { backgroundColor: colors.primaryButton }]}
                   onPress={() => { logVaultModeSwitch('withdraw'); setMode('withdraw'); setAmount(''); setResult(null); }}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.modeText, mode === 'withdraw' && styles.modeTextActive]}>
+                  <Text style={[styles.modeText, { color: colors.textSecondary }, mode === 'withdraw' && { color: colors.primaryButtonText }]}>
                     Withdraw
                   </Text>
                 </TouchableOpacity>
@@ -297,57 +299,57 @@ export default function VaultModal({
 
               {/* Balance info - contextual per mode */}
               {mode === 'deposit' && (
-                <View style={styles.positionBar}>
-                  <Text style={styles.positionLabel}>{vaultData ? 'Vault balance' : 'Wallet balance'}</Text>
-                  <Text style={styles.positionAmount}>
+                <View style={[styles.positionBar, { backgroundColor: colors.infoBackground }]}>
+                  <Text style={[styles.positionLabel, { color: colors.textSecondary }]}>{vaultData ? 'Vault balance' : 'Wallet balance'}</Text>
+                  <Text style={[styles.positionAmount, { color: colors.accentBlueDark }]}>
                     {walletBalance !== null ? `${toUiAmount(walletBalance, decimals)} ${symbol}` : '—'}
                   </Text>
                 </View>
               )}
               {mode === 'withdraw' && hasPosition && (
-                <View style={styles.positionBar}>
-                  <Text style={styles.positionLabel}>Your deposit</Text>
-                  <Text style={styles.positionAmount}>
+                <View style={[styles.positionBar, { backgroundColor: colors.infoBackground }]}>
+                  <Text style={[styles.positionLabel, { color: colors.textSecondary }]}>Your deposit</Text>
+                  <Text style={[styles.positionAmount, { color: colors.accentBlueDark }]}>
                     {formatAmount(position!.balance.uiAmount)} {symbol}
                   </Text>
                 </View>
               )}
 
               {/* Amount input */}
-              <View style={styles.inputRow}>
+              <View style={[styles.inputRow, { backgroundColor: colors.inputBackground }]}>
                 <TextInput
-                  style={styles.amountInput}
+                  style={[styles.amountInput, { color: colors.textPrimary }]}
                   value={amount}
                   onChangeText={sanitizeAmount}
                   placeholder="0.00"
-                  placeholderTextColor="#B2B2B2"
+                  placeholderTextColor={colors.placeholderColor}
                   keyboardType="decimal-pad"
                   editable={!loading}
                 />
-                <Text style={styles.inputSymbol}>{symbol}</Text>
+                <Text style={[styles.inputSymbol, { color: colors.textSecondary }]}>{symbol}</Text>
                 {((mode === 'withdraw' && hasPosition) || (mode === 'deposit' && walletBalance !== null)) && (
-                  <TouchableOpacity style={styles.maxButton} onPress={handleMaxPress}>
-                    <Text style={styles.maxText}>MAX</Text>
+                  <TouchableOpacity style={[styles.maxButton, { backgroundColor: colors.primaryButton }]} onPress={handleMaxPress}>
+                    <Text style={[styles.maxText, { color: colors.primaryButtonText }]}>MAX</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
               {/* Validation error */}
               {exceedsBalance && (
-                <Text style={styles.validationError}>
+                <Text style={[styles.validationError, { color: colors.errorText }]}>
                   {mode === 'withdraw' ? 'Exceeds your deposit balance' : 'Exceeds your wallet balance'}
                 </Text>
               )}
               {belowMinimum && (
-                <Text style={styles.validationError}>
+                <Text style={[styles.validationError, { color: colors.errorText }]}>
                   Minimum {mode} is {toUiAmount(minAmountRaw, decimals)} {symbol}
                 </Text>
               )}
 
               {/* Result banner */}
               {result && (
-                <View style={[styles.resultBanner, result.success ? styles.resultSuccess : styles.resultError]}>
-                  <Text style={[styles.resultText, result.success ? styles.resultTextSuccess : styles.resultTextError]}>
+                <View style={[styles.resultBanner, result.success ? { backgroundColor: colors.successBackground } : { backgroundColor: colors.errorBackground }]}>
+                  <Text style={[styles.resultText, result.success ? { color: colors.successText } : { color: colors.errorText }]}>
                     {result.message}
                   </Text>
                 </View>
@@ -355,15 +357,15 @@ export default function VaultModal({
 
               {/* Submit button */}
               <TouchableOpacity
-                style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
+                style={[styles.submitButton, { backgroundColor: colors.primaryButton }, !canSubmit && { backgroundColor: colors.disabledButton }]}
                 onPress={handleSubmit}
                 activeOpacity={0.7}
                 disabled={!canSubmit}
               >
                 {loading ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color={colors.primaryButtonText} />
                 ) : (
-                  <Text style={styles.submitText}>
+                  <Text style={[styles.submitText, { color: colors.primaryButtonText }]}>
                     {mode === 'deposit' ? 'Deposit' : 'Withdraw'}
                   </Text>
                 )}
@@ -386,7 +388,6 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F4F4F4',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -403,11 +404,9 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#E8EAF1',
     overflow: 'hidden',
   },
   protocolIcon: {
@@ -422,30 +421,25 @@ const styles = StyleSheet.create({
   vaultTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#000',
   },
   vaultApy: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#138001',
   },
   positionBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#EEF4FB',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   positionLabel: {
     fontSize: 13,
-    color: '#6B7B8D',
   },
   positionAmount: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#175DA3',
   },
   modeToggle: {
     flexDirection: 'row',
@@ -458,21 +452,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.06)',
     alignItems: 'center',
   },
-  modeButtonActive: {
-    backgroundColor: '#000000',
-  },
   modeText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#6B7B8D',
-  },
-  modeTextActive: {
-    color: '#fff',
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F4F4F4',
     borderRadius: 12,
     paddingHorizontal: 16,
     gap: 8,
@@ -481,16 +467,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 18,
     fontWeight: '600',
-    color: '#000',
     paddingVertical: 14,
   },
   inputSymbol: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#6B7B8D',
   },
   maxButton: {
-    backgroundColor: '#000000',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -498,11 +481,9 @@ const styles = StyleSheet.create({
   maxText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#fff',
   },
   validationError: {
     fontSize: 13,
-    color: '#F95357',
     marginTop: -8,
   },
   resultBanner: {
@@ -510,34 +491,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  resultSuccess: {
-    backgroundColor: '#E8F5E9',
-  },
-  resultError: {
-    backgroundColor: '#FFEBEE',
-  },
   resultText: {
     fontSize: 14,
     fontWeight: '500',
   },
-  resultTextSuccess: {
-    color: '#2E7D32',
-  },
-  resultTextError: {
-    color: '#F95357',
-  },
   submitButton: {
-    backgroundColor: '#000000',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
   },
-  submitButtonDisabled: {
-    backgroundColor: '#B2B2B2',
-  },
   submitText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#fff',
   },
 });
