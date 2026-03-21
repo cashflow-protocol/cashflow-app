@@ -299,7 +299,6 @@ function App() {
             }}
             onBack={() => setOnboardingStep('carousel')}
             onHaveInviteCode={() => { setInviteCodeFrom('waitlist'); setOnboardingStep('invite-code'); }}
-            onRecovery={() => setOnboardingStep('vault-recovery')}
           />
         );
         break;
