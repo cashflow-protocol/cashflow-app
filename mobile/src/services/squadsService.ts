@@ -387,6 +387,12 @@ export async function createMultisig(
   // Wait for TX 1 to confirm before referencing the multisig account
   await sleep(2000);
 
+  // Record vault creation fee in backend (fire-and-forget)
+  if (VAULT_CREATION_FEE > 0) {
+    apiService.recordVaultCreationFee(walletAddress, VAULT_CREATION_FEE.toString(), signature)
+      .catch(err => console.warn('[createMultisig] failed to record vault creation fee:', err));
+  }
+
   // TODO: TX 2 for SpendingLimit setup is disabled for now.
   // Cloud wallet will be funded manually until spending limits are tested.
   // See plan file for the full SpendingLimit implementation when ready.

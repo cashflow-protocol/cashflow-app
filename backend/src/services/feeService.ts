@@ -1,4 +1,4 @@
-import { UserCostBasisModel, FeeTransactionModel, FeeTransactionStatus, TransactionModel, TransactionAction } from '../models';
+import { UserCostBasisModel, FeeTransactionModel, FeeTransactionStatus, FeeType, TransactionModel, TransactionAction } from '../models';
 import { TransferManager } from '../managers/TransferManager';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import type { SerializedInstruction } from '../types';
@@ -86,7 +86,26 @@ export async function createFeeRecord(params: {
 }): Promise<void> {
   await FeeTransactionModel.create({
     ...params,
+    feeType: FeeType.PROFIT,
     status: FeeTransactionStatus.PENDING,
+  });
+}
+
+/**
+ * Record a vault creation fee payment.
+ */
+export async function createVaultCreationFeeRecord(params: {
+  walletAddress: string;
+  feeAmount: string;
+  signature: string;
+}): Promise<void> {
+  await FeeTransactionModel.create({
+    walletAddress: params.walletAddress,
+    mint: 'So11111111111111111111111111111111111111112', // native SOL
+    feeType: FeeType.VAULT_CREATION,
+    feeAmount: params.feeAmount,
+    signature: params.signature,
+    status: FeeTransactionStatus.CONFIRMED,
   });
 }
 

@@ -10,4 +10,4 @@ export { WaitlistTask, WaitlistTaskModel } from './WaitlistTask';
 export { Notification, NotificationModel, NotificationType } from './Notification';
 export { DeviceToken, DeviceTokenModel } from './DeviceToken';
 export { UserCostBasis, UserCostBasisModel } from './UserCostBasis';
-export { FeeTransaction, FeeTransactionModel, FeeTransactionStatus } from './FeeTransaction';
+export { FeeTransaction, FeeTransactionModel, FeeTransactionStatus, FeeType } from './FeeTransaction';

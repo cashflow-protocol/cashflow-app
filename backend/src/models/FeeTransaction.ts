@@ -6,6 +6,11 @@ export enum FeeTransactionStatus {
   FAILED = 'failed',
 }
 
+export enum FeeType {
+  PROFIT = 'profit',
+  VAULT_CREATION = 'vault_creation',
+}
+
 @modelOptions({
   schemaOptions: {
     timestamps: true,
@@ -21,21 +26,28 @@ export class FeeTransaction {
   @prop({ required: true })
   public mint!: string;
 
-  /** Reference to the withdrawal Transaction._id */
-  @prop({ required: true })
-  public withdrawTransactionId!: string;
+  @prop({ required: true, enum: FeeType, default: FeeType.PROFIT })
+  public feeType!: FeeType;
 
-  /** Raw withdrawal amount (bigint as string) */
-  @prop({ required: true })
-  public withdrawAmount!: string;
+  /** Reference to the withdrawal Transaction._id (profit fees only) */
+  @prop()
+  public withdrawTransactionId?: string;
 
-  /** Computed marginal profit on this withdrawal (bigint as string) */
-  @prop({ required: true })
-  public profitAmount!: string;
+  /** Raw withdrawal amount (bigint as string, profit fees only) */
+  @prop()
+  public withdrawAmount?: string;
 
-  /** Fee charged: 10% of profit (bigint as string) */
+  /** Computed marginal profit on this withdrawal (bigint as string, profit fees only) */
+  @prop()
+  public profitAmount?: string;
+
+  /** Fee charged (bigint as string) */
   @prop({ required: true })
   public feeAmount!: string;
+
+  /** On-chain signature (vault creation fees) */
+  @prop()
+  public signature?: string;
 
   @prop({ required: true, enum: FeeTransactionStatus, default: FeeTransactionStatus.PENDING })
   public status!: FeeTransactionStatus;
