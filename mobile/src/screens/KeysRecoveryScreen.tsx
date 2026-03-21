@@ -713,7 +713,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       >
         {addRecoveryStep === 'choose' ? (
           <View style={styles.addRecoverySheet}>
-            <Text style={[styles.addRecoveryTitle, { color: colors.textPrimary }]}>Add{'\n'}Recovery Key</Text>
+            <Text style={[styles.addRecoveryTitle, { color: colors.textPrimary }]}>Add Recovery Key</Text>
 
             <View style={styles.addRecoveryInfo}>
               <View style={styles.addRecoveryInfoItem}>
