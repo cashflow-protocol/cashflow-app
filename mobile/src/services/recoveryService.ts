@@ -290,14 +290,8 @@ export async function buildAndSubmitRecoveryProposal(
     }
   }
 
-  // Step 6: Send TX1 on-chain (creates config tx + proposal + MWA/cloud approvals)
+  // Step 6: Submit to backend — it will broadcast TX1 on-chain and store the proposal
   onProgress?.('Sending proposal on-chain...');
-
-  const tx1Bytes = tx1.serialize();
-  const sendResult = await connection.sendRawTransaction(tx1Bytes, { skipPreflight: false });
-  await connection.confirmTransaction(sendResult, 'confirmed');
-
-  onProgress?.('Submitting recovery proposal...');
 
   const tx1Base64 = Buffer.from(tx1Bytes).toString('base64');
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');

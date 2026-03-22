@@ -144,8 +144,8 @@ router.post('/find-vault-by-address', async (req: Request, res: Response) => {
 
 /**
  * POST /create-proposal
- * Store a recovery proposal with pre-built transactions.
- * The mobile app builds TX1/TX2 and sends them here for multi-party signing.
+ * Broadcast TX1 on-chain, then store the recovery proposal.
+ * The mobile app builds TX1/TX2, signs them, and sends here for broadcasting + storage.
  */
 router.post('/create-proposal', async (req: Request, res: Response) => {
   try {
@@ -168,6 +168,20 @@ router.post('/create-proposal', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'Missing required fields' });
       return;
     }
+
+    // Broadcast TX1 on-chain (creates config tx + proposal + initial approvals)
+    const { Connection } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl, 'confirmed');
+
+    const tx1Bytes = Buffer.from(tx1Base64, 'base64');
+    const tx1Sig = await conn.sendRawTransaction(tx1Bytes, {
+      skipPreflight: false,
+      maxRetries: 5,
+    });
+    console.log(`Recovery TX1 sent: ${tx1Sig}`);
+    await conn.confirmTransaction(tx1Sig, 'confirmed');
+    console.log(`Recovery TX1 confirmed: ${tx1Sig}`);
 
     const proposal = await RecoveryProposalModel.create({
       multisigAddress,
