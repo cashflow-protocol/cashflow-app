@@ -1,0 +1,258 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'react-router';
+import { useWalletConnectors, useConnectWallet, useWallet, useTransactionSigner } from '@solana/connector/react';
+import { VersionedTransaction, PublicKey } from '@solana/web3.js';
+import '../styles/recovery.css';
+
+const API_BASE = window.location.hostname.includes('localhost')
+  ? 'http://localhost:3000'
+  : window.location.hostname.includes('dev.')
+    ? 'https://api-dev.cashflow.fun'
+    : 'https://api.cashflow.fun';
+
+interface Signer {
+  address: string;
+  type: string;
+  label?: string;
+  email?: string;
+  signed: boolean;
+}
+
+interface Proposal {
+  proposalId: string;
+  multisigAddress: string;
+  vaultAddress: string;
+  threshold: number;
+  status: string;
+  actions: Array<{ memberAddress: string; permissions: string }>;
+  signaturesCollected: number;
+  tx1Base64: string;
+  requiredSigners: Signer[];
+}
+
+function truncate(addr: string) {
+  return addr ? addr.slice(0, 4) + '...' + addr.slice(-4) : '';
+}
+
+function maskEmail(email: string) {
+  if (!email) return '';
+  if (email.length <= 12) return email.slice(0, 2) + '...' + email.slice(-4);
+  return email.slice(0, 2) + '...' + email.slice(-10);
+}
+
+export default function RecoveryPage() {
+  const { id: proposalId } = useParams<{ id: string }>();
+  const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [signing, setSigning] = useState(false);
+  const [signed, setSigned] = useState(false);
+  const [error, setError] = useState('');
+  const [showWalletPicker, setShowWalletPicker] = useState(false);
+
+  // @solana/connector hooks
+  const wallets = useWalletConnectors();
+  const { connect } = useConnectWallet();
+  const { account: connectedAddress } = useWallet();
+  const { signer, ready: signerReady } = useTransactionSigner();
+
+  const loadProposal = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}`);
+      if (!res.ok) throw new Error('Not found');
+      const json = await res.json();
+      setProposal(json.data);
+      setLoading(false);
+    } catch {
+      setNotFound(true);
+      setLoading(false);
+    }
+  }, [proposalId]);
+
+  useEffect(() => { loadProposal(); }, [loadProposal]);
+
+  // After wallet connects, validate and hide picker
+  useEffect(() => {
+    if (!connectedAddress || !proposal) return;
+    setShowWalletPicker(false);
+
+    const addr = connectedAddress.toString();
+    const signer = proposal.requiredSigners.find(s => s.address === addr);
+    if (!signer) {
+      setError(`Wallet ${truncate(addr)} is not a required signer for this proposal.`);
+    } else if (signer.signed) {
+      setError('This wallet has already signed this proposal.');
+    }
+  }, [connectedAddress, proposal]);
+
+  const handleConnect = (walletId: string) => {
+    setError('');
+    connect(walletId as any);
+  };
+
+  const handleSign = async () => {
+    if (!connectedAddress || !proposal || !signer) return;
+    const addr = connectedAddress.toString();
+    setSigning(true);
+    setError('');
+
+    try {
+      // Deserialize the transaction
+      const txBytes = Uint8Array.from(atob(proposal.tx1Base64), c => c.charCodeAt(0));
+      const tx = VersionedTransaction.deserialize(txBytes);
+
+      // Sign via @solana/connector's TransactionSigner
+      const signedTx = await signer.signTransaction(tx) as VersionedTransaction;
+
+      // Extract our signature by index
+      const walletPubkey = new PublicKey(addr);
+      const walletIndex = tx.message.staticAccountKeys.findIndex(
+        (k: PublicKey) => k.equals(walletPubkey),
+      );
+      if (walletIndex === -1) throw new Error('Wallet not found in transaction signers');
+
+      const sigBytes = signedTx.signatures[walletIndex];
+      const sigBase64 = btoa(String.fromCharCode(...sigBytes));
+
+      // Submit to backend
+      const submitRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: addr, signature: sigBase64 }),
+      });
+
+      if (!submitRes.ok) {
+        const err = await submitRes.json();
+        throw new Error(err.error || 'Failed to submit signature');
+      }
+
+      setSigned(true);
+      loadProposal();
+    } catch (err: any) {
+      setError('Signing failed: ' + (err.message || err));
+    } finally {
+      setSigning(false);
+    }
+  };
+
+  const connectedAddr = connectedAddress?.toString();
+  const isRequiredSigner = proposal?.requiredSigners.some(s => s.address === connectedAddr);
+  const alreadySigned = proposal?.requiredSigners.find(s => s.address === connectedAddr)?.signed;
+  const canSign = connectedAddr && isRequiredSigner && !alreadySigned && !signed && signerReady;
+
+  if (loading) {
+    return (
+      <div className="recovery-page">
+        <div className="container">
+          <div className="logo">Cashflow</div>
+          <div className="subtitle">Vault Recovery - External Wallet Signing</div>
+          <div className="status">Loading proposal...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <div className="recovery-page">
+        <div className="container">
+          <div className="logo">Cashflow</div>
+          <div className="subtitle">Vault Recovery - External Wallet Signing</div>
+          <div className="status error">Proposal not found or has expired.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="recovery-page">
+      <div className="container">
+        <div className="logo">Cashflow</div>
+        <div className="subtitle">Vault Recovery - External Wallet Signing</div>
+
+        <div className="info-card">
+          <div className="info-row">
+            <span className="info-label">Vault</span>
+            <span className="info-value">{truncate(proposal!.vaultAddress)}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">Threshold</span>
+            <span className="info-value">{proposal!.signaturesCollected}/{proposal!.threshold} signatures</span>
+          </div>
+        </div>
+
+        <h3 className="section-title">Actions</h3>
+        {(proposal!.actions || []).map((a, i) => (
+          <div key={i} className="action-card">
+            Add member: {truncate(a.memberAddress)} ({a.permissions})
+          </div>
+        ))}
+
+        <h3 className="section-title" style={{ marginTop: 20 }}>Signers</h3>
+        <div className="signer-list">
+          {proposal!.requiredSigners.map((s) => (
+            <div key={s.address || s.type} className="signer-item">
+              <div>
+                <div className="signer-addr">{truncate(s.address)}</div>
+                <div className="signer-type">
+                  {s.type || ''}{s.email ? ' - ' + maskEmail(s.email) : s.label ? ' - ' + s.label : ''}
+                </div>
+              </div>
+              {s.signed ? (
+                <span className="badge badge-signed">Signed</span>
+              ) : connectedAddr && s.address === connectedAddr ? (
+                <span className="badge badge-you">You</span>
+              ) : (
+                <span className="badge badge-pending">Pending</span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Not connected — show connect button or wallet list */}
+        {!connectedAddr && !showWalletPicker && (
+          <button className="btn btn-primary" onClick={() => setShowWalletPicker(true)}>
+            Connect Wallet
+          </button>
+        )}
+
+        {!connectedAddr && showWalletPicker && (
+          <div className="wallet-list">
+            {wallets.length === 0 ? (
+              <div className="wallet-empty">
+                No Solana wallets detected.<br /><br />
+                Install <a href="https://phantom.app" target="_blank" rel="noopener">Phantom</a>,{' '}
+                <a href="https://solflare.com" target="_blank" rel="noopener">Solflare</a>, or any
+                Solana wallet extension.
+              </div>
+            ) : (
+              wallets.map((w) => (
+                <button
+                  key={w.id}
+                  className="wallet-item"
+                  onClick={() => handleConnect(w.id)}
+                >
+                  {w.icon && <img src={w.icon} alt={w.name} />}
+                  <span>{w.name}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Connected — show sign button */}
+        {canSign && (
+          <button className="btn btn-primary" onClick={handleSign} disabled={signing}>
+            {signing ? 'Signing...' : 'Sign Recovery Proposal'}
+          </button>
+        )}
+
+        {signed && (
+          <div className="status success">Signed successfully! You can close this page.</div>
+        )}
+
+        {error && <div className="status error">{error}</div>}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,138 @@
+.recovery-page {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0f0b1a;
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 40px 20px;
+}
+.recovery-page .container {
+  max-width: 480px;
+  width: 100%;
+  background: #1a1528;
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+.recovery-page .logo {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  background: linear-gradient(135deg, #7c3aed, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.recovery-page .subtitle {
+  color: rgba(255,255,255,0.5);
+  font-size: 14px;
+  margin-bottom: 32px;
+}
+.recovery-page .info-card {
+  background: rgba(255,255,255,0.06);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+.recovery-page .info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+.recovery-page .info-label { color: rgba(255,255,255,0.5); font-size: 14px; }
+.recovery-page .info-value { font-weight: 600; font-size: 14px; font-family: monospace; }
+.recovery-page .action-card {
+  background: rgba(25,195,148,0.1);
+  border: 1px solid rgba(25,195,148,0.3);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.recovery-page .btn {
+  width: 100%;
+  height: 52px;
+  border: none;
+  border-radius: 26px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 24px;
+  transition: opacity 0.2s;
+}
+.recovery-page .btn:hover { opacity: 0.85; }
+.recovery-page .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.recovery-page .btn-primary {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #fff;
+}
+.recovery-page .status {
+  text-align: center;
+  padding: 16px;
+  font-size: 15px;
+  color: rgba(255,255,255,0.5);
+}
+.recovery-page .status.error { color: #ef4444; }
+.recovery-page .status.success { color: #19C394; font-weight: 600; }
+.recovery-page .signer-list { margin-bottom: 24px; }
+.recovery-page .signer-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.recovery-page .signer-item:last-child { border-bottom: none; }
+.recovery-page .signer-addr { font-family: monospace; font-size: 13px; }
+.recovery-page .signer-type { font-size: 12px; color: rgba(255,255,255,0.4); }
+.recovery-page .badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 600;
+}
+.recovery-page .badge-signed { background: rgba(25,195,148,0.15); color: #19C394; }
+.recovery-page .badge-pending { background: rgba(255,200,50,0.12); color: #f5a623; }
+.recovery-page .badge-you { background: rgba(124,58,237,0.15); color: #a78bfa; }
+.recovery-page .section-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+
+/* Wallet picker */
+.recovery-page .wallet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+}
+.recovery-page .wallet-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 14px;
+  border: none;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s;
+}
+.recovery-page .wallet-item:hover { background: rgba(255,255,255,0.1); }
+.recovery-page .wallet-item img {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+.recovery-page .wallet-empty {
+  text-align: center;
+  color: rgba(255,255,255,0.4);
+  font-size: 14px;
+  padding: 24px 0;
+}
+.recovery-page .wallet-empty a {
+  color: #a78bfa;
+  text-decoration: none;
+}

@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/recovery/:id", "destination": "/recovery/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

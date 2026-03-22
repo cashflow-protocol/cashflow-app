@@ -1,0 +1,22 @@
+{
+  "name": "cashflow-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@solana/connector": "^0.2.4",
+    "@solana/web3.js": "^1.98.4",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router": "^7.13.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.1"
+  }
+}
