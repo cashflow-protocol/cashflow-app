@@ -35,6 +35,7 @@ interface MultisigResult {
 }
 
 function truncateAddress(addr: string): string {
+  if (!addr) return '';
   if (addr.length <= 10) return addr;
   return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
 }
@@ -194,6 +195,14 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
                 <Text style={styles.vaultCardSub}>
                   {item.threshold} of {item.memberCount} multisig
                 </Text>
+                <View style={styles.vaultCardMembers}>
+                  {item.members.map((m) => (
+                    <Text key={m.address} style={styles.vaultCardMember}>
+                      {truncateAddress(m.address)}
+                      {m.address === walletAddress ? ' (you)' : ''}
+                    </Text>
+                  ))}
+                </View>
               </View>
               <ChevronRight size={20} color="rgba(255,255,255,0.5)" />
             </View>
@@ -410,6 +419,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.6)',
     marginTop: 4,
+  },
+  vaultCardMembers: {
+    marginTop: 8,
+    gap: 2,
+  },
+  vaultCardMember: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.45)',
   },
   detailCard: {
     borderRadius: 16,

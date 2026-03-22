@@ -130,6 +130,9 @@ class WalletService {
         const result = await wallet.signTransactions({
           payloads: base64Payloads,
         });
+        if (!result?.signed_payloads?.length) {
+          throw new Error('MWA returned no signed payloads');
+        }
         console.log('[MWA] signTransactions done, payloads:', result.signed_payloads.length);
         return result.signed_payloads.map((payload: string) =>
           new Uint8Array(Buffer.from(payload, 'base64')),

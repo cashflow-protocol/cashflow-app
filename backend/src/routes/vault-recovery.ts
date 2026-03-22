@@ -165,7 +165,10 @@ router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
         actions: proposal.actions,
         signaturesCollected: proposal.collectedSignatures.length,
         requiredSigners: proposal.requiredSigners.map(s => ({
-          ...s,
+          address: s.address,
+          type: s.type,
+          label: s.label,
+          email: s.email,
           signed: signedAddresses.has(s.address),
         })),
       },

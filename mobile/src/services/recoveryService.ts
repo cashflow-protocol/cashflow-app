@@ -224,6 +224,9 @@ export async function buildAndSubmitRecoveryProposal(
   // Sign TX1 and TX2 with MWA wallet
   const serialized = [tx1, tx2].map(tx => new Uint8Array(tx.serialize()));
   const signedBytes = await walletService.signTransactions(serialized);
+  if (!signedBytes || signedBytes.length < 2) {
+    throw new Error('Wallet signing failed — no signed transactions returned');
+  }
 
   // Extract MWA signatures and apply to both transactions
   for (let i = 0; i < 2; i++) {
