@@ -135,9 +135,8 @@ export default function RecoveryPage() {
       const wallet = connectorClient.getConnector(connectorId);
       if (!wallet) throw new Error('Wallet not found');
 
-      // Try signAndSendTransaction first, fall back to signTransaction
-      const signAndSendFeature = wallet.features['solana:signAndSendTransaction'] as any;
       const signFeature = wallet.features['solana:signTransaction'] as any;
+      if (!signFeature) throw new Error('Wallet does not support transaction signing');
 
       const account = wallet.accounts.find(a => {
         try {
@@ -149,34 +148,24 @@ export default function RecoveryPage() {
 
       const txBytes = Uint8Array.from(atob(txBase64), c => c.charCodeAt(0));
 
-      if (signAndSendFeature) {
-        // Sign and send in one step
-        await signAndSendFeature.signAndSendTransaction({
-          transaction: txBytes,
-          account,
-          chain: 'solana:mainnet',
-        });
-      } else if (signFeature) {
-        // Sign only, then we need to send it
-        const [{ signedTransaction }] = await signFeature.signTransaction({
-          transaction: txBytes,
-          account,
-          chain: 'solana:mainnet',
-        });
-        // Send the signed transaction via RPC
-        const sendRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/send-approve-tx`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            signedTransaction: btoa(String.fromCharCode(...new Uint8Array(signedTransaction))),
-          }),
-        });
-        if (!sendRes.ok) {
-          const err = await sendRes.json();
-          throw new Error(err.error || 'Failed to send transaction');
-        }
-      } else {
-        throw new Error('Wallet does not support transaction signing');
+      // Sign only — we send via our own RPC to avoid wallet relay issues
+      const [{ signedTransaction }] = await signFeature.signTransaction({
+        transaction: txBytes,
+        account,
+        chain: 'solana:mainnet',
+      });
+
+      // Send via backend
+      const sendRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/send-approve-tx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signedTransaction: btoa(String.fromCharCode(...new Uint8Array(signedTransaction))),
+        }),
+      });
+      if (!sendRes.ok) {
+        const err = await sendRes.json();
+        throw new Error(err.error || 'Failed to send transaction');
       }
 
       // 3. Mark as signed and refresh
