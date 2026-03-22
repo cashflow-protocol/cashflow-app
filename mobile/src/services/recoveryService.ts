@@ -307,12 +307,9 @@ export async function buildAndSubmitRecoveryProposal(
   });
 
   // Build external signing URL
-  const baseUrl = SOLANA_CONFIG.rpcEndpoint.includes('devnet')
-    ? 'https://dev-api.cashflow.fun'
-    : 'https://api.cashflow.fun';
   const hasExternalSigners = requiredSigners.some(s => s.type === 'external');
   const externalSigningUrl = hasExternalSigners
-    ? `${baseUrl}/vault-recovery/v1/sign/${result.proposalId}`
+    ? `https://cashflow.fun/recovery/${result.proposalId}`
     : null;
 
   return {

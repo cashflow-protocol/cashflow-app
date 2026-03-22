@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { RecoveryProposalModel, RecoveryProposalStatus } from '../models/RecoveryProposal';
 import { signTransactionWithPrivy } from '../services/privyService';
 import { JitoManager } from '../managers';
-import path from 'path';
+
 
 const router = Router();
 const jitoManager = new JitoManager();
@@ -432,10 +432,10 @@ router.post('/proposal/:proposalId/send-bundle', async (req: Request, res: Respo
 
 /**
  * GET /sign/:proposalId
- * Serve the external wallet signing web page.
+ * Redirect to the website recovery page.
  */
-router.get('/sign/:proposalId', async (_req: Request, res: Response) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'recovery-sign.html'));
+router.get('/sign/:proposalId', async (req: Request, res: Response) => {
+  res.redirect(`https://cashflow.fun/recovery/${req.params.proposalId}`);
 });
 
 export default router;
