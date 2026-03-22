@@ -230,6 +230,7 @@ router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
         status: proposal.status,
         actions: proposal.actions,
         signaturesCollected: proposal.collectedSignatures.length,
+        tx1Base64: proposal.tx1Base64,
         requiredSigners: proposal.requiredSigners.map(s => ({
           address: s.address,
           type: s.type,

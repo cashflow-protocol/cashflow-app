@@ -283,19 +283,8 @@
       btn.textContent = 'Signing...';
 
       try {
-        const fullRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/assembled-tx`);
-        let tx1Base64;
-        if (fullRes.ok) {
-          const fullData = (await fullRes.json()).data;
-          tx1Base64 = fullData.tx1Base64;
-        } else {
-          showError('Cannot sign — threshold not met yet. Try again when more signers have signed.');
-          btn.disabled = false;
-          btn.textContent = 'Sign Recovery Proposal';
-          return;
-        }
-
-        const txBytes = Uint8Array.from(atob(tx1Base64), c => c.charCodeAt(0));
+        // Use TX1 from the proposal directly — no need for threshold to be met
+        const txBytes = Uint8Array.from(atob(proposal.tx1Base64), c => c.charCodeAt(0));
         const tx = solanaWeb3.VersionedTransaction.deserialize(txBytes);
 
         const signedTx = await provider.signTransaction(tx);
