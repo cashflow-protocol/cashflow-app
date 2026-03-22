@@ -369,8 +369,9 @@ router.post('/proposal/:proposalId/sign-privy', async (req: Request, res: Respon
       },
     });
   } catch (error: any) {
-    console.error('Error signing with Privy:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to sign with Privy' });
+    const privyError = error?.response?.data || error?.message || 'Failed to sign with Privy';
+    console.error('Error signing with Privy:', JSON.stringify(privyError, null, 2));
+    res.status(500).json({ success: false, error: typeof privyError === 'string' ? privyError : JSON.stringify(privyError) });
   }
 });
 

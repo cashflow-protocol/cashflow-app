@@ -121,17 +121,23 @@ export async function signTransactionWithPrivy(
   const walletAddress = solanaWallets[0].address;
 
   // Sign transaction via Privy wallet RPC
-  const signRes = await axios.post(
-    `${PRIVY_BASE_URL}/wallets/${walletId}/rpc`,
-    {
-      method: 'signTransaction',
-      params: {
-        transaction: transactionBase64,
-        encoding: 'base64',
+  let signRes;
+  try {
+    signRes = await axios.post(
+      `${PRIVY_BASE_URL}/wallets/${walletId}/rpc`,
+      {
+        method: 'signTransaction',
+        params: {
+          transaction: transactionBase64,
+          encoding: 'base64',
+        },
       },
-    },
-    { headers: { ...headers, 'privy-authorization-signature': userId } },
-  );
+      { headers: { ...headers, 'privy-authorization-signature': userId } },
+    );
+  } catch (err: any) {
+    const detail = err?.response?.data ? JSON.stringify(err.response.data) : err.message;
+    throw new Error(`Privy signing failed: ${detail}`);
+  }
 
   if (!signRes.data?.data?.signature) {
     throw new Error('Privy signing failed — no signature returned');
