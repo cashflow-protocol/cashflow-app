@@ -96,6 +96,19 @@
 .recovery-page .badge-pending { background: rgba(255,200,50,0.12); color: #f5a623; }
 .recovery-page .badge-you { background: rgba(124,58,237,0.15); color: #a78bfa; }
 .recovery-page .section-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+.recovery-page .btn-disconnect {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: center;
+}
+.recovery-page .btn-disconnect:hover { color: rgba(255,255,255,0.6); }
 
 /* Wallet picker modal */
 .recovery-page .wallet-overlay {

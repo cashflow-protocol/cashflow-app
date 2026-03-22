@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router';
-import { useWalletConnectors, useConnectWallet, useWallet, useTransactionSigner } from '@solana/connector/react';
+import { useWalletConnectors, useConnectWallet, useDisconnectWallet, useWallet, useTransactionSigner } from '@solana/connector/react';
 import { VersionedTransaction, PublicKey } from '@solana/web3.js';
 import '../styles/recovery.css';
 
@@ -53,6 +53,7 @@ export default function RecoveryPage() {
   // @solana/connector hooks
   const wallets = useWalletConnectors();
   const { connect } = useConnectWallet();
+  const { disconnect } = useDisconnectWallet();
   const { account: connectedAddress } = useWallet();
   const { signer, ready: signerReady } = useTransactionSigner();
 
@@ -68,6 +69,9 @@ export default function RecoveryPage() {
       setLoading(false);
     }
   }, [proposalId]);
+
+  // Disconnect any previously remembered wallet on mount
+  useEffect(() => { disconnect(); }, []);
 
   useEffect(() => { loadProposal(); }, [loadProposal]);
 
@@ -248,10 +252,16 @@ export default function RecoveryPage() {
           </div>
         )}
 
-        {/* Connected — show sign button */}
+        {/* Connected — show sign button + disconnect */}
         {canSign && (
           <button className="btn btn-primary" onClick={handleSign} disabled={signing}>
             {signing ? 'Signing...' : 'Sign Recovery Proposal'}
+          </button>
+        )}
+
+        {connectedAddr && !signed && (
+          <button className="btn-disconnect" onClick={() => { disconnect(); setError(''); }}>
+            Disconnect {truncate(connectedAddr)}
           </button>
         )}
 
