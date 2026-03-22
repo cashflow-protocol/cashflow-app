@@ -281,22 +281,42 @@ router.post('/send-signed-tx', async (req: Request, res: Response) => {
     const conn = new Connection(rpcUrl, 'confirmed');
 
     const txBytes = Buffer.from(signedTransaction, 'base64');
+
+    // Get confirmation strategy
+    let confirmBlockhash: string;
+    let confirmLastValidBlockHeight: number;
+    if (blockhash && lastValidBlockHeight) {
+      confirmBlockhash = blockhash;
+      confirmLastValidBlockHeight = lastValidBlockHeight;
+    } else {
+      const latest = await conn.getLatestBlockhash('confirmed');
+      confirmBlockhash = latest.blockhash;
+      confirmLastValidBlockHeight = latest.lastValidBlockHeight;
+    }
+
+    // Send and keep resending until confirmed or expired
     const signature = await conn.sendRawTransaction(txBytes, {
-      skipPreflight: false,
-      maxRetries: 5,
+      skipPreflight: true,
+      maxRetries: 0, // We handle retries ourselves
     });
     console.log(`Recovery TX sent: ${signature}`);
 
-    // Use the original blockhash for confirmation if provided, otherwise fetch fresh
-    let confirmStrategy;
-    if (blockhash && lastValidBlockHeight) {
-      confirmStrategy = { signature, blockhash, lastValidBlockHeight };
-    } else {
-      const latest = await conn.getLatestBlockhash('confirmed');
-      confirmStrategy = { signature, blockhash: latest.blockhash, lastValidBlockHeight: latest.lastValidBlockHeight };
+    // Aggressively resend every 2 seconds while polling for confirmation
+    const resendInterval = setInterval(async () => {
+      try {
+        await conn.sendRawTransaction(txBytes, { skipPreflight: true, maxRetries: 0 });
+      } catch {}
+    }, 2000);
+
+    try {
+      await conn.confirmTransaction(
+        { signature, blockhash: confirmBlockhash, lastValidBlockHeight: confirmLastValidBlockHeight },
+        'confirmed',
+      );
+      console.log(`Recovery TX confirmed: ${signature}`);
+    } finally {
+      clearInterval(resendInterval);
     }
-    await conn.confirmTransaction(confirmStrategy, 'confirmed');
-    console.log(`Recovery TX confirmed: ${signature}`);
 
     res.json({ success: true, data: { signature } });
   } catch (error: any) {
@@ -450,7 +470,7 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
       member: memberPubkey,
     });
 
-    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
 
     const msg = new TransactionMessage({
       payerKey: memberPubkey,
@@ -469,6 +489,7 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
       data: {
         transaction: txBase64,
         blockhash,
+        lastValidBlockHeight,
       },
     });
   } catch (error: any) {
@@ -495,12 +516,24 @@ router.post('/proposal/:proposalId/send-approve-tx', async (req: Request, res: R
     const conn = new Connection(rpcUrl, 'confirmed');
 
     const txBytes = Buffer.from(signedTransaction, 'base64');
-    const signature = await conn.sendRawTransaction(txBytes, { skipPreflight: false, maxRetries: 5 });
-    console.log(`Approve TX sent: ${signature}`);
 
     const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
-    await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
-    console.log(`Approve TX confirmed: ${signature}`);
+
+    const signature = await conn.sendRawTransaction(txBytes, { skipPreflight: true, maxRetries: 0 });
+    console.log(`Approve TX sent: ${signature}`);
+
+    const resendInterval = setInterval(async () => {
+      try {
+        await conn.sendRawTransaction(txBytes, { skipPreflight: true, maxRetries: 0 });
+      } catch {}
+    }, 2000);
+
+    try {
+      await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+      console.log(`Approve TX confirmed: ${signature}`);
+    } finally {
+      clearInterval(resendInterval);
+    }
 
     res.json({ success: true, data: { signature } });
   } catch (error: any) {
