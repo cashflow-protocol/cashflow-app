@@ -247,6 +247,100 @@ router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /proposal/:proposalId/build-approve-tx
+ * Build a proposalApprove transaction for a given member to sign and send.
+ * Body: { memberAddress: string }
+ */
+router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: Response) => {
+  try {
+    const { memberAddress } = req.body;
+    if (!memberAddress) {
+      res.status(400).json({ success: false, error: 'memberAddress is required' });
+      return;
+    }
+
+    const proposal = await RecoveryProposalModel.findById(req.params.proposalId);
+    if (!proposal) {
+      res.status(404).json({ success: false, error: 'Proposal not found' });
+      return;
+    }
+
+    // Verify this address is a required signer
+    const isRequired = proposal.requiredSigners.some(s => s.address === memberAddress);
+    if (!isRequired) {
+      res.status(400).json({ success: false, error: 'Address is not a required signer' });
+      return;
+    }
+
+    const multisigLib = await import('@sqds/multisig');
+    const { Connection, PublicKey, TransactionMessage, VersionedTransaction } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl);
+
+    const multisigPda = new PublicKey(proposal.multisigAddress);
+    const memberPubkey = new PublicKey(memberAddress);
+    const transactionIndex = BigInt(proposal.transactionIndex);
+
+    // Build proposalApprove instruction
+    const approveIx = multisigLib.instructions.proposalApprove({
+      multisigPda,
+      transactionIndex,
+      member: memberPubkey,
+    });
+
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+
+    const msg = new TransactionMessage({
+      payerKey: memberPubkey,
+      recentBlockhash: blockhash,
+      instructions: [approveIx],
+    }).compileToV0Message();
+
+    const tx = new VersionedTransaction(msg);
+    const txBase64 = Buffer.from(tx.serialize()).toString('base64');
+
+    res.json({
+      success: true,
+      data: {
+        transaction: txBase64,
+        blockhash,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error building approve tx:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to build approve transaction' });
+  }
+});
+
+/**
+ * POST /proposal/:proposalId/send-approve-tx
+ * Send a signed proposalApprove transaction on-chain.
+ * Body: { signedTransaction: string (base64) }
+ */
+router.post('/proposal/:proposalId/send-approve-tx', async (req: Request, res: Response) => {
+  try {
+    const { signedTransaction } = req.body;
+    if (!signedTransaction) {
+      res.status(400).json({ success: false, error: 'signedTransaction is required' });
+      return;
+    }
+
+    const { Connection } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl, 'confirmed');
+
+    const txBytes = Buffer.from(signedTransaction, 'base64');
+    const signature = await conn.sendRawTransaction(txBytes, { skipPreflight: false });
+    await conn.confirmTransaction(signature, 'confirmed');
+
+    res.json({ success: true, data: { signature } });
+  } catch (error: any) {
+    console.error('Error sending approve tx:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to send transaction' });
+  }
+});
+
+/**
  * POST /proposal/:proposalId/submit-signature
  * Submit a signature from an external wallet or other signer.
  */

@@ -115,65 +115,71 @@ export default function RecoveryPage() {
     setError('');
 
     try {
-      // Get the wallet standard wallet via connector client
-      const state = connectorClient.getSnapshot();
-      if (state.wallet.status !== 'connected') {
-        throw new Error('Wallet not connected');
+      // 1. Ask backend to build a proposalApprove tx for this member
+      const buildRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/build-approve-tx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberAddress: addr }),
+      });
+      if (!buildRes.ok) {
+        const err = await buildRes.json();
+        throw new Error(err.error || 'Failed to build approve transaction');
       }
+      const { data: { transaction: txBase64 } } = await buildRes.json();
+
+      // 2. Get the wallet standard wallet for signing
+      const state = connectorClient.getSnapshot();
+      if (state.wallet.status !== 'connected') throw new Error('Wallet not connected');
 
       const connectorId = state.wallet.session.connectorId;
       const wallet = connectorClient.getConnector(connectorId);
       if (!wallet) throw new Error('Wallet not found');
 
+      // Try signAndSendTransaction first, fall back to signTransaction
+      const signAndSendFeature = wallet.features['solana:signAndSendTransaction'] as any;
       const signFeature = wallet.features['solana:signTransaction'] as any;
-      if (!signFeature) throw new Error('Wallet does not support solana:signTransaction');
 
-      // Find the account matching our address
       const account = wallet.accounts.find(a => {
-        // Account address can be a Uint8Array — compare as base58
         try {
           const accAddr = typeof a.address === 'string' ? a.address : address(a.address as any);
           return accAddr === addr;
-        } catch {
-          return false;
-        }
+        } catch { return false; }
       });
       if (!account) throw new Error('Account not found in wallet');
 
-      // Sign the raw transaction bytes
-      const txBytes = Uint8Array.from(atob(proposal.tx1Base64), c => c.charCodeAt(0));
+      const txBytes = Uint8Array.from(atob(txBase64), c => c.charCodeAt(0));
 
-      const [{ signedTransaction }] = await signFeature.signTransaction({
-        transaction: txBytes,
-        account,
-        chain: 'solana:mainnet',
-      });
-
-      // Decode the signed transaction using @solana/kit to extract our signature
-      const txDecode = getTransactionDecoder();
-      const signedTx = txDecode.decode(signedTransaction);
-
-      const walletAddr = address(addr);
-      const sig = signedTx.signatures[walletAddr];
-
-      if (!sig) {
-        throw new Error('No signature found for connected wallet');
+      if (signAndSendFeature) {
+        // Sign and send in one step
+        await signAndSendFeature.signAndSendTransaction({
+          transaction: txBytes,
+          account,
+          chain: 'solana:mainnet',
+        });
+      } else if (signFeature) {
+        // Sign only, then we need to send it
+        const [{ signedTransaction }] = await signFeature.signTransaction({
+          transaction: txBytes,
+          account,
+          chain: 'solana:mainnet',
+        });
+        // Send the signed transaction via RPC
+        const sendRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/send-approve-tx`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            signedTransaction: btoa(String.fromCharCode(...new Uint8Array(signedTransaction))),
+          }),
+        });
+        if (!sendRes.ok) {
+          const err = await sendRes.json();
+          throw new Error(err.error || 'Failed to send transaction');
+        }
+      } else {
+        throw new Error('Wallet does not support transaction signing');
       }
 
-      const sigBase64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
-
-      // Submit to backend
-      const submitRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: addr, signature: sigBase64 }),
-      });
-
-      if (!submitRes.ok) {
-        const err = await submitRes.json();
-        throw new Error(err.error || 'Failed to submit signature');
-      }
-
+      // 3. Mark as signed and refresh
       setSigned(true);
       loadProposal();
     } catch (err: any) {
