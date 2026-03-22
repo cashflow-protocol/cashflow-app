@@ -5,7 +5,7 @@ import {
   useConnectWallet,
   useDisconnectWallet,
   useWallet,
-  useTransactionSigner,
+  useConnectorClient,
 } from '@solana/connector/react';
 import {
   getTransactionDecoder,
@@ -64,7 +64,7 @@ export default function RecoveryPage() {
   const { connect } = useConnectWallet();
   const { disconnect: disconnectWallet } = useDisconnectWallet();
   const { account: connectedAddress } = useWallet();
-  const { signer, ready: signerReady } = useTransactionSigner();
+  const connectorClient = useConnectorClient();
 
   const loadProposal = useCallback(async () => {
     try {
@@ -109,29 +109,50 @@ export default function RecoveryPage() {
   };
 
   const handleSign = async () => {
-    if (!connectedAddress || !proposal || !signer) return;
+    if (!connectedAddress || !proposal || !connectorClient) return;
     const addr = connectedAddress.toString();
     setSigning(true);
     setError('');
 
     try {
-      // Pass raw bytes to the connector's TransactionSigner
+      // Get the wallet standard wallet via connector client
+      const state = connectorClient.getSnapshot();
+      if (state.wallet.status !== 'connected') {
+        throw new Error('Wallet not connected');
+      }
+
+      const connectorId = state.wallet.session.connectorId;
+      const wallet = connectorClient.getConnector(connectorId);
+      if (!wallet) throw new Error('Wallet not found');
+
+      const signFeature = wallet.features['solana:signTransaction'] as any;
+      if (!signFeature) throw new Error('Wallet does not support solana:signTransaction');
+
+      // Find the account matching our address
+      const account = wallet.accounts.find(a => {
+        // Account address can be a Uint8Array — compare as base58
+        try {
+          const accAddr = typeof a.address === 'string' ? a.address : address(a.address as any);
+          return accAddr === addr;
+        } catch {
+          return false;
+        }
+      });
+      if (!account) throw new Error('Account not found in wallet');
+
+      // Sign the raw transaction bytes
       const txBytes = Uint8Array.from(atob(proposal.tx1Base64), c => c.charCodeAt(0));
 
-      // signTransaction accepts Uint8Array and returns the signed result
-      const signedResult = await signer.signTransaction(txBytes);
+      const [{ signedTransaction }] = await signFeature.signTransaction({
+        transaction: txBytes,
+        account,
+        chain: 'solana:mainnet',
+      });
 
-      // Decode the signed transaction using @solana/kit to extract signature
+      // Decode the signed transaction using @solana/kit to extract our signature
       const txDecode = getTransactionDecoder();
-      // The result could be Uint8Array, VersionedTransaction, or other SolanaTransaction types
-      const signedBytes = signedResult instanceof Uint8Array
-        ? signedResult
-        : typeof (signedResult as any).serialize === 'function'
-          ? new Uint8Array((signedResult as any).serialize())
-          : new Uint8Array(signedResult as unknown as ArrayBuffer);
-      const signedTx = txDecode.decode(signedBytes);
+      const signedTx = txDecode.decode(signedTransaction);
 
-      // Extract the signer's signature from the signatures map
       const walletAddr = address(addr);
       const sig = signedTx.signatures[walletAddr];
 
@@ -165,7 +186,7 @@ export default function RecoveryPage() {
   const connectedAddr = connectedAddress?.toString();
   const isRequiredSigner = proposal?.requiredSigners.some(s => s.address === connectedAddr);
   const alreadySigned = proposal?.requiredSigners.find(s => s.address === connectedAddr)?.signed;
-  const canSign = connectedAddr && isRequiredSigner && !alreadySigned && !signed && signerReady;
+  const canSign = connectedAddr && isRequiredSigner && !alreadySigned && !signed;
 
   if (loading) {
     return (
