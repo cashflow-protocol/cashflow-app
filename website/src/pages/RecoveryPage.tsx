@@ -87,6 +87,7 @@ export default function RecoveryPage() {
 
   const handleConnect = (walletId: string) => {
     setError('');
+    setShowWalletPicker(false);
     connect(walletId as any);
   };
 
@@ -209,34 +210,41 @@ export default function RecoveryPage() {
           ))}
         </div>
 
-        {/* Not connected — show connect button or wallet list */}
-        {!connectedAddr && !showWalletPicker && (
+        {/* Not connected — show connect button */}
+        {!connectedAddr && (
           <button className="btn btn-primary" onClick={() => setShowWalletPicker(true)}>
             Connect Wallet
           </button>
         )}
 
-        {!connectedAddr && showWalletPicker && (
-          <div className="wallet-list">
-            {wallets.length === 0 ? (
-              <div className="wallet-empty">
-                No Solana wallets detected.<br /><br />
-                Install <a href="https://phantom.app" target="_blank" rel="noopener">Phantom</a>,{' '}
-                <a href="https://solflare.com" target="_blank" rel="noopener">Solflare</a>, or any
-                Solana wallet extension.
+        {/* Wallet picker modal */}
+        {showWalletPicker && (
+          <div className="wallet-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowWalletPicker(false); }}>
+            <div className="wallet-sheet">
+              <div className="wallet-sheet-handle" />
+              <div className="wallet-sheet-title">Connect Wallet</div>
+              <div className="wallet-list">
+                {wallets.length === 0 ? (
+                  <div className="wallet-empty">
+                    No Solana wallets detected.<br /><br />
+                    Install <a href="https://phantom.app" target="_blank" rel="noopener">Phantom</a>,{' '}
+                    <a href="https://solflare.com" target="_blank" rel="noopener">Solflare</a>, or any
+                    Solana wallet extension.
+                  </div>
+                ) : (
+                  wallets.map((w) => (
+                    <button
+                      key={w.id}
+                      className="wallet-item"
+                      onClick={() => handleConnect(w.id)}
+                    >
+                      {w.icon && <img src={w.icon} alt={w.name} />}
+                      <span>{w.name}</span>
+                    </button>
+                  ))
+                )}
               </div>
-            ) : (
-              wallets.map((w) => (
-                <button
-                  key={w.id}
-                  className="wallet-item"
-                  onClick={() => handleConnect(w.id)}
-                >
-                  {w.icon && <img src={w.icon} alt={w.name} />}
-                  <span>{w.name}</span>
-                </button>
-              ))
-            )}
+            </div>
           </div>
         )}
 

@@ -97,12 +97,44 @@
 .recovery-page .badge-you { background: rgba(124,58,237,0.15); color: #a78bfa; }
 .recovery-page .section-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
 
-/* Wallet picker */
+/* Wallet picker modal */
+.recovery-page .wallet-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  z-index: 100;
+}
+.recovery-page .wallet-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: #1a1528;
+  border-radius: 24px 24px 0 0;
+  padding: 20px 24px 40px;
+  animation: recoverySlideUp 0.25s ease-out;
+}
+@keyframes recoverySlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.recovery-page .wallet-sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.15);
+  margin: 0 auto 20px;
+}
+.recovery-page .wallet-sheet-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
 .recovery-page .wallet-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 24px;
 }
 .recovery-page .wallet-item {
   display: flex;
