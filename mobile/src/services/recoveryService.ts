@@ -14,6 +14,7 @@ import {
 } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { SOLANA_CONFIG } from '../config/solana';
+import { API_CONFIG } from '../config/api';
 import {
   generateAndStoreCloudKeypair,
   generateAndStoreDeviceKeypair,
@@ -314,7 +315,7 @@ export async function buildAndSubmitRecoveryProposal(
   // Build external signing URL
   const hasExternalSigners = requiredSigners.some(s => s.type === 'external');
   const externalSigningUrl = hasExternalSigners
-    ? `https://cashflow.fun/recovery/${result.proposalId}`
+    ? `${API_CONFIG.websiteUrl}/recovery/${result.proposalId}`
     : null;
 
   return {
