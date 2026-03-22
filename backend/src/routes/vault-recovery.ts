@@ -7,47 +7,44 @@ import path from 'path';
 const router = Router();
 const jitoManager = new JitoManager();
 
-// Simple in-memory cache for gPA results (expensive call)
-let cachedMultisigs: { pubkey: string; members: { key: string; permissions: number }[]; threshold: number; createKey: string }[] = [];
-let cacheTimestamp = 0;
-const CACHE_TTL_MS = 60_000; // 1 minute
+const SQUADS_PROGRAM_ID = 'SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf';
 
-async function fetchAllMultisigs() {
-  const now = Date.now();
-  if (cachedMultisigs.length > 0 && now - cacheTimestamp < CACHE_TTL_MS) {
-    return cachedMultisigs;
+// Squads V4 Multisig account layout — member keys start at byte 132,
+// each Member entry is 33 bytes (32 pubkey + 1 permissions mask).
+const FIRST_MEMBER_OFFSET = 132;
+const MEMBER_STRIDE = 33;
+const MAX_MEMBER_POSITIONS = 5;
+
+/**
+ * Search for Squads V4 Multisig accounts that contain a specific pubkey as a member.
+ * Uses targeted memcmp filters at each possible member offset so the RPC
+ * filters server-side (no full gPA scan).
+ */
+async function findMultisigsByMember(conn: any, PublicKeyClass: any, address: string) {
+  const programId = new PublicKeyClass(SQUADS_PROGRAM_ID);
+  const queries = [];
+  for (let i = 0; i < MAX_MEMBER_POSITIONS; i++) {
+    const offset = FIRST_MEMBER_OFFSET + i * MEMBER_STRIDE;
+    queries.push(
+      conn.getProgramAccounts(programId, {
+        filters: [{ memcmp: { offset, bytes: address } }],
+      }).catch(() => []),
+    );
   }
-
-  const multisigLib = await import('@sqds/multisig');
-  const { Connection } = await import('@solana/web3.js');
-  const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-  const conn = new Connection(rpcUrl);
-
-  const gpa = multisigLib.accounts.Multisig.gpaBuilder();
-  const allAccounts = await gpa.run(conn);
-
-  const results: typeof cachedMultisigs = [];
-
-  for (const { pubkey, account } of allAccounts) {
-    try {
-      const [data] = multisigLib.accounts.Multisig.fromAccountInfo(account);
-      results.push({
-        pubkey: pubkey.toBase58(),
-        members: data.members.map((m: any) => ({
-          key: m.key.toBase58(),
-          permissions: m.permissions.mask,
-        })),
-        threshold: data.threshold,
-        createKey: data.createKey.toBase58(),
-      });
-    } catch {
-      // Skip malformed accounts
+  const results = await Promise.all(queries);
+  // Deduplicate by pubkey
+  const seen = new Set<string>();
+  const accounts: { pubkey: any; account: any }[] = [];
+  for (const batch of results) {
+    for (const item of batch) {
+      const key = item.pubkey.toBase58();
+      if (!seen.has(key)) {
+        seen.add(key);
+        accounts.push(item);
+      }
     }
   }
-
-  cachedMultisigs = results;
-  cacheTimestamp = now;
-  return results;
+  return accounts;
 }
 
 /**
@@ -64,36 +61,63 @@ router.post('/find-vaults', async (req: Request, res: Response) => {
     }
 
     const multisigLib = await import('@sqds/multisig');
-    const { PublicKey } = await import('@solana/web3.js');
+    const { Connection, PublicKey } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl);
 
-    const allMultisigs = await fetchAllMultisigs();
+    // Search for multisigs containing memberAddress and optionally cloudKey
+    const searchAddresses = [memberAddress];
+    if (cloudKey && cloudKey !== memberAddress) searchAddresses.push(cloudKey);
 
-    // Filter for multisigs containing this member
-    const matches = allMultisigs.filter((ms) =>
-      ms.members.some((m) => m.key === memberAddress),
-    );
+    const allAccounts: { pubkey: any; account: any }[] = [];
+    const seen = new Set<string>();
+    for (const addr of searchAddresses) {
+      const found = await findMultisigsByMember(conn, PublicKey, addr);
+      for (const item of found) {
+        const key = item.pubkey.toBase58();
+        if (!seen.has(key)) {
+          seen.add(key);
+          allAccounts.push(item);
+        }
+      }
+    }
 
-    // Build response with vault PDAs
-    const multisigs = matches.map((ms) => {
-      const multisigPda = new PublicKey(ms.pubkey);
-      const [vaultPda] = multisigLib.getVaultPda({ multisigPda, index: 0 });
+    // Parse matched accounts and build response
+    const multisigs = [];
+    for (const { pubkey, account } of allAccounts) {
+      try {
+        const [data] = multisigLib.accounts.Multisig.fromAccountInfo(account);
+        const members = data.members.map((m: any) => ({
+          key: m.key.toBase58(),
+          permissions: m.permissions.mask,
+        }));
 
-      return {
-        multisigAddress: ms.pubkey,
-        vaultAddress: vaultPda.toBase58(),
-        threshold: ms.threshold,
-        memberCount: ms.members.length,
-        members: ms.members.map((m) => ({
-          address: m.key,
-          permissions: {
-            initiate: (m.permissions & 1) !== 0,
-            vote: (m.permissions & 2) !== 0,
-            execute: (m.permissions & 4) !== 0,
-          },
-        })),
-        matchesCloudKey: cloudKey ? ms.members.some((m) => m.key === cloudKey) : undefined,
-      };
-    });
+        // Verify at least one search address is in the members list
+        const isMember = members.some((m: any) => searchAddresses.includes(m.key));
+        if (!isMember) continue;
+
+        const multisigPda = pubkey;
+        const [vaultPda] = multisigLib.getVaultPda({ multisigPda, index: 0 });
+
+        multisigs.push({
+          multisigAddress: pubkey.toBase58(),
+          vaultAddress: vaultPda.toBase58(),
+          threshold: data.threshold,
+          memberCount: members.length,
+          members: members.map((m: any) => ({
+            address: m.key,
+            permissions: {
+              initiate: (m.permissions & 1) !== 0,
+              vote: (m.permissions & 2) !== 0,
+              execute: (m.permissions & 4) !== 0,
+            },
+          })),
+          matchesCloudKey: cloudKey ? members.some((m: any) => m.key === cloudKey) : undefined,
+        });
+      } catch {
+        // Skip malformed accounts
+      }
+    }
 
     res.json({ success: true, data: { multisigs } });
   } catch (error) {
