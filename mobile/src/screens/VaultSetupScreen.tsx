@@ -28,13 +28,12 @@ interface VaultSetupScreenProps {
   inviteCode: string;
   onComplete: () => void;
   onBack?: () => void;
-  onReset?: () => void;
   onRecovery?: () => void;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onReset, onRecovery }: VaultSetupScreenProps) {
+export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRecovery }: VaultSetupScreenProps) {
   const { colors } = useTheme();
   const { connect: connectWallet } = useWallet();
   const [loading, setLoading] = useState(false);
@@ -224,15 +223,6 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRes
               style={{ alignItems: 'center', marginTop: 16 }}
             >
               <Text style={{ color: colors.onboardingTextMuted, fontSize: 13 }}>Recover existing vault</Text>
-            </TouchableOpacity>
-          )}
-          {onReset && __DEV__ && (
-            <TouchableOpacity
-              onPress={async () => { authService.setInviteCode(''); await deleteAllKeypairs(); onReset(); }}
-              activeOpacity={0.7}
-              style={{ alignItems: 'center', marginTop: 12 }}
-            >
-              <Text style={{ color: colors.onboardingTextMuted, fontSize: 12 }}>Reset (test)</Text>
             </TouchableOpacity>
           )}
         </Animated.View>

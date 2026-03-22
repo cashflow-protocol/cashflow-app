@@ -274,13 +274,12 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
       <SafeAreaView
         edges={['top']}
         style={styles.header}
-        onLayout={(e) => setGradientHeight(Math.max(255, e.nativeEvent.layout.height + 34))}
       >
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton}>
-          <ArrowLeft size={24} color={colors.primaryButtonText} />
+          <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.primaryButtonText }]}>Waitlist</Text>
-        <Text style={[styles.headerSubtitle, { color: colors.primaryButtonText + 'B3' }]}>
+        <Text style={[styles.headerTitle, { color: '#FFFFFF' }]}>Waitlist</Text>
+        <Text style={[styles.headerSubtitle, { color: 'rgba(255,255,255,0.7)' }]}>
           Complete tasks to earn XP{'\n'}and move up the queue
         </Text>
       </SafeAreaView>
@@ -291,6 +290,10 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.statsContainer}
         style={styles.statsScroll}
+        onLayout={(e) => {
+          const { y, height } = e.nativeEvent.layout;
+          setGradientHeight(y + height / 2);
+        }}
       >
         <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
           <View style={styles.statRow}>
@@ -466,7 +469,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 255,
   },
   header: {
     alignItems: 'center',

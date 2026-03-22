@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ function formatUsd(value: number): string {
 export default function AssetsScreen() {
   const { colors } = useTheme();
   const { assets, totalUsdValue, loading, refreshing, refresh } = useAssets();
+  const [gradientHeight, setGradientHeight] = useState(220);
 
   React.useEffect(() => { logScreenView('AssetsScreen'); }, []);
 
@@ -32,7 +33,7 @@ export default function AssetsScreen() {
 
       <LinearGradient
         colors={colors.assetsGradient as unknown as string[]}
-        style={styles.headerGradient}
+        style={[styles.headerGradient, { height: gradientHeight }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
       />
@@ -47,6 +48,10 @@ export default function AssetsScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.statsContainer}
         style={styles.statsScroll}
+        onLayout={(e) => {
+          const { y, height } = e.nativeEvent.layout;
+          setGradientHeight(y + height / 2);
+        }}
       >
         <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
           <View style={styles.statRow}>
@@ -104,7 +109,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 220,
   },
   header: {
     alignItems: 'center',

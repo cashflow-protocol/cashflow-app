@@ -28,6 +28,7 @@ export default function EarnScreen() {
   const { tokens, earnings, loading, refreshing, error, refresh } = useEarnTokens();
   const [activeFilter, setActiveFilter] = useState(ALL_FILTER);
   const [selectedToken, setSelectedToken] = useState<EarnTokenWithPosition | null>(null);
+  const [gradientHeight, setGradientHeight] = useState(220);
 
   React.useEffect(() => { logScreenView('EarnScreen'); }, []);
 
@@ -73,7 +74,7 @@ export default function EarnScreen() {
       {/* Header Gradient */}
       <LinearGradient
         colors={colors.earnGradient as unknown as string[]}
-        style={styles.headerGradient}
+        style={[styles.headerGradient, { height: gradientHeight }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
       />
@@ -106,6 +107,10 @@ export default function EarnScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.statsContainer}
             style={styles.statsScroll}
+            onLayout={(e) => {
+              const { y, height } = e.nativeEvent.layout;
+              setGradientHeight(y + height / 2);
+            }}
           >
             <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
               <View style={styles.statRow}>
@@ -244,7 +249,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 220,
   },
   header: {
     alignItems: 'center',

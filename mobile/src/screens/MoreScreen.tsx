@@ -52,6 +52,7 @@ function formatSol(amount: number | null): string {
 
 export default function MoreScreen({ onNavigate }: MoreScreenProps) {
   const { colors } = useTheme();
+  const [gradientHeight, setGradientHeight] = useState(220);
   const [vault, setVault] = useState<VaultData | null>(null);
   const [cloudPubkey, setCloudPubkey] = useState<string | null>(null);
   const [devicePubkey, setDevicePubkey] = useState<string | null>(null);
@@ -179,7 +180,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
 
       <LinearGradient
         colors={colors.earnGradient as unknown as string[]}
-        style={styles.headerGradient}
+        style={[styles.headerGradient, { height: gradientHeight }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
       />
@@ -188,42 +189,46 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
         <Text style={styles.title}>More</Text>
       </SafeAreaView>
 
+      {/* Stats row */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.statsContainer}
+        style={styles.statsScroll}
+        onLayout={(e) => {
+          const { y, height } = e.nativeEvent.layout;
+          setGradientHeight(y + height / 2);
+        }}
+      >
+        <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
+          <View style={styles.statRow}>
+            <View style={styles.statIconCircle}>
+              <LifetimeEarnedIcon size={20} />
+            </View>
+            <View>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Transactions</Text>
+              <Text style={[styles.statValue, { color: colors.textPrimary }]}>0</Text>
+            </View>
+          </View>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
+          <View style={styles.statRow}>
+            <View style={styles.statIconCircle}>
+              <Last7DIcon size={20} />
+            </View>
+            <View>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active since</Text>
+              <Text style={[styles.statValue, { color: colors.textPrimary }]}>Today</Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Stats row */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.statsContainer}
-          style={styles.statsScroll}
-        >
-          <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
-            <View style={styles.statRow}>
-              <View style={styles.statIconCircle}>
-                <LifetimeEarnedIcon size={20} />
-              </View>
-              <View>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Transactions</Text>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>0</Text>
-              </View>
-            </View>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
-            <View style={styles.statRow}>
-              <View style={styles.statIconCircle}>
-                <Last7DIcon size={20} />
-              </View>
-              <View>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active since</Text>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>Today</Text>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-
         {/* Squads Section */}
         <View style={styles.content}>
           <Text style={styles.sectionLabel}>Squads</Text>
@@ -400,7 +405,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 220,
   },
   header: {
     alignItems: 'center',
