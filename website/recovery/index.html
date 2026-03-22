@@ -81,7 +81,6 @@
       background: linear-gradient(135deg, #7c3aed, #6d28d9);
       color: #fff;
     }
-    .btn-success { background: #19C394; color: #fff; }
     .status {
       text-align: center;
       padding: 16px;
@@ -112,6 +111,78 @@
     .badge-you { background: rgba(124,58,237,0.15); color: #a78bfa; }
     .section-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
     .hidden { display: none; }
+
+    /* Wallet picker modal */
+    .wallet-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      z-index: 100;
+    }
+    .wallet-sheet {
+      width: 100%;
+      max-width: 480px;
+      background: #1a1528;
+      border-radius: 24px 24px 0 0;
+      padding: 20px 24px 40px;
+      animation: slideUp 0.25s ease-out;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .wallet-sheet-handle {
+      width: 40px;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.15);
+      margin: 0 auto 20px;
+    }
+    .wallet-sheet-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+    .wallet-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .wallet-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 14px;
+      border: none;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    .wallet-item:hover { background: rgba(255,255,255,0.1); }
+    .wallet-item img {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+    }
+    .wallet-empty {
+      text-align: center;
+      color: rgba(255,255,255,0.4);
+      font-size: 14px;
+      padding: 24px 0;
+    }
+    .wallet-empty a {
+      color: #a78bfa;
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
@@ -140,7 +211,7 @@
       <div id="signers" class="signer-list"></div>
 
       <div id="connect-section">
-        <button class="btn btn-primary" id="connect-btn" onclick="connectWallet()">Connect Wallet</button>
+        <button class="btn btn-primary" id="connect-btn" onclick="showWalletPicker()">Connect Wallet</button>
       </div>
 
       <div id="sign-section" class="hidden">
@@ -159,21 +230,29 @@
     </div>
   </div>
 
+  <!-- Wallet picker modal -->
+  <div id="wallet-modal" class="wallet-overlay hidden" onclick="if(event.target===this)hideWalletPicker()">
+    <div class="wallet-sheet">
+      <div class="wallet-sheet-handle"></div>
+      <div class="wallet-sheet-title">Connect Wallet</div>
+      <div id="wallet-list" class="wallet-list"></div>
+    </div>
+  </div>
+
   <script>
-    // Determine API base from the website hostname
     const API_BASE = window.location.hostname.includes('localhost')
       ? 'http://localhost:3000'
       : window.location.hostname.includes('dev.')
         ? 'https://api-dev.cashflow.fun'
         : 'https://api.cashflow.fun';
 
-    // Extract proposalId from path: /recovery/{proposalId}
     const pathParts = window.location.pathname.split('/').filter(Boolean);
     const proposalId = pathParts[pathParts.length - 1];
 
     let proposal = null;
     let connectedWallet = null;
-    let provider = null;
+    let selectedWalletAdapter = null;
+    const detectedWallets = [];
 
     function truncate(addr) {
       return addr ? addr.slice(0, 4) + '...' + addr.slice(-4) : '';
@@ -184,6 +263,202 @@
       if (email.length <= 12) return email.slice(0, 2) + '...' + email.slice(-4);
       return email.slice(0, 2) + '...' + email.slice(-10);
     }
+
+    // ─── Wallet Standard detection ───
+    // Detects all wallets that implement the Wallet Standard protocol,
+    // plus legacy window-injected wallets (Phantom, Solflare, Backpack, etc.)
+
+    function registerWallet(wallet) {
+      // Avoid duplicates by name
+      if (detectedWallets.some(w => w.name === wallet.name)) return;
+      detectedWallets.push(wallet);
+    }
+
+    function detectWalletStandard() {
+      // The Wallet Standard uses navigator.wallets as a registration point
+      // Wallets call navigator.wallets.push({ register }) and apps respond
+      try {
+        const callbacks = [];
+        const register = (...wallets) => {
+          for (const w of wallets) {
+            // Wallet Standard wallets have features map
+            if (w.features && w.features['standard:connect']) {
+              registerWallet({
+                name: w.name,
+                icon: w.icon,
+                type: 'standard',
+                adapter: w,
+              });
+            }
+          }
+        };
+
+        // Process wallets already registered
+        if (window.navigator.wallets) {
+          const existing = window.navigator.wallets;
+          if (Array.isArray(existing)) {
+            // Process existing entries and replace with our hook
+            for (const entry of existing) {
+              if (typeof entry === 'function') {
+                entry({ register });
+              } else if (entry?.register) {
+                // Already a registration API
+              }
+            }
+            // Replace array with proxy to catch future registrations
+            window.navigator.wallets = {
+              push: (...args) => {
+                for (const arg of args) {
+                  if (typeof arg === 'function') {
+                    arg({ register });
+                  }
+                }
+              }
+            };
+          } else if (typeof existing.push === 'function') {
+            existing.push({ register });
+          }
+        } else {
+          window.navigator.wallets = {
+            push: (...args) => {
+              for (const arg of args) {
+                if (typeof arg === 'function') {
+                  arg({ register });
+                }
+              }
+            }
+          };
+        }
+      } catch (e) {
+        console.warn('Wallet Standard detection error:', e);
+      }
+    }
+
+    function detectLegacyWallets() {
+      // Fallback: detect wallets via their window-injected providers
+      const legacyWallets = [
+        { check: () => window.phantom?.solana, name: 'Phantom', icon: 'https://phantom.app/img/logo_small.png' },
+        { check: () => window.solflare, name: 'Solflare', icon: 'https://solflare.com/favicon.ico' },
+        { check: () => window.backpack, name: 'Backpack', icon: 'https://backpack.app/favicon.ico' },
+        { check: () => window.coin98?.sol, name: 'Coin98', icon: 'https://coin98.com/favicon.ico' },
+        { check: () => window.exodus?.solana, name: 'Exodus', icon: 'https://www.exodus.com/favicon.ico' },
+      ];
+
+      for (const w of legacyWallets) {
+        try {
+          const provider = w.check();
+          if (provider) {
+            registerWallet({
+              name: w.name,
+              icon: w.icon,
+              type: 'legacy',
+              adapter: provider,
+            });
+          }
+        } catch {}
+      }
+    }
+
+    async function connectStandardWallet(wallet) {
+      const connectFeature = wallet.adapter.features['standard:connect'];
+      const result = await connectFeature.connect();
+      const account = result.accounts[0];
+      if (!account) throw new Error('No account returned');
+      // Account address is a Uint8Array, convert to base58
+      const pubkey = new solanaWeb3.PublicKey(account.address);
+      return {
+        publicKey: pubkey,
+        signTransaction: async (tx) => {
+          const signFeature = wallet.adapter.features['solana:signTransaction'];
+          if (!signFeature) throw new Error('Wallet does not support signTransaction');
+          const serialized = tx.serialize();
+          const [result] = await signFeature.signTransaction({ transaction: serialized, account });
+          return solanaWeb3.VersionedTransaction.deserialize(result.signedTransaction);
+        },
+      };
+    }
+
+    async function connectLegacyWallet(wallet) {
+      const resp = await wallet.adapter.connect();
+      const pubkey = resp.publicKey;
+      return {
+        publicKey: pubkey,
+        signTransaction: (tx) => wallet.adapter.signTransaction(tx),
+      };
+    }
+
+    // ─── Wallet picker UI ───
+
+    function showWalletPicker() {
+      const listEl = document.getElementById('wallet-list');
+      listEl.innerHTML = '';
+
+      if (detectedWallets.length === 0) {
+        listEl.innerHTML = `
+          <div class="wallet-empty">
+            No Solana wallets detected.<br><br>
+            Install <a href="https://phantom.app" target="_blank">Phantom</a>,
+            <a href="https://solflare.com" target="_blank">Solflare</a>, or any
+            Solana wallet extension.
+          </div>
+        `;
+      } else {
+        for (const wallet of detectedWallets) {
+          const btn = document.createElement('button');
+          btn.className = 'wallet-item';
+          // Wallet Standard icon can be a data URI or URL
+          const iconSrc = wallet.type === 'standard' && wallet.adapter.icon
+            ? wallet.adapter.icon
+            : wallet.icon;
+          btn.innerHTML = `
+            <img src="${iconSrc}" alt="${wallet.name}" onerror="this.style.display='none'">
+            <span>${wallet.name}</span>
+          `;
+          btn.onclick = () => selectWallet(wallet);
+          listEl.appendChild(btn);
+        }
+      }
+
+      document.getElementById('wallet-modal').classList.remove('hidden');
+    }
+
+    function hideWalletPicker() {
+      document.getElementById('wallet-modal').classList.add('hidden');
+    }
+
+    async function selectWallet(wallet) {
+      hideWalletPicker();
+      try {
+        let connected;
+        if (wallet.type === 'standard') {
+          connected = await connectStandardWallet(wallet);
+        } else {
+          connected = await connectLegacyWallet(wallet);
+        }
+
+        connectedWallet = connected.publicKey.toString();
+        selectedWalletAdapter = connected;
+
+        const requiredSigner = proposal.requiredSigners.find(s => s.address === connectedWallet);
+        if (!requiredSigner) {
+          showError(`Wallet ${truncate(connectedWallet)} is not a required signer for this proposal.`);
+          return;
+        }
+
+        if (requiredSigner.signed) {
+          showError('This wallet has already signed this proposal.');
+          return;
+        }
+
+        document.getElementById('connect-section').classList.add('hidden');
+        document.getElementById('sign-section').classList.remove('hidden');
+        renderProposal();
+      } catch (err) {
+        showError('Failed to connect wallet: ' + (err.message || err));
+      }
+    }
+
+    // ─── Proposal loading & rendering ───
 
     async function loadProposal() {
       try {
@@ -206,7 +481,6 @@
       document.getElementById('threshold-info').textContent =
         `${proposal.signaturesCollected}/${proposal.threshold} signatures`;
 
-      // Actions
       const actionsEl = document.getElementById('actions');
       actionsEl.innerHTML = '';
       (proposal.actions || []).forEach(a => {
@@ -216,7 +490,6 @@
         actionsEl.appendChild(div);
       });
 
-      // Signers
       const signersEl = document.getElementById('signers');
       signersEl.innerHTML = '';
       proposal.requiredSigners.forEach(s => {
@@ -244,38 +517,7 @@
       });
     }
 
-    async function connectWallet() {
-      try {
-        if (window.phantom?.solana) {
-          provider = window.phantom.solana;
-        } else if (window.solflare) {
-          provider = window.solflare;
-        } else {
-          showError('No Solana wallet found. Please install Phantom or Solflare.');
-          return;
-        }
-
-        const resp = await provider.connect();
-        connectedWallet = resp.publicKey.toString();
-
-        const requiredSigner = proposal.requiredSigners.find(s => s.address === connectedWallet);
-        if (!requiredSigner) {
-          showError(`Wallet ${truncate(connectedWallet)} is not a required signer for this proposal.`);
-          return;
-        }
-
-        if (requiredSigner.signed) {
-          showError('This wallet has already signed this proposal.');
-          return;
-        }
-
-        document.getElementById('connect-section').classList.add('hidden');
-        document.getElementById('sign-section').classList.remove('hidden');
-        renderProposal();
-      } catch (err) {
-        showError('Failed to connect wallet: ' + (err.message || err));
-      }
-    }
+    // ─── Transaction signing ───
 
     async function signTransaction() {
       const btn = document.getElementById('sign-btn');
@@ -283,11 +525,10 @@
       btn.textContent = 'Signing...';
 
       try {
-        // Use TX1 from the proposal directly — no need for threshold to be met
         const txBytes = Uint8Array.from(atob(proposal.tx1Base64), c => c.charCodeAt(0));
         const tx = solanaWeb3.VersionedTransaction.deserialize(txBytes);
 
-        const signedTx = await provider.signTransaction(tx);
+        const signedTx = await selectedWalletAdapter.signTransaction(tx);
 
         const accountKeys = tx.message.staticAccountKeys;
         const walletPubkey = new solanaWeb3.PublicKey(connectedWallet);
@@ -331,7 +572,13 @@
       setTimeout(() => el.classList.add('hidden'), 8000);
     }
 
-    loadProposal();
+    // ─── Init ───
+    detectWalletStandard();
+    // Give wallet extensions time to inject their providers
+    setTimeout(() => {
+      detectLegacyWallets();
+      loadProposal();
+    }, 500);
   </script>
 </body>
 </html>
