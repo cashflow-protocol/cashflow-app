@@ -169,19 +169,28 @@ router.post('/create-proposal', async (req: Request, res: Response) => {
       return;
     }
 
-    // Broadcast TX1 on-chain (creates config tx + proposal + initial approvals)
-    const { Connection } = await import('@solana/web3.js');
-    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-    const conn = new Connection(rpcUrl, 'confirmed');
+    // Broadcast TX1 on-chain via Jito
+    const bundleId = await jitoManager.sendBundle([tx1Base64]);
+    console.log(`Recovery TX1 bundle sent: ${bundleId}`);
 
-    const tx1Bytes = Buffer.from(tx1Base64, 'base64');
-    const tx1Sig = await conn.sendRawTransaction(tx1Bytes, {
-      skipPreflight: false,
-      maxRetries: 5,
-    });
-    console.log(`Recovery TX1 sent: ${tx1Sig}`);
-    await conn.confirmTransaction(tx1Sig, 'confirmed');
-    console.log(`Recovery TX1 confirmed: ${tx1Sig}`);
+    // Poll for confirmation
+    let landed = false;
+    for (let i = 0; i < 15; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const status = await jitoManager.getBundleStatus(bundleId);
+      if (status?.confirmation_status === 'confirmed' || status?.confirmation_status === 'finalized') {
+        landed = true;
+        break;
+      }
+      if (status?.err && !('Ok' in status.err)) {
+        throw new Error(`TX1 bundle failed: ${JSON.stringify(status.err)}`);
+      }
+    }
+
+    if (!landed) {
+      throw new Error('TX1 did not land on-chain within timeout');
+    }
+    console.log(`Recovery TX1 confirmed via Jito: ${bundleId}`);
 
     const proposal = await RecoveryProposalModel.create({
       multisigAddress,
@@ -295,11 +304,26 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
     const memberPubkey = new PublicKey(memberAddress);
     const transactionIndex = BigInt(proposal.transactionIndex);
 
-    // Build proposalApprove instruction with priority fees
+    // Build proposalApprove instruction with priority fees + Jito tip
     const approveIx = multisigLib.instructions.proposalApprove({
       multisigPda,
       transactionIndex,
       member: memberPubkey,
+    });
+
+    // Jito tip
+    const JITO_TIP_ACCOUNTS = [
+      'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
+      'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
+      'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
+      'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
+    ];
+    const { SystemProgram } = await import('@solana/web3.js');
+    const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
+    const jitoTipIx = SystemProgram.transfer({
+      fromPubkey: memberPubkey,
+      toPubkey: new PublicKey(tipAccount),
+      lamports: 500_000,
     });
 
     const { blockhash } = await conn.getLatestBlockhash('confirmed');
@@ -311,6 +335,7 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
         ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
         ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
         approveIx,
+        jitoTipIx,
       ],
     }).compileToV0Message();
 
@@ -343,15 +368,27 @@ router.post('/proposal/:proposalId/send-approve-tx', async (req: Request, res: R
       return;
     }
 
-    const { Connection } = await import('@solana/web3.js');
-    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-    const conn = new Connection(rpcUrl, 'confirmed');
+    const bundleId = await jitoManager.sendBundle([signedTransaction]);
+    console.log(`Approve TX bundle sent: ${bundleId}`);
 
-    const txBytes = Buffer.from(signedTransaction, 'base64');
-    const signature = await conn.sendRawTransaction(txBytes, { skipPreflight: false });
-    await conn.confirmTransaction(signature, 'confirmed');
+    let landed = false;
+    for (let i = 0; i < 15; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const status = await jitoManager.getBundleStatus(bundleId);
+      if (status?.confirmation_status === 'confirmed' || status?.confirmation_status === 'finalized') {
+        landed = true;
+        break;
+      }
+      if (status?.err && !('Ok' in status.err)) {
+        throw new Error(`Approve TX failed: ${JSON.stringify(status.err)}`);
+      }
+    }
 
-    res.json({ success: true, data: { signature } });
+    if (!landed) {
+      throw new Error('Approve transaction did not land on-chain within timeout');
+    }
+
+    res.json({ success: true, data: { bundleId } });
   } catch (error: any) {
     console.error('Error sending approve tx:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to send transaction' });

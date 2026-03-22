@@ -178,6 +178,9 @@ export async function buildAndSubmitRecoveryProposal(
     }));
   }
 
+  // Jito tip for TX1
+  tx1Instructions.push(jitoTipIx(feePayer));
+
   // Build TX2 — execute + close + Jito tip
   const tx2Instructions: TransactionInstruction[] = [
     ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
