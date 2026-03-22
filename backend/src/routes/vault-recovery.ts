@@ -179,8 +179,7 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
 
     // Build TX1 instructions
     const tx1Instructions = [
-      ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
       multisigLib.instructions.configTransactionCreate({
         multisigPda,
         transactionIndex,
@@ -225,8 +224,7 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
 
     // Also build TX2 (execute) — stored for later use after threshold is met
     const tx2Instructions = [
-      ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
-      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
       multisigLib.instructions.configTransactionExecute({
         multisigPda,
         transactionIndex,
@@ -451,8 +449,7 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
       payerKey: memberPubkey,
       recentBlockhash: blockhash,
       instructions: [
-        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
-        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
         approveIx,
       ],
     }).compileToV0Message();
