@@ -237,23 +237,23 @@ export async function buildAndSubmitRecoveryProposal(
     }
   }
 
-  // Sign TX1 and TX2 with MWA wallet
-  const serialized = [tx1, tx2].map(tx => new Uint8Array(tx.serialize()));
-  const signedBytes = await walletService.signTransactions(serialized);
-  if (!signedBytes || signedBytes.length < 2) {
-    throw new Error('Wallet signing failed — no signed transactions returned');
-  }
+  // Sign and send TX1 via MWA (cloud key sig is already applied, MWA adds its own and sends)
+  onProgress?.('Sending proposal on-chain...');
+  const tx1Serialized = new Uint8Array(tx1.serialize());
+  await walletService.signAndSendTransactions([tx1Serialized]);
 
-  // Extract MWA signatures and apply to both transactions
-  for (let i = 0; i < 2; i++) {
-    const originalTx = [tx1, tx2][i];
-    const signedTx = VersionedTransaction.deserialize(signedBytes[i]);
-    const walletIndex = originalTx.message.staticAccountKeys.findIndex(
-      (k: PublicKey) => k.equals(walletPubkey),
-    );
-    if (walletIndex !== -1) {
-      originalTx.signatures[walletIndex] = signedTx.signatures[walletIndex];
-    }
+  // Sign TX2 with MWA (sign-only, will be sent later after threshold is met)
+  const tx2Serialized = new Uint8Array(tx2.serialize());
+  const tx2SignedBytes = await walletService.signTransactions([tx2Serialized]);
+  if (!tx2SignedBytes?.[0]) {
+    throw new Error('Wallet signing failed — no signed transaction returned');
+  }
+  const tx2Signed = VersionedTransaction.deserialize(tx2SignedBytes[0]);
+  const tx2WalletIndex = tx2.message.staticAccountKeys.findIndex(
+    (k: PublicKey) => k.equals(walletPubkey),
+  );
+  if (tx2WalletIndex !== -1) {
+    tx2.signatures[tx2WalletIndex] = tx2Signed.signatures[tx2WalletIndex];
   }
 
   // Step 5: Determine required signers and who has already signed
@@ -300,8 +300,8 @@ export async function buildAndSubmitRecoveryProposal(
     }
   }
 
-  // Step 6: Submit to backend — it will broadcast TX1 on-chain and store the proposal
-  onProgress?.('Sending proposal on-chain...');
+  // Step 6: Store proposal on backend (TX1 already sent on-chain above)
+  onProgress?.('Saving recovery proposal...');
 
   const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');

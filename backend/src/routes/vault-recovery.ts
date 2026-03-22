@@ -169,29 +169,7 @@ router.post('/create-proposal', async (req: Request, res: Response) => {
       return;
     }
 
-    // Broadcast TX1 on-chain via Jito
-    const bundleId = await jitoManager.sendBundle([tx1Base64]);
-    console.log(`Recovery TX1 bundle sent: ${bundleId}`);
-
-    // Poll for confirmation
-    let landed = false;
-    for (let i = 0; i < 15; i++) {
-      await new Promise(r => setTimeout(r, 2000));
-      const status = await jitoManager.getBundleStatus(bundleId);
-      if (status?.confirmation_status === 'confirmed' || status?.confirmation_status === 'finalized') {
-        landed = true;
-        break;
-      }
-      if (status?.err && !('Ok' in status.err)) {
-        throw new Error(`TX1 bundle failed: ${JSON.stringify(status.err)}`);
-      }
-    }
-
-    if (!landed) {
-      throw new Error('TX1 did not land on-chain within timeout');
-    }
-    console.log(`Recovery TX1 confirmed via Jito: ${bundleId}`);
-
+    // TX1 is already sent on-chain by the mobile app via MWA signAndSend
     const proposal = await RecoveryProposalModel.create({
       multisigAddress,
       vaultAddress,
