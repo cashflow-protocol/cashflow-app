@@ -29,7 +29,7 @@ export async function getOrCreatePrivyUser(email: string): Promise<{
 
   try {
     const searchRes = await axios.post(`${PRIVY_BASE_URL}/users/search`, {
-      query: { email },
+      emails: [email],
     }, { headers });
 
     if (searchRes.data?.data?.length > 0) {
@@ -98,7 +98,7 @@ export async function signTransactionWithPrivy(
 
   // Find user by email
   const searchRes = await axios.post(`${PRIVY_BASE_URL}/users/search`, {
-    query: { email },
+    emails: [email],
   }, { headers });
 
   if (!searchRes.data?.data?.length) {
