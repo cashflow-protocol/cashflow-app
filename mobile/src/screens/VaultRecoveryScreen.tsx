@@ -75,7 +75,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
         setLoading(false);
         return;
       }
-      const address = account.address;
+      const address = account.publicKey as string;
       setWalletAddress(address);
       setStep('searching');
 
