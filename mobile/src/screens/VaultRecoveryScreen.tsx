@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   FlatList,
   Animated,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
@@ -50,6 +52,9 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
   const [loading, setLoading] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [manualModalVisible, setManualModalVisible] = useState(false);
+  const [manualAddress, setManualAddress] = useState('');
+  const [manualLoading, setManualLoading] = useState(false);
 
   // Animations
   const contentOpacity = useRef(new Animated.Value(0)).current;
@@ -126,6 +131,27 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
     setStep('executing');
   }, [selectedVault]);
 
+  const handleManualLookup = useCallback(async () => {
+    const trimmed = manualAddress.trim();
+    if (!trimmed) return;
+    setManualLoading(true);
+    try {
+      const result = await apiService.findVaultByAddress(trimmed);
+      if (!result) {
+        showToast('No vault found for this address');
+        return;
+      }
+      setManualModalVisible(false);
+      setManualAddress('');
+      setSelectedVault(result);
+      setStep('confirm');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to look up vault');
+    } finally {
+      setManualLoading(false);
+    }
+  }, [manualAddress, showToast]);
+
   const handleTryDifferent = useCallback(() => {
     setWalletAddress('');
     setVaults([]);
@@ -164,6 +190,13 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       <Text style={[styles.description, { color: colors.onboardingTextMuted }]}>
         No Cashflow vaults were found for wallet{'\n'}{truncateAddress(walletAddress)}.{'\n\n'}Make sure you're connecting the same wallet you used when creating your vault.
       </Text>
+      <TouchableOpacity
+        onPress={() => setManualModalVisible(true)}
+        activeOpacity={0.7}
+        style={styles.manualEntryButton}
+      >
+        <Text style={styles.manualEntryText}>Enter vault address manually</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -350,6 +383,51 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
           {renderBottomButton()}
         </View>
       </SafeAreaView>
+
+      {/* Manual vault address modal */}
+      <Modal
+        visible={manualModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setManualModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Enter Vault Address</Text>
+            <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
+              Enter the Squads multisig address for the vault you want to recover.
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: colors.cardSecondary, color: colors.textPrimary }]}
+              value={manualAddress}
+              onChangeText={setManualAddress}
+              placeholder="Multisig address..."
+              placeholderTextColor={colors.textTertiary}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity
+              style={[styles.modalButton, { backgroundColor: colors.onboardingButton }]}
+              onPress={handleManualLookup}
+              disabled={manualLoading || manualAddress.trim().length === 0}
+              activeOpacity={0.7}
+            >
+              {manualLoading ? (
+                <ActivityIndicator color={colors.onboardingButtonText} />
+              ) : (
+                <Text style={[styles.modalButtonText, { color: colors.onboardingButtonText }]}>Look Up</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => { setManualModalVisible(false); setManualAddress(''); }}
+              activeOpacity={0.7}
+              style={styles.modalCancel}
+            >
+              <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -427,6 +505,63 @@ const styles = StyleSheet.create({
   vaultCardMember: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.45)',
+  },
+  manualEntryButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  manualEntryText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  modalContent: {
+    borderRadius: 20,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  modalDescription: {
+    fontSize: 14,
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  modalInput: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  modalButton: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalCancel: {
+    alignItems: 'center',
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  modalCancelText: {
+    fontSize: 14,
   },
   detailCard: {
     borderRadius: 16,

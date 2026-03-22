@@ -401,6 +401,25 @@ class ApiService {
     return res.data;
   }
 
+  async findVaultByAddress(
+    address: string,
+  ): Promise<{
+    multisigAddress: string;
+    vaultAddress: string;
+    threshold: number;
+    memberCount: number;
+    members: Array<{ address: string; permissions: { initiate: boolean; vote: boolean; execute: boolean } }>;
+  } | null> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/find-vault-by-address`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address }),
+    });
+    if (!r.ok) throw new Error(`API error: ${r.status}`);
+    const res = await r.json();
+    return res.data?.multisig || null;
+  }
+
   async createRecoveryProposal(params: {
     multisigAddress: string;
     vaultAddress: string;
