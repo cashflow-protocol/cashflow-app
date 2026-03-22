@@ -287,7 +287,7 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
     }
 
     const multisigLib = await import('@sqds/multisig');
-    const { Connection, PublicKey, TransactionMessage, VersionedTransaction } = await import('@solana/web3.js');
+    const { Connection, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram } = await import('@solana/web3.js');
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
     const conn = new Connection(rpcUrl);
 
@@ -295,7 +295,7 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
     const memberPubkey = new PublicKey(memberAddress);
     const transactionIndex = BigInt(proposal.transactionIndex);
 
-    // Build proposalApprove instruction
+    // Build proposalApprove instruction with priority fees
     const approveIx = multisigLib.instructions.proposalApprove({
       multisigPda,
       transactionIndex,
@@ -307,7 +307,11 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
     const msg = new TransactionMessage({
       payerKey: memberPubkey,
       recentBlockhash: blockhash,
-      instructions: [approveIx],
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+        approveIx,
+      ],
     }).compileToV0Message();
 
     const tx = new VersionedTransaction(msg);

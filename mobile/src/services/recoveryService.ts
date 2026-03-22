@@ -11,6 +11,7 @@ import {
   TransactionMessage,
   TransactionInstruction,
   SystemProgram,
+  ComputeBudgetProgram,
 } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { SOLANA_CONFIG } from '../config/solana';
@@ -139,7 +140,10 @@ export async function buildAndSubmitRecoveryProposal(
   const existingCloudPubkey = hasExistingCloud ? new PublicKey(existingCloudKey!) : null;
 
   // Build instructions
-  const tx1Instructions: TransactionInstruction[] = [];
+  const tx1Instructions: TransactionInstruction[] = [
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+  ];
 
   // Create config transaction with all AddMember actions
   tx1Instructions.push(multisig.instructions.configTransactionCreate({
@@ -175,7 +179,10 @@ export async function buildAndSubmitRecoveryProposal(
   }
 
   // Build TX2 — execute + close + Jito tip
-  const tx2Instructions: TransactionInstruction[] = [];
+  const tx2Instructions: TransactionInstruction[] = [
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+  ];
   tx2Instructions.push(multisig.instructions.configTransactionExecute({
     multisigPda,
     transactionIndex,
@@ -293,7 +300,7 @@ export async function buildAndSubmitRecoveryProposal(
   // Step 6: Submit to backend — it will broadcast TX1 on-chain and store the proposal
   onProgress?.('Sending proposal on-chain...');
 
-  const tx1Base64 = Buffer.from(tx1Bytes).toString('base64');
+  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
   const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
   const tx1MessageBase64 = Buffer.from(tx1.message.serialize()).toString('base64');
 
