@@ -319,7 +319,7 @@ export async function createMultisig(
     connection,
     programConfigPda,
   );
-  console.log('[createMultisig] program config fetched.');
+  console.log('[createMultisig] program config fetched');
 
   // --- TX 1: Create multisig + fund cloud key with initial SOL ---
   const createMultisigIx = multisig.instructions.multisigCreateV2({
