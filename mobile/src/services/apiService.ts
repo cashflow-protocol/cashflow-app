@@ -401,6 +401,46 @@ class ApiService {
     return res.data;
   }
 
+  async buildRecoveryProposalTx(params: {
+    multisigAddress: string;
+    walletAddress: string;
+    members: Array<{ address: string; permissions: any }>;
+    cloudKey?: string;
+    addMemberActions: Array<{ memberAddress: string; permissions: string }>;
+  }): Promise<{
+    tx1Base64: string;
+    tx2Base64: string;
+    transactionIndex: number;
+    blockhash: string;
+    threshold: number;
+  }> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/build-proposal-tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: 'Failed' }));
+      throw new Error(err.error || `API error: ${r.status}`);
+    }
+    const res = await r.json();
+    return res.data;
+  }
+
+  async sendSignedRecoveryTx(signedTransaction: string): Promise<{ signature: string }> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/send-signed-tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signedTransaction }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: 'Failed' }));
+      throw new Error(err.error || `API error: ${r.status}`);
+    }
+    const res = await r.json();
+    return res.data;
+  }
+
   async findVaultByAddress(
     address: string,
   ): Promise<{

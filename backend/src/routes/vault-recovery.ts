@@ -143,9 +143,166 @@ router.post('/find-vault-by-address', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /build-proposal-tx
+ * Build TX1 (configTransactionCreate + proposalCreate + proposalApprove) with fresh blockhash.
+ * Mobile signs it and sends back via /create-proposal.
+ */
+router.post('/build-proposal-tx', async (req: Request, res: Response) => {
+  try {
+    const { multisigAddress, walletAddress, members, cloudKey, addMemberActions } = req.body;
+    if (!multisigAddress || !walletAddress || !addMemberActions?.length) {
+      res.status(400).json({ success: false, error: 'Missing required fields' });
+      return;
+    }
+
+    const multisigLib = await import('@sqds/multisig');
+    const { Connection, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl, 'confirmed');
+
+    const multisigPda = new PublicKey(multisigAddress);
+    const walletPubkey = new PublicKey(walletAddress);
+    const { Permissions } = multisigLib.types;
+
+    // Get current transaction index from on-chain
+    const multisigAccount = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
+    const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
+
+    // Build add member actions for the Squads instruction
+    const parsedActions = addMemberActions.map((a: any) => ({
+      __kind: 'AddMember' as const,
+      newMember: {
+        key: new PublicKey(a.memberAddress),
+        permissions: Permissions.all(),
+      },
+    }));
+
+    // Build TX1 instructions
+    const tx1Instructions = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      multisigLib.instructions.configTransactionCreate({
+        multisigPda,
+        transactionIndex,
+        creator: walletPubkey,
+        rentPayer: walletPubkey,
+        actions: parsedActions,
+      }),
+      multisigLib.instructions.proposalCreate({
+        multisigPda,
+        transactionIndex,
+        creator: walletPubkey,
+        rentPayer: walletPubkey,
+      }),
+      multisigLib.instructions.proposalApprove({
+        multisigPda,
+        transactionIndex,
+        member: walletPubkey,
+      }),
+    ];
+
+    // Cloud key approves too if provided
+    if (cloudKey) {
+      const cloudPubkey = new PublicKey(cloudKey);
+      const isMember = (members || []).some((m: any) => m.address === cloudKey);
+      if (isMember) {
+        tx1Instructions.push(multisigLib.instructions.proposalApprove({
+          multisigPda,
+          transactionIndex,
+          member: cloudPubkey,
+        }));
+      }
+    }
+
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+
+    const msg = new TransactionMessage({
+      payerKey: walletPubkey,
+      recentBlockhash: blockhash,
+      instructions: tx1Instructions,
+    }).compileToV0Message();
+    const tx = new VersionedTransaction(msg);
+
+    // Also build TX2 (execute) — stored for later use after threshold is met
+    const tx2Instructions = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      multisigLib.instructions.configTransactionExecute({
+        multisigPda,
+        transactionIndex,
+        member: walletPubkey,
+        rentPayer: walletPubkey,
+      }),
+    ];
+    if (multisigAccount.rentCollector) {
+      tx2Instructions.push(multisigLib.instructions.configTransactionAccountsClose({
+        multisigPda,
+        transactionIndex,
+        rentCollector: new PublicKey(multisigAccount.rentCollector),
+      }));
+    }
+    const msg2 = new TransactionMessage({
+      payerKey: walletPubkey,
+      recentBlockhash: blockhash,
+      instructions: tx2Instructions,
+    }).compileToV0Message();
+    const tx2 = new VersionedTransaction(msg2);
+
+    res.json({
+      success: true,
+      data: {
+        tx1Base64: Buffer.from(tx.serialize()).toString('base64'),
+        tx2Base64: Buffer.from(tx2.serialize()).toString('base64'),
+        transactionIndex: Number(transactionIndex),
+        blockhash,
+        threshold: multisigAccount.threshold,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error building proposal tx:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to build proposal transaction' });
+  }
+});
+
+/**
+ * POST /send-signed-tx
+ * Broadcast a signed transaction via RPC.
+ * Body: { signedTransaction: string (base64) }
+ */
+router.post('/send-signed-tx', async (req: Request, res: Response) => {
+  try {
+    const { signedTransaction } = req.body;
+    if (!signedTransaction) {
+      res.status(400).json({ success: false, error: 'signedTransaction is required' });
+      return;
+    }
+
+    const { Connection } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl, 'confirmed');
+
+    const txBytes = Buffer.from(signedTransaction, 'base64');
+    const signature = await conn.sendRawTransaction(txBytes, {
+      skipPreflight: false,
+      maxRetries: 5,
+    });
+    console.log(`Recovery TX sent: ${signature}`);
+
+    // Wait for confirmation with timeout
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+    await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+    console.log(`Recovery TX confirmed: ${signature}`);
+
+    res.json({ success: true, data: { signature } });
+  } catch (error: any) {
+    console.error('Error sending signed tx:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to send transaction' });
+  }
+});
+
+/**
  * POST /create-proposal
- * Broadcast TX1 on-chain, then store the recovery proposal.
- * The mobile app builds TX1/TX2, signs them, and sends here for broadcasting + storage.
+ * Store a recovery proposal after TX1 has been confirmed on-chain.
  */
 router.post('/create-proposal', async (req: Request, res: Response) => {
   try {
@@ -164,22 +321,21 @@ router.post('/create-proposal', async (req: Request, res: Response) => {
       createdByWallet,
     } = req.body;
 
-    if (!multisigAddress || !tx1Base64 || !tx2Base64 || !requiredSigners?.length) {
+    if (!multisigAddress || !requiredSigners?.length) {
       res.status(400).json({ success: false, error: 'Missing required fields' });
       return;
     }
 
-    // TX1 is already sent on-chain by the mobile app via MWA signAndSend
     const proposal = await RecoveryProposalModel.create({
       multisigAddress,
       vaultAddress,
       transactionIndex,
       threshold,
       actions: actions || [],
-      tx1MessageBase64,
-      tx1Base64,
-      tx2Base64,
-      blockhash,
+      tx1MessageBase64: tx1MessageBase64 || '',
+      tx1Base64: tx1Base64 || '',
+      tx2Base64: tx2Base64 || '',
+      blockhash: blockhash || '',
       requiredSigners,
       collectedSignatures: collectedSignatures || [],
       status: RecoveryProposalStatus.PENDING,
@@ -282,26 +438,11 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
     const memberPubkey = new PublicKey(memberAddress);
     const transactionIndex = BigInt(proposal.transactionIndex);
 
-    // Build proposalApprove instruction with priority fees + Jito tip
+    // Build proposalApprove instruction with priority fees
     const approveIx = multisigLib.instructions.proposalApprove({
       multisigPda,
       transactionIndex,
       member: memberPubkey,
-    });
-
-    // Jito tip
-    const JITO_TIP_ACCOUNTS = [
-      'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
-      'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
-      'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
-      'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
-    ];
-    const { SystemProgram } = await import('@solana/web3.js');
-    const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
-    const jitoTipIx = SystemProgram.transfer({
-      fromPubkey: memberPubkey,
-      toPubkey: new PublicKey(tipAccount),
-      lamports: 500_000,
     });
 
     const { blockhash } = await conn.getLatestBlockhash('confirmed');
@@ -313,7 +454,6 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
         ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
         ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
         approveIx,
-        jitoTipIx,
       ],
     }).compileToV0Message();
 
@@ -346,27 +486,19 @@ router.post('/proposal/:proposalId/send-approve-tx', async (req: Request, res: R
       return;
     }
 
-    const bundleId = await jitoManager.sendBundle([signedTransaction]);
-    console.log(`Approve TX bundle sent: ${bundleId}`);
+    const { Connection } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl, 'confirmed');
 
-    let landed = false;
-    for (let i = 0; i < 15; i++) {
-      await new Promise(r => setTimeout(r, 2000));
-      const status = await jitoManager.getBundleStatus(bundleId);
-      if (status?.confirmation_status === 'confirmed' || status?.confirmation_status === 'finalized') {
-        landed = true;
-        break;
-      }
-      if (status?.err && !('Ok' in status.err)) {
-        throw new Error(`Approve TX failed: ${JSON.stringify(status.err)}`);
-      }
-    }
+    const txBytes = Buffer.from(signedTransaction, 'base64');
+    const signature = await conn.sendRawTransaction(txBytes, { skipPreflight: false, maxRetries: 5 });
+    console.log(`Approve TX sent: ${signature}`);
 
-    if (!landed) {
-      throw new Error('Approve transaction did not land on-chain within timeout');
-    }
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+    await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+    console.log(`Approve TX confirmed: ${signature}`);
 
-    res.json({ success: true, data: { bundleId } });
+    res.json({ success: true, data: { signature } });
   } catch (error: any) {
     console.error('Error sending approve tx:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to send transaction' });

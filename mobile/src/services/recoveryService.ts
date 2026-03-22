@@ -5,16 +5,9 @@
  * by creating a config transaction signed by existing members.
  */
 import {
-  Connection,
   PublicKey,
   VersionedTransaction,
-  TransactionMessage,
-  TransactionInstruction,
-  SystemProgram,
-  ComputeBudgetProgram,
 } from '@solana/web3.js';
-import * as multisig from '@sqds/multisig';
-import { SOLANA_CONFIG } from '../config/solana';
 import { API_CONFIG } from '../config/api';
 import {
   generateAndStoreCloudKeypair,
@@ -26,34 +19,9 @@ import walletService from './walletService';
 import apiService from './apiService';
 import { getRecoveryEmails } from './vaultStorage';
 
-const { Permission, Permissions } = multisig.types;
-
 function maskEmail(email: string): string {
   if (email.length <= 12) return email.slice(0, 2) + '...' + email.slice(-4);
   return email.slice(0, 2) + '...' + email.slice(-10);
-}
-const connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
-
-// Jito tip
-const JITO_TIP_ACCOUNTS = [
-  'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
-  'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
-  'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
-  'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
-  '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5',
-  'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
-  'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL',
-  '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT',
-];
-const JITO_TIP_LAMPORTS = 500_000;
-
-function jitoTipIx(feePayer: PublicKey): TransactionInstruction {
-  const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
-  return SystemProgram.transfer({
-    fromPubkey: feePayer,
-    toPubkey: new PublicKey(tipAccount),
-    lamports: JITO_TIP_LAMPORTS,
-  });
 }
 
 export interface RecoveryMember {
@@ -89,13 +57,9 @@ export async function buildAndSubmitRecoveryProposal(
   threshold: number,
   onProgress?: (msg: string) => void,
 ): Promise<RecoveryProposalResult> {
-  const multisigPda = new PublicKey(multisigAddress);
-  const walletPubkey = new PublicKey(walletAddress);
-
   // Step 1: Generate new keys
   onProgress?.('Generating new keys...');
   const newDeviceKey = await generateAndStoreDeviceKeypair();
-  const newDevicePubkey = new PublicKey(newDeviceKey);
 
   let existingCloudKey = await getCloudPublicKey();
   let newCloudKey: string | null = null;
@@ -108,122 +72,32 @@ export async function buildAndSubmitRecoveryProposal(
 
   // Step 2: Determine AddMember actions
   const actions: Array<{ memberAddress: string; permissions: string }> = [];
-  const addMemberActions: any[] = [];
-
-  // Always add new device key
   actions.push({ memberAddress: newDeviceKey, permissions: 'all' });
-  addMemberActions.push({
-    __kind: 'AddMember' as const,
-    newMember: { key: newDevicePubkey, permissions: Permissions.all() },
-  });
-
-  // Add new cloud key if generated
   if (newCloudKey) {
-    const newCloudPubkey = new PublicKey(newCloudKey);
     actions.push({ memberAddress: newCloudKey, permissions: 'all' });
-    addMemberActions.push({
-      __kind: 'AddMember' as const,
-      newMember: { key: newCloudPubkey, permissions: Permissions.all() },
-    });
   }
 
-  // Step 3: Build TX1 — config transaction + proposal + approvals from available signers
+  // Step 3: Ask backend to build TX1 + TX2 with fresh blockhash
   onProgress?.('Building recovery transaction...');
 
-  const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
-  const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
+  const buildResult = await apiService.buildRecoveryProposalTx({
+    multisigAddress,
+    walletAddress,
+    members,
+    cloudKey: hasExistingCloud ? existingCloudKey! : undefined,
+    addMemberActions: actions,
+  });
 
-  // MWA wallet is the fee payer (cloud key may not have SOL during recovery)
-  const feePayer = walletPubkey;
+  const { tx1Base64, tx2Base64, transactionIndex, blockhash } = buildResult;
 
-  // Determine which existing members can sign
-  const existingCloudPubkey = hasExistingCloud ? new PublicKey(existingCloudKey!) : null;
-
-  // Build instructions
-  const tx1Instructions: TransactionInstruction[] = [
-    ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
-  ];
-
-  // Create config transaction with all AddMember actions
-  tx1Instructions.push(multisig.instructions.configTransactionCreate({
-    multisigPda,
-    transactionIndex,
-    creator: walletPubkey,
-    rentPayer: feePayer,
-    actions: addMemberActions,
-  }));
-
-  // Create proposal
-  tx1Instructions.push(multisig.instructions.proposalCreate({
-    multisigPda,
-    transactionIndex,
-    creator: walletPubkey,
-    rentPayer: feePayer,
-  }));
-
-  // MWA wallet approves
-  tx1Instructions.push(multisig.instructions.proposalApprove({
-    multisigPda,
-    transactionIndex,
-    member: walletPubkey,
-  }));
-
-  // Cloud key approves (if we have the existing cloud key)
-  if (existingCloudPubkey) {
-    tx1Instructions.push(multisig.instructions.proposalApprove({
-      multisigPda,
-      transactionIndex,
-      member: existingCloudPubkey,
-    }));
-  }
-
-  // Jito tip for TX1
-  tx1Instructions.push(jitoTipIx(feePayer));
-
-  // Build TX2 — execute + close + Jito tip
-  const tx2Instructions: TransactionInstruction[] = [
-    ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
-    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
-  ];
-  tx2Instructions.push(multisig.instructions.configTransactionExecute({
-    multisigPda,
-    transactionIndex,
-    member: walletPubkey,
-    rentPayer: feePayer,
-  }));
-
-  if (multisigAccount.rentCollector) {
-    tx2Instructions.push(multisig.instructions.configTransactionAccountsClose({
-      multisigPda,
-      transactionIndex,
-      rentCollector: new PublicKey(multisigAccount.rentCollector),
-    }));
-  }
-  tx2Instructions.push(jitoTipIx(feePayer));
-
-  // Compile transactions
-  const { blockhash } = await connection.getLatestBlockhash('confirmed');
-
-  const msg1 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: tx1Instructions,
-  }).compileToV0Message();
-  const tx1 = new VersionedTransaction(msg1);
-
-  const msg2 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: tx2Instructions,
-  }).compileToV0Message();
-  const tx2 = new VersionedTransaction(msg2);
-
-  // Step 4: Sign locally
+  // Step 4: Sign TX1 with cloud key + MWA, then send via backend
   onProgress?.('Signing with your wallet...');
 
-  // Sign with existing cloud key if available
-  if (existingCloudPubkey) {
+  const tx1 = VersionedTransaction.deserialize(Buffer.from(tx1Base64, 'base64'));
+
+  // Sign with cloud key if it's a member
+  if (hasExistingCloud && existingCloudKey) {
+    const existingCloudPubkey = new PublicKey(existingCloudKey);
     const messageBytes = tx1.message.serialize();
     const messageBase64 = Buffer.from(messageBytes).toString('base64');
     const sigBase64 = await signWithCloud(messageBase64);
@@ -237,29 +111,29 @@ export async function buildAndSubmitRecoveryProposal(
     }
   }
 
-  // Sign and send TX1 via MWA (cloud key sig is already applied, MWA adds its own and sends)
-  onProgress?.('Sending proposal on-chain...');
+  // Sign TX1 with MWA (sign-only)
   const tx1Serialized = new Uint8Array(tx1.serialize());
-  await walletService.signAndSendTransactions([tx1Serialized]);
-
-  // Sign TX2 with MWA (sign-only, will be sent later after threshold is met)
-  const tx2Serialized = new Uint8Array(tx2.serialize());
-  const tx2SignedBytes = await walletService.signTransactions([tx2Serialized]);
-  if (!tx2SignedBytes?.[0]) {
+  const tx1SignedBytes = await walletService.signTransactions([tx1Serialized]);
+  if (!tx1SignedBytes?.[0]) {
     throw new Error('Wallet signing failed — no signed transaction returned');
   }
-  const tx2Signed = VersionedTransaction.deserialize(tx2SignedBytes[0]);
-  const tx2WalletIndex = tx2.message.staticAccountKeys.findIndex(
+  const tx1Signed = VersionedTransaction.deserialize(tx1SignedBytes[0]);
+  const walletPubkey = new PublicKey(walletAddress);
+  const tx1WalletIndex = tx1.message.staticAccountKeys.findIndex(
     (k: PublicKey) => k.equals(walletPubkey),
   );
-  if (tx2WalletIndex !== -1) {
-    tx2.signatures[tx2WalletIndex] = tx2Signed.signatures[tx2WalletIndex];
+  if (tx1WalletIndex !== -1) {
+    tx1.signatures[tx1WalletIndex] = tx1Signed.signatures[tx1WalletIndex];
   }
 
-  // Step 5: Determine required signers and who has already signed
+  // Send TX1 via backend RPC
+  onProgress?.('Sending proposal on-chain...');
+  const signedTx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
+  await apiService.sendSignedRecoveryTx(signedTx1Base64);
+
+  // Step 5: Determine required signers
   const recoveryEmails = await getRecoveryEmails();
   const requiredSigners: RecoveryMember[] = [];
-  const collectedSignatures: Array<{ address: string; signature: string }> = [];
 
   for (const member of members) {
     const addr = member.address;
@@ -283,38 +157,26 @@ export async function buildAndSubmitRecoveryProposal(
     }
 
     requiredSigners.push({ address: addr, type, label, email });
-
-    // Extract collected signatures from signed tx
-    const signerIndex = tx1.message.staticAccountKeys.findIndex(
-      (k: PublicKey) => k.equals(new PublicKey(addr)),
-    );
-    if (signerIndex !== -1) {
-      const sig = tx1.signatures[signerIndex];
-      const isNonZero = sig.some((b: number) => b !== 0);
-      if (isNonZero) {
-        collectedSignatures.push({
-          address: addr,
-          signature: Buffer.from(sig).toString('base64'),
-        });
-      }
-    }
   }
 
-  // Step 6: Store proposal on backend (TX1 already sent on-chain above)
-  onProgress?.('Saving recovery proposal...');
+  // MWA + cloud key already signed TX1 on-chain, so mark them as signed
+  const collectedSignatures: Array<{ address: string; signature: string }> = [];
+  collectedSignatures.push({ address: walletAddress, signature: 'on-chain' });
+  if (hasExistingCloud && existingCloudKey) {
+    collectedSignatures.push({ address: existingCloudKey, signature: 'on-chain' });
+  }
 
-  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-  const tx1MessageBase64 = Buffer.from(tx1.message.serialize()).toString('base64');
+  // Step 6: Store proposal on backend
+  onProgress?.('Saving recovery proposal...');
 
   const result = await apiService.createRecoveryProposal({
     multisigAddress,
     vaultAddress,
-    transactionIndex: Number(transactionIndex),
+    transactionIndex,
     threshold,
     actions,
-    tx1MessageBase64,
-    tx1Base64,
+    tx1MessageBase64: '',
+    tx1Base64: signedTx1Base64,
     tx2Base64,
     blockhash,
     requiredSigners,
