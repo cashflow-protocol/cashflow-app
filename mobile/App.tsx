@@ -27,6 +27,7 @@ import VaultRecoveryScreen from './src/screens/VaultRecoveryScreen';
 import BiometricLockScreen from './src/components/BiometricLockScreen';
 import TabBar, { type TabName } from './src/components/TabBar';
 import { getVault } from './src/services/vaultStorage';
+import { checkWaitlistStatus } from './src/services/onboardingService';
 import { hasPin } from './src/services/pinStorage';
 import { migrateKeypairsToBiometric, getCloudPublicKey } from './src/services/keypairStorage';
 import apiService from './src/services/apiService';
@@ -89,9 +90,21 @@ function App() {
       logAppInit(hasVault, pinExists);
       setUserHasVault(hasVault);
       setUserOnWaitlist(!hasVault && !!cloudPk);
-      // If user previously joined the waitlist, go straight to waitlist screen
+      // If user previously joined the waitlist, check if they've been approved
       if (!hasVault && cloudPk) {
-        setOnboardingStep('waitlist');
+        try {
+          const status = await checkWaitlistStatus(cloudPk);
+          if (status.approved && status.inviteCode) {
+            // Already approved — go straight to vault setup
+            setInviteCode(status.inviteCode);
+            setOnboardingStep('vault-setup');
+          } else {
+            setOnboardingStep('waitlist');
+          }
+        } catch {
+          // If check fails, fall back to waitlist screen
+          setOnboardingStep('waitlist');
+        }
         // Initialize push notifications for waitlist users
         initializeWaitlistPushNotifications(cloudPk).catch((err) => {
           console.error('Waitlist push notification init failed:', err);
@@ -285,7 +298,6 @@ function App() {
           <VaultSetupScreen
             inviteCode={inviteCode}
             onComplete={handleVaultComplete}
-            onReset={() => { setInviteCode(''); setOnboardingStep('waitlist'); }}
             onRecovery={() => setOnboardingStep('vault-recovery')}
           />
         );

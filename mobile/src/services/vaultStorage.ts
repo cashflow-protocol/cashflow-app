@@ -43,6 +43,7 @@ export async function clearVault(): Promise<void> {
   await Keychain.resetGenericPassword({ service: VAULT_SERVICE });
 }
 
+
 // Recovery email map: address → email
 const RECOVERY_EMAILS_SERVICE = 'fun.cashflow.recoveryEmails';
 let cachedRecoveryEmails: Record<string, string> | undefined = undefined;
