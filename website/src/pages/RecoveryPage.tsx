@@ -1,7 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router';
-import { useWalletConnectors, useConnectWallet, useDisconnectWallet, useWallet, useTransactionSigner } from '@solana/connector/react';
-import { VersionedTransaction, PublicKey } from '@solana/web3.js';
+import {
+  useWalletConnectors,
+  useConnectWallet,
+  useDisconnectWallet,
+  useWallet,
+  useKitTransactionSigner,
+} from '@solana/connector/react';
+import {
+  getBase64Decoder,
+  getBase64Encoder,
+  getTransactionDecoder,
+  getTransactionEncoder,
+  address,
+} from '@solana/kit';
 import '../styles/recovery.css';
 
 const API_BASE = window.location.hostname.includes('localhost')
@@ -10,7 +22,7 @@ const API_BASE = window.location.hostname.includes('localhost')
     ? 'https://api-dev.cashflow.fun'
     : 'https://api.cashflow.fun';
 
-interface Signer {
+interface SignerInfo {
   address: string;
   type: string;
   label?: string;
@@ -27,7 +39,7 @@ interface Proposal {
   actions: Array<{ memberAddress: string; permissions: string }>;
   signaturesCollected: number;
   tx1Base64: string;
-  requiredSigners: Signer[];
+  requiredSigners: SignerInfo[];
 }
 
 function truncate(addr: string) {
@@ -53,9 +65,9 @@ export default function RecoveryPage() {
   // @solana/connector hooks
   const wallets = useWalletConnectors();
   const { connect } = useConnectWallet();
-  const { disconnect } = useDisconnectWallet();
+  const { disconnect: disconnectWallet } = useDisconnectWallet();
   const { account: connectedAddress } = useWallet();
-  const { signer, ready: signerReady } = useTransactionSigner();
+  const { signer: kitSigner, ready: signerReady } = useKitTransactionSigner();
 
   const loadProposal = useCallback(async () => {
     try {
@@ -70,6 +82,10 @@ export default function RecoveryPage() {
     }
   }, [proposalId]);
 
+  const disconnect = useCallback(() => {
+    disconnectWallet();
+  }, [disconnectWallet]);
+
   // Disconnect any previously remembered wallet on mount
   useEffect(() => { disconnect(); }, []);
 
@@ -81,10 +97,10 @@ export default function RecoveryPage() {
     setShowWalletPicker(false);
 
     const addr = connectedAddress.toString();
-    const signer = proposal.requiredSigners.find(s => s.address === addr);
-    if (!signer) {
+    const s = proposal.requiredSigners.find(s => s.address === addr);
+    if (!s) {
       setError(`Wallet ${truncate(addr)} is not a required signer for this proposal.`);
-    } else if (signer.signed) {
+    } else if (s.signed) {
       setError('This wallet has already signed this proposal.');
     }
   }, [connectedAddress, proposal]);
@@ -96,28 +112,30 @@ export default function RecoveryPage() {
   };
 
   const handleSign = async () => {
-    if (!connectedAddress || !proposal || !signer) return;
+    if (!connectedAddress || !proposal || !kitSigner) return;
     const addr = connectedAddress.toString();
     setSigning(true);
     setError('');
 
     try {
-      // Deserialize the transaction
+      const txDecode = getTransactionDecoder();
+
+      // Decode the base64 transaction into @solana/kit Transaction
       const txBytes = Uint8Array.from(atob(proposal.tx1Base64), c => c.charCodeAt(0));
-      const tx = VersionedTransaction.deserialize(txBytes);
+      const tx = txDecode.decode(txBytes);
 
-      // Sign via @solana/connector's TransactionSigner
-      const signedTx = await signer.signTransaction(tx) as VersionedTransaction;
+      // Sign using kit's TransactionModifyingSigner
+      const [signedTx] = await kitSigner.modifyAndSignTransactions([tx]);
 
-      // Extract our signature by index
-      const walletPubkey = new PublicKey(addr);
-      const walletIndex = tx.message.staticAccountKeys.findIndex(
-        (k: PublicKey) => k.equals(walletPubkey),
-      );
-      if (walletIndex === -1) throw new Error('Wallet not found in transaction signers');
+      // Extract the signer's signature from the signed transaction
+      const walletAddr = address(addr);
+      const sig = signedTx.signatures[walletAddr];
 
-      const sigBytes = signedTx.signatures[walletIndex];
-      const sigBase64 = btoa(String.fromCharCode(...sigBytes));
+      if (!sig) {
+        throw new Error('No signature found for connected wallet');
+      }
+
+      const sigBase64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
 
       // Submit to backend
       const submitRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
@@ -214,14 +232,12 @@ export default function RecoveryPage() {
           ))}
         </div>
 
-        {/* Not connected — show connect button */}
         {!connectedAddr && (
           <button className="btn btn-primary" onClick={() => setShowWalletPicker(true)}>
             Connect Wallet
           </button>
         )}
 
-        {/* Wallet picker modal */}
         {showWalletPicker && (
           <div className="wallet-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowWalletPicker(false); }}>
             <div className="wallet-sheet">
@@ -252,7 +268,6 @@ export default function RecoveryPage() {
           </div>
         )}
 
-        {/* Connected — show sign button + disconnect */}
         {canSign && (
           <button className="btn btn-primary" onClick={handleSign} disabled={signing}>
             {signing ? 'Signing...' : 'Sign Recovery Proposal'}
