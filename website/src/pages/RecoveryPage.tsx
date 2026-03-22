@@ -5,13 +5,10 @@ import {
   useConnectWallet,
   useDisconnectWallet,
   useWallet,
-  useKitTransactionSigner,
+  useTransactionSigner,
 } from '@solana/connector/react';
 import {
-  getBase64Decoder,
-  getBase64Encoder,
   getTransactionDecoder,
-  getTransactionEncoder,
   address,
 } from '@solana/kit';
 import '../styles/recovery.css';
@@ -67,7 +64,7 @@ export default function RecoveryPage() {
   const { connect } = useConnectWallet();
   const { disconnect: disconnectWallet } = useDisconnectWallet();
   const { account: connectedAddress } = useWallet();
-  const { signer: kitSigner, ready: signerReady } = useKitTransactionSigner();
+  const { signer, ready: signerReady } = useTransactionSigner();
 
   const loadProposal = useCallback(async () => {
     try {
@@ -112,22 +109,29 @@ export default function RecoveryPage() {
   };
 
   const handleSign = async () => {
-    if (!connectedAddress || !proposal || !kitSigner) return;
+    if (!connectedAddress || !proposal || !signer) return;
     const addr = connectedAddress.toString();
     setSigning(true);
     setError('');
 
     try {
-      const txDecode = getTransactionDecoder();
-
-      // Decode the base64 transaction into @solana/kit Transaction
+      // Pass raw bytes to the connector's TransactionSigner
       const txBytes = Uint8Array.from(atob(proposal.tx1Base64), c => c.charCodeAt(0));
-      const tx = txDecode.decode(txBytes);
 
-      // Sign using kit's TransactionModifyingSigner
-      const [signedTx] = await kitSigner.modifyAndSignTransactions([tx]);
+      // signTransaction accepts Uint8Array and returns the signed result
+      const signedResult = await signer.signTransaction(txBytes);
 
-      // Extract the signer's signature from the signed transaction
+      // Decode the signed transaction using @solana/kit to extract signature
+      const txDecode = getTransactionDecoder();
+      // The result could be Uint8Array, VersionedTransaction, or other SolanaTransaction types
+      const signedBytes = signedResult instanceof Uint8Array
+        ? signedResult
+        : typeof (signedResult as any).serialize === 'function'
+          ? new Uint8Array((signedResult as any).serialize())
+          : new Uint8Array(signedResult as unknown as ArrayBuffer);
+      const signedTx = txDecode.decode(signedBytes);
+
+      // Extract the signer's signature from the signatures map
       const walletAddr = address(addr);
       const sig = signedTx.signatures[walletAddr];
 
