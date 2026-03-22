@@ -25,6 +25,11 @@ import apiService from './apiService';
 import { getRecoveryEmails } from './vaultStorage';
 
 const { Permission, Permissions } = multisig.types;
+
+function maskEmail(email: string): string {
+  if (email.length <= 12) return email.slice(0, 2) + '...' + email.slice(-4);
+  return email.slice(0, 2) + '...' + email.slice(-10);
+}
 const connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
 
 // Jito tip
@@ -260,7 +265,7 @@ export async function buildAndSubmitRecoveryProposal(
     } else if (recoveryEmails[addr]) {
       type = 'privy';
       email = recoveryEmails[addr];
-      label = `Email (${email})`;
+      label = `Email (${maskEmail(email)})`;
     } else {
       type = 'external';
       label = 'External Wallet';

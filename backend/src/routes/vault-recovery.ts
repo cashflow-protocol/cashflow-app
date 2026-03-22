@@ -77,6 +77,72 @@ router.post('/find-vaults', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /find-vault-by-address
+ * Look up a specific Squads V4 multisig by its multisig or vault address.
+ * Body: { address: string }
+ */
+router.post('/find-vault-by-address', async (req: Request, res: Response) => {
+  try {
+    const { address } = req.body;
+    if (!address || typeof address !== 'string') {
+      res.status(400).json({ success: false, error: 'address is required' });
+      return;
+    }
+
+    // The Squads API /multisigs/:address works for member lookups,
+    // but for a direct multisig lookup we need a different approach.
+    // Try fetching the multisig account directly via Solana RPC.
+    const { Connection, PublicKey } = await import('@solana/web3.js');
+    const multisigLib = await import('@sqds/multisig');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl);
+
+    // Try the address as a multisig PDA first
+    let multisigPda: InstanceType<typeof PublicKey>;
+    let multisigData: any;
+    let vaultAddress: string;
+
+    try {
+      multisigPda = new PublicKey(address);
+      multisigData = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
+      const [vaultPda] = multisigLib.getVaultPda({ multisigPda, index: 0 });
+      vaultAddress = vaultPda.toBase58();
+    } catch {
+      // Not a valid multisig address — try treating it as a vault address
+      // and search for it via the Squads API using each member
+      // Since we can't reverse a vault PDA, return not found
+      res.json({ success: true, data: { multisig: null } });
+      return;
+    }
+
+    const members = multisigData.members.map((m: any) => ({
+      address: m.key.toBase58(),
+      permissions: {
+        initiate: (m.permissions.mask & 1) !== 0,
+        vote: (m.permissions.mask & 2) !== 0,
+        execute: (m.permissions.mask & 4) !== 0,
+      },
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        multisig: {
+          multisigAddress: multisigPda.toBase58(),
+          vaultAddress,
+          threshold: multisigData.threshold,
+          memberCount: members.length,
+          members,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Error finding vault by address:', error);
+    res.status(500).json({ success: false, error: 'Failed to find vault' });
+  }
+});
+
+/**
  * POST /create-proposal
  * Store a recovery proposal with pre-built transactions.
  * The mobile app builds TX1/TX2 and sends them here for multi-party signing.

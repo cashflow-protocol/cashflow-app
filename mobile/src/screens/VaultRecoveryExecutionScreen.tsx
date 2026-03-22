@@ -53,6 +53,11 @@ function truncateAddress(addr: string): string {
   return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
 }
 
+function maskEmail(email: string): string {
+  if (email.length <= 12) return email.slice(0, 2) + '...' + email.slice(-4);
+  return email.slice(0, 2) + '...' + email.slice(-10);
+}
+
 export default function VaultRecoveryExecutionScreen({
   vault,
   walletAddress,
@@ -160,7 +165,7 @@ export default function VaultRecoveryExecutionScreen({
   const handlePrivySign = useCallback(async (email: string) => {
     if (!proposalId) return;
     try {
-      setStatusText(`Signing with ${email}...`);
+      setStatusText(`Signing with ${maskEmail(email)}...`);
       const result = await apiService.requestPrivySign(proposalId, email);
       setSignaturesCollected(result.signaturesCollected);
 

@@ -179,6 +179,12 @@
       return addr ? addr.slice(0, 4) + '...' + addr.slice(-4) : '';
     }
 
+    function maskEmail(email) {
+      if (!email) return '';
+      if (email.length <= 12) return email.slice(0, 2) + '...' + email.slice(-4);
+      return email.slice(0, 2) + '...' + email.slice(-10);
+    }
+
     async function loadProposal() {
       try {
         const res = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}`);
@@ -230,7 +236,7 @@
         div.innerHTML = `
           <div>
             <div class="signer-addr">${truncate(s.address)}</div>
-            <div class="signer-type">${s.type || ''}${s.label ? ' - ' + s.label : ''}</div>
+            <div class="signer-type">${s.type || ''}${s.email ? ' - ' + maskEmail(s.email) : s.label ? ' - ' + s.label : ''}</div>
           </div>
           ${badge}
         `;
