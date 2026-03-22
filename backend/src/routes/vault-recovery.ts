@@ -213,7 +213,7 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
       }
     }
 
-    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
 
     const msg = new TransactionMessage({
       payerKey: walletPubkey,
@@ -253,6 +253,7 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
         tx2Base64: Buffer.from(tx2.serialize()).toString('base64'),
         transactionIndex: Number(transactionIndex),
         blockhash,
+        lastValidBlockHeight,
         threshold: multisigAccount.threshold,
       },
     });
@@ -269,7 +270,7 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
  */
 router.post('/send-signed-tx', async (req: Request, res: Response) => {
   try {
-    const { signedTransaction } = req.body;
+    const { signedTransaction, blockhash, lastValidBlockHeight } = req.body;
     if (!signedTransaction) {
       res.status(400).json({ success: false, error: 'signedTransaction is required' });
       return;
@@ -286,9 +287,15 @@ router.post('/send-signed-tx', async (req: Request, res: Response) => {
     });
     console.log(`Recovery TX sent: ${signature}`);
 
-    // Wait for confirmation with timeout
-    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
-    await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+    // Use the original blockhash for confirmation if provided, otherwise fetch fresh
+    let confirmStrategy;
+    if (blockhash && lastValidBlockHeight) {
+      confirmStrategy = { signature, blockhash, lastValidBlockHeight };
+    } else {
+      const latest = await conn.getLatestBlockhash('confirmed');
+      confirmStrategy = { signature, blockhash: latest.blockhash, lastValidBlockHeight: latest.lastValidBlockHeight };
+    }
+    await conn.confirmTransaction(confirmStrategy, 'confirmed');
     console.log(`Recovery TX confirmed: ${signature}`);
 
     res.json({ success: true, data: { signature } });

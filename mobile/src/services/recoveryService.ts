@@ -88,7 +88,7 @@ export async function buildAndSubmitRecoveryProposal(
     addMemberActions: actions,
   });
 
-  const { tx1Base64, tx2Base64, transactionIndex, blockhash } = buildResult;
+  const { tx1Base64, tx2Base64, transactionIndex, blockhash, lastValidBlockHeight } = buildResult;
 
   // Step 4: Sign TX1 with cloud key + MWA, then send via backend
   onProgress?.('Signing with your wallet...');
@@ -129,7 +129,7 @@ export async function buildAndSubmitRecoveryProposal(
   // Send TX1 via backend RPC
   onProgress?.('Sending proposal on-chain...');
   const signedTx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  await apiService.sendSignedRecoveryTx(signedTx1Base64);
+  await apiService.sendSignedRecoveryTx(signedTx1Base64, blockhash, lastValidBlockHeight);
 
   // Step 5: Determine required signers
   const recoveryEmails = await getRecoveryEmails();

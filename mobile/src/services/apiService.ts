@@ -412,6 +412,7 @@ class ApiService {
     tx2Base64: string;
     transactionIndex: number;
     blockhash: string;
+    lastValidBlockHeight: number;
     threshold: number;
   }> {
     const r = await fetch(`${this.baseUrl}/vault-recovery/v1/build-proposal-tx`, {
@@ -427,11 +428,11 @@ class ApiService {
     return res.data;
   }
 
-  async sendSignedRecoveryTx(signedTransaction: string): Promise<{ signature: string }> {
+  async sendSignedRecoveryTx(signedTransaction: string, blockhash?: string, lastValidBlockHeight?: number): Promise<{ signature: string }> {
     const r = await fetch(`${this.baseUrl}/vault-recovery/v1/send-signed-tx`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ signedTransaction }),
+      body: JSON.stringify({ signedTransaction, blockhash, lastValidBlockHeight }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({ error: 'Failed' }));
