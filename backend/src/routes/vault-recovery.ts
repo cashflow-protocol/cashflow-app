@@ -7,44 +7,17 @@ import path from 'path';
 const router = Router();
 const jitoManager = new JitoManager();
 
-const SQUADS_PROGRAM_ID = 'SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf';
-
-// Squads V4 Multisig account layout — member keys start at byte 132,
-// each Member entry is 33 bytes (32 pubkey + 1 permissions mask).
-const FIRST_MEMBER_OFFSET = 132;
-const MEMBER_STRIDE = 33;
-const MAX_MEMBER_POSITIONS = 5;
+const SQUADS_V4_API = 'https://v4-api.squads.so';
 
 /**
- * Search for Squads V4 Multisig accounts that contain a specific pubkey as a member.
- * Uses targeted memcmp filters at each possible member offset so the RPC
- * filters server-side (no full gPA scan).
+ * Fetch multisigs for a member address using the Squads V4 API.
  */
-async function findMultisigsByMember(conn: any, PublicKeyClass: any, address: string) {
-  const programId = new PublicKeyClass(SQUADS_PROGRAM_ID);
-  const queries = [];
-  for (let i = 0; i < MAX_MEMBER_POSITIONS; i++) {
-    const offset = FIRST_MEMBER_OFFSET + i * MEMBER_STRIDE;
-    queries.push(
-      conn.getProgramAccounts(programId, {
-        filters: [{ memcmp: { offset, bytes: address } }],
-      }).catch(() => []),
-    );
-  }
-  const results = await Promise.all(queries);
-  // Deduplicate by pubkey
-  const seen = new Set<string>();
-  const accounts: { pubkey: any; account: any }[] = [];
-  for (const batch of results) {
-    for (const item of batch) {
-      const key = item.pubkey.toBase58();
-      if (!seen.has(key)) {
-        seen.add(key);
-        accounts.push(item);
-      }
-    }
-  }
-  return accounts;
+async function fetchMultisigsFromSquadsApi(memberAddress: string) {
+  const r = await fetch(`${SQUADS_V4_API}/multisigs/${memberAddress}?useProd=true`);
+  if (!r.ok) return [];
+  const data = await r.json();
+  if (!Array.isArray(data)) return [];
+  return data;
 }
 
 /**
@@ -60,62 +33,39 @@ router.post('/find-vaults', async (req: Request, res: Response) => {
       return;
     }
 
-    const multisigLib = await import('@sqds/multisig');
-    const { Connection, PublicKey } = await import('@solana/web3.js');
-    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-    const conn = new Connection(rpcUrl);
-
-    // Search for multisigs containing memberAddress and optionally cloudKey
-    const searchAddresses = [memberAddress];
-    if (cloudKey && cloudKey !== memberAddress) searchAddresses.push(cloudKey);
-
-    const allAccounts: { pubkey: any; account: any }[] = [];
-    const seen = new Set<string>();
-    for (const addr of searchAddresses) {
-      const found = await findMultisigsByMember(conn, PublicKey, addr);
-      for (const item of found) {
-        const key = item.pubkey.toBase58();
-        if (!seen.has(key)) {
-          seen.add(key);
-          allAccounts.push(item);
-        }
-      }
+    // Query Squads V4 API for both memberAddress and cloudKey
+    const queries = [fetchMultisigsFromSquadsApi(memberAddress)];
+    if (cloudKey && cloudKey !== memberAddress) {
+      queries.push(fetchMultisigsFromSquadsApi(cloudKey));
     }
+    const results = await Promise.all(queries);
 
-    // Parse matched accounts and build response
+    // Deduplicate by multisig address
+    const seen = new Set<string>();
     const multisigs = [];
-    for (const { pubkey, account } of allAccounts) {
-      try {
-        const [data] = multisigLib.accounts.Multisig.fromAccountInfo(account);
-        const members = data.members.map((m: any) => ({
-          key: m.key.toBase58(),
-          permissions: m.permissions.mask,
-        }));
+    for (const batch of results) {
+      for (const ms of batch) {
+        if (seen.has(ms.address)) continue;
+        seen.add(ms.address);
 
-        // Verify at least one search address is in the members list
-        const isMember = members.some((m: any) => searchAddresses.includes(m.key));
-        if (!isMember) continue;
-
-        const multisigPda = pubkey;
-        const [vaultPda] = multisigLib.getVaultPda({ multisigPda, index: 0 });
-
+        const members = ms.account?.members || [];
         multisigs.push({
-          multisigAddress: pubkey.toBase58(),
-          vaultAddress: vaultPda.toBase58(),
-          threshold: data.threshold,
+          multisigAddress: ms.address,
+          vaultAddress: ms.defaultVault,
+          threshold: ms.account?.threshold ?? 1,
           memberCount: members.length,
           members: members.map((m: any) => ({
             address: m.key,
             permissions: {
-              initiate: (m.permissions & 1) !== 0,
-              vote: (m.permissions & 2) !== 0,
-              execute: (m.permissions & 4) !== 0,
+              initiate: (m.permissions?.mask & 1) !== 0,
+              vote: (m.permissions?.mask & 2) !== 0,
+              execute: (m.permissions?.mask & 4) !== 0,
             },
           })),
-          matchesCloudKey: cloudKey ? members.some((m: any) => m.key === cloudKey) : undefined,
+          matchesCloudKey: cloudKey
+            ? members.some((m: any) => m.key === cloudKey)
+            : undefined,
         });
-      } catch {
-        // Skip malformed accounts
       }
     }
 
