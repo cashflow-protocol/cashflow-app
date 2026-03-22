@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   FlatList,
   Animated,
-  Modal,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +17,7 @@ import { getCloudPublicKey } from '../services/keypairStorage';
 import apiService from '../services/apiService';
 import Toast from '../components/Toast';
 import { useTheme } from '../theme/ThemeContext';
+import BottomSheet from '../components/BottomSheet';
 import VaultRecoveryExecutionScreen from './VaultRecoveryExecutionScreen';
 
 interface VaultRecoveryScreenProps {
@@ -288,18 +288,27 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
     switch (step) {
       case 'connect':
         return (
-          <TouchableOpacity
-            style={[styles.primaryButton, { backgroundColor: colors.onboardingButton }]}
-            onPress={handleConnect}
-            disabled={loading}
-            activeOpacity={0.7}
-          >
-            {loading ? (
-              <ActivityIndicator color="#6d28d9" />
-            ) : (
-              <Text style={[styles.primaryButtonText, { color: colors.onboardingButtonText }]}>Connect Wallet</Text>
-            )}
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={[styles.primaryButton, { backgroundColor: colors.onboardingButton }]}
+              onPress={handleConnect}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              {loading ? (
+                <ActivityIndicator color="#6d28d9" />
+              ) : (
+                <Text style={[styles.primaryButtonText, { color: colors.onboardingButtonText }]}>Connect Wallet</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setManualModalVisible(true)}
+              activeOpacity={0.7}
+              style={{ alignItems: 'center', marginTop: 16 }}
+            >
+              <Text style={{ color: colors.onboardingTextMuted, fontSize: 14 }}>Enter vault address manually</Text>
+            </TouchableOpacity>
+          </>
         );
       case 'no-results':
         return (
@@ -384,50 +393,40 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
         </View>
       </SafeAreaView>
 
-      {/* Manual vault address modal */}
-      <Modal
+      {/* Manual vault address bottom sheet */}
+      <BottomSheet
         visible={manualModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setManualModalVisible(false)}
+        onClose={() => { setManualModalVisible(false); setManualAddress(''); }}
+        avoidKeyboard
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Enter Vault Address</Text>
-            <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
-              Enter the Squads multisig address for the vault you want to recover.
-            </Text>
-            <TextInput
-              style={[styles.modalInput, { backgroundColor: colors.cardSecondary, color: colors.textPrimary }]}
-              value={manualAddress}
-              onChangeText={setManualAddress}
-              placeholder="Multisig address..."
-              placeholderTextColor={colors.textTertiary}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: colors.onboardingButton }]}
-              onPress={handleManualLookup}
-              disabled={manualLoading || manualAddress.trim().length === 0}
-              activeOpacity={0.7}
-            >
-              {manualLoading ? (
-                <ActivityIndicator color={colors.onboardingButtonText} />
-              ) : (
-                <Text style={[styles.modalButtonText, { color: colors.onboardingButtonText }]}>Look Up</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => { setManualModalVisible(false); setManualAddress(''); }}
-              activeOpacity={0.7}
-              style={styles.modalCancel}
-            >
-              <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        <Text style={[styles.sheetTitle, { color: colors.textPrimary }]}>Enter Vault Address</Text>
+        <Text style={[styles.sheetSubtitle, { color: colors.textSecondary }]}>
+          Enter the Squads multisig address for the vault you want to recover.
+        </Text>
+        <TextInput
+          style={[styles.sheetInput, { backgroundColor: colors.inputBackground, color: colors.textPrimary }]}
+          value={manualAddress}
+          onChangeText={setManualAddress}
+          placeholder="Multisig address..."
+          placeholderTextColor={colors.placeholderColor}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="done"
+          onSubmitEditing={handleManualLookup}
+        />
+        <TouchableOpacity
+          style={[styles.sheetButton, { backgroundColor: colors.accentBlue }, (manualLoading || manualAddress.trim().length === 0) && styles.sheetButtonDisabled]}
+          onPress={handleManualLookup}
+          disabled={manualLoading || manualAddress.trim().length === 0}
+          activeOpacity={0.7}
+        >
+          {manualLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.sheetButtonText}>Look Up</Text>
+          )}
+        </TouchableOpacity>
+      </BottomSheet>
     </View>
   );
 }
@@ -519,49 +518,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  modalContent: {
-    borderRadius: 20,
-    padding: 24,
-  },
-  modalTitle: {
-    fontSize: 18,
+  sheetTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    marginBottom: 8,
   },
-  modalDescription: {
+  sheetSubtitle: {
     fontSize: 14,
-    marginBottom: 20,
-    lineHeight: 20,
   },
-  modalInput: {
+  sheetInput: {
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    fontSize: 14,
-    marginBottom: 16,
+    fontSize: 16,
   },
-  modalButton: {
-    borderRadius: 14,
+  sheetButton: {
+    borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
   },
-  modalButtonText: {
+  sheetButtonDisabled: {
+    opacity: 0.5,
+  },
+  sheetButtonText: {
+    color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
-  },
-  modalCancel: {
-    alignItems: 'center',
-    marginTop: 12,
-    paddingVertical: 8,
-  },
-  modalCancelText: {
-    fontSize: 14,
+    fontWeight: '700',
   },
   detailCard: {
     borderRadius: 16,
