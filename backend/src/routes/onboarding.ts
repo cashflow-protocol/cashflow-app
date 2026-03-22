@@ -86,6 +86,12 @@ router.post('/redeem-invite', async (req, res) => {
       return;
     }
 
+    // Mark the waitlist user as approved so check-status works on app restart
+    await WaitlistUserModel.findOneAndUpdate(
+      { publicKey },
+      { $set: { status: 'approved', inviteCode: code.toUpperCase(), approvedAt: new Date() } },
+    );
+
     res.json({ success: true });
   } catch (error) {
     console.error('Redeem invite error:', error);
