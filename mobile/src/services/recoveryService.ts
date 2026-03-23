@@ -13,7 +13,6 @@ import {
   generateAndStoreCloudKeypair,
   generateAndStoreDeviceKeypair,
   getCloudPublicKey,
-  signWithCloud,
 } from './keypairStorage';
 import walletService from './walletService';
 import apiService from './apiService';
@@ -77,72 +76,29 @@ export async function buildAndSubmitRecoveryProposal(
     actions.push({ memberAddress: newCloudKey, permissions: 'all' });
   }
 
-  // Step 3: Ask backend to build TX1 + TX2 with fresh blockhash
+  // Step 3: Ask backend to build TX1 (without cloud key — only MWA signs)
+  // Cloud key will approve separately after TX1 lands, same as other voters.
   onProgress?.('Building recovery transaction...');
 
   const buildResult = await apiService.buildRecoveryProposalTx({
     multisigAddress,
     walletAddress,
     members,
-    cloudKey: hasExistingCloud ? existingCloudKey! : undefined,
     addMemberActions: actions,
+    // Don't include cloudKey — MWA is the only signer for TX1
   });
 
-  const { tx1Base64, tx2Base64, transactionIndex, blockhash } = buildResult;
+  const { tx2Base64, transactionIndex, blockhash } = buildResult;
 
-  // Step 4: Sign TX1 with cloud key + MWA, then send via backend
+  // Step 4: Sign and send TX1 via MWA signAndSend
+  // MWA handles blockhash refresh internally — no stale blockhash issue
   onProgress?.('Signing with your wallet...');
 
-  const tx1 = VersionedTransaction.deserialize(Buffer.from(tx1Base64, 'base64'));
-
-  // Sign with cloud key if it's a member
-  if (hasExistingCloud && existingCloudKey) {
-    const existingCloudPubkey = new PublicKey(existingCloudKey);
-    const messageBytes = tx1.message.serialize();
-    const messageBase64 = Buffer.from(messageBytes).toString('base64');
-    const sigBase64 = await signWithCloud(messageBase64);
-    const sigBytes = new Uint8Array(Buffer.from(sigBase64, 'base64'));
-
-    const cloudIndex = tx1.message.staticAccountKeys.findIndex(
-      (k: PublicKey) => k.equals(existingCloudPubkey),
-    );
-    if (cloudIndex !== -1) {
-      tx1.signatures[cloudIndex] = sigBytes;
-    }
-  }
-
-  // Sign TX1 with MWA (sign-only)
+  const tx1 = VersionedTransaction.deserialize(Buffer.from(buildResult.tx1Base64, 'base64'));
   const tx1Serialized = new Uint8Array(tx1.serialize());
-  const tx1SignedBytes = await walletService.signTransactions([tx1Serialized]);
-  if (!tx1SignedBytes?.[0]) {
-    throw new Error('Wallet signing failed — no signed transaction returned');
-  }
-  const tx1Signed = VersionedTransaction.deserialize(tx1SignedBytes[0]);
-  const walletPubkey = new PublicKey(walletAddress);
-  const tx1WalletIndex = tx1.message.staticAccountKeys.findIndex(
-    (k: PublicKey) => k.equals(walletPubkey),
-  );
-  if (tx1WalletIndex !== -1) {
-    tx1.signatures[tx1WalletIndex] = tx1Signed.signatures[tx1WalletIndex];
-  }
+  await walletService.signAndSendTransactions([tx1Serialized]);
 
-  // Send TX1 via Jito bundle (no auth needed for v1)
-  onProgress?.('Sending proposal on-chain...');
-  const signedTx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-
-  const bundleRes = await fetch(`${API_CONFIG.baseUrl}/solana/v1/send-bundle`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transactions: [signedTx1Base64] }),
-  });
-  if (!bundleRes.ok) {
-    const err = await bundleRes.json().catch(() => ({ error: 'Failed' }));
-    throw new Error(err.error || 'Failed to send recovery transaction');
-  }
-  const bundleData = await bundleRes.json();
-  if (bundleData.status !== 'confirmed' && bundleData.status !== 'finalized') {
-    throw new Error('Recovery transaction did not confirm. Please try again.');
-  }
+  onProgress?.('Proposal sent on-chain...');
 
   // Step 5: Determine required signers
   const recoveryEmails = await getRecoveryEmails();
@@ -189,7 +145,7 @@ export async function buildAndSubmitRecoveryProposal(
     threshold,
     actions,
     tx1MessageBase64: '',
-    tx1Base64: signedTx1Base64,
+    tx1Base64: buildResult.tx1Base64,
     tx2Base64,
     blockhash,
     requiredSigners,
