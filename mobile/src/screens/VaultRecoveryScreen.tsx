@@ -73,9 +73,12 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
   }, []);
 
   const handleConnect = useCallback(async () => {
+    console.log('[Recovery] handleConnect called, selectedVault:', selectedVault?.multisigAddress);
     setLoading(true);
     try {
+      console.log('[Recovery] calling connectWallet...');
       const account = await connectWallet();
+      console.log('[Recovery] connectWallet returned:', account?.publicKey);
       if (!account) {
         showToast('Failed to connect wallet');
         setLoading(false);
@@ -126,17 +129,47 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
     setStep('confirm');
   }, []);
 
-  const handleRecover = useCallback(() => {
+  const handleRecover = useCallback(async () => {
     if (!selectedVault) return;
+
+    // If wallet not connected, connect first then proceed
+    let addr = walletAddress;
+    if (!addr) {
+      setManualModalVisible(false);
+      await new Promise(r => setTimeout(r, 300));
+
+      setLoading(true);
+      try {
+        const account = await connectWallet();
+        if (!account) {
+          showToast('Failed to connect wallet');
+          setLoading(false);
+          return;
+        }
+        addr = account.publicKey as string;
+        setWalletAddress(addr);
+      } catch (err: any) {
+        const msg = err?.message || '';
+        if (!msg.includes('CancellationException')) {
+          showToast(msg || 'Failed to connect wallet');
+        }
+        setLoading(false);
+        return;
+      }
+      setLoading(false);
+    }
+
     setStep('executing');
-  }, [selectedVault]);
+  }, [selectedVault, walletAddress, connectWallet, showToast]);
 
   const handleManualLookup = useCallback(async () => {
     const trimmed = manualAddress.trim();
     if (!trimmed) return;
     setManualLoading(true);
     try {
+      console.log('[Recovery] manual lookup for:', trimmed);
       const result = await apiService.findVaultByAddress(trimmed);
+      console.log('[Recovery] manual lookup result:', JSON.stringify(result));
       if (!result) {
         showToast('No vault found for this address');
         return;
@@ -144,6 +177,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       setManualModalVisible(false);
       setManualAddress('');
       setSelectedVault(result);
+      console.log('[Recovery] selectedVault set, going to confirm');
       setStep('confirm');
     } catch (err: any) {
       showToast(err.message || 'Failed to look up vault');
@@ -274,6 +308,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
   );
 
   const renderStepContent = () => {
+    console.log('[Recovery] renderStepContent step:', step, 'walletAddress:', walletAddress, 'selectedVault:', selectedVault?.multisigAddress);
     switch (step) {
       case 'connect': return renderConnect();
       case 'searching': return renderSearching();
@@ -337,7 +372,9 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
               {loading ? (
                 <ActivityIndicator color="#6d28d9" />
               ) : (
-                <Text style={[styles.primaryButtonText, { color: colors.onboardingButtonText }]}>Recover Vault</Text>
+                <Text style={[styles.primaryButtonText, { color: colors.onboardingButtonText }]}>
+                  {walletAddress ? 'Recover Vault' : 'Connect Wallet & Recover'}
+                </Text>
               )}
             </TouchableOpacity>
             {vaults.length > 1 && (
