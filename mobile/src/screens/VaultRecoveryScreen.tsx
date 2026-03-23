@@ -401,7 +401,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       >
         <Text style={[styles.sheetTitle, { color: colors.textPrimary }]}>Enter Vault Address</Text>
         <Text style={[styles.sheetSubtitle, { color: colors.textSecondary }]}>
-          Enter the Squads multisig address for the vault you want to recover.
+          Enter the multisig address, vault address, or any member's wallet address.
         </Text>
         <TextInput
           style={[styles.sheetInput, { backgroundColor: colors.inputBackground, color: colors.textPrimary }]}

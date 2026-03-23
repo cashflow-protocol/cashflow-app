@@ -102,15 +102,47 @@ router.post('/find-vault-by-address', async (req: Request, res: Response) => {
     let multisigData: any;
     let vaultAddress: string;
 
+    // Try as multisig PDA first (on-chain lookup)
     try {
       multisigPda = new PublicKey(address);
       multisigData = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
       const [vaultPda] = multisigLib.getVaultPda({ multisigPda, index: 0 });
       vaultAddress = vaultPda.toBase58();
     } catch {
-      // Not a valid multisig address — try treating it as a vault address
-      // and search for it via the Squads API using each member
-      // Since we can't reverse a vault PDA, return not found
+      // Not a multisig PDA — try Squads API (works for member addresses,
+      // and we can check if the address matches a vault address)
+      try {
+        const squadsRes = await fetch(`${SQUADS_V4_API}/multisigs/${address}?useProd=true`);
+        if (squadsRes.ok) {
+          const squadsData = await squadsRes.json();
+          if (Array.isArray(squadsData) && squadsData.length > 0) {
+            // Address is a member — return the first multisig
+            const ms = squadsData[0];
+            const members = ms.account?.members || [];
+            res.json({
+              success: true,
+              data: {
+                multisig: {
+                  multisigAddress: ms.address,
+                  vaultAddress: ms.defaultVault,
+                  threshold: ms.account?.threshold ?? 1,
+                  memberCount: members.length,
+                  members: members.map((m: any) => ({
+                    address: m.key,
+                    permissions: {
+                      initiate: (m.permissions?.mask & 1) !== 0,
+                      vote: (m.permissions?.mask & 2) !== 0,
+                      execute: (m.permissions?.mask & 4) !== 0,
+                    },
+                  })),
+                },
+              },
+            });
+            return;
+          }
+        }
+      } catch {}
+
       res.json({ success: true, data: { multisig: null } });
       return;
     }
