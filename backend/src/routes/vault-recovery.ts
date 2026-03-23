@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { RecoveryProposalModel, RecoveryProposalStatus } from '../models/RecoveryProposal';
+import { UserModel } from '../models';
 import { signTransactionWithPrivy } from '../services/privyService';
 import { JitoManager } from '../managers';
 
@@ -139,6 +140,45 @@ router.post('/find-vault-by-address', async (req: Request, res: Response) => {
               },
             });
             return;
+          }
+        }
+      } catch {}
+
+      // Try as vault address — look up in our User DB to find a member,
+      // then use Squads API with that member to get the multisig
+      try {
+        const user = await UserModel.findOne({ vaultAddress: address }).lean();
+        if (user?.publicKey) {
+          const squadsRes2 = await fetch(`${SQUADS_V4_API}/multisigs/${user.publicKey}?useProd=true`);
+          if (squadsRes2.ok) {
+            const squadsData2 = await squadsRes2.json();
+            if (Array.isArray(squadsData2)) {
+              // Find the multisig whose defaultVault matches
+              const match = squadsData2.find((ms: any) => ms.defaultVault === address);
+              if (match) {
+                const members2 = match.account?.members || [];
+                res.json({
+                  success: true,
+                  data: {
+                    multisig: {
+                      multisigAddress: match.address,
+                      vaultAddress: match.defaultVault,
+                      threshold: match.account?.threshold ?? 1,
+                      memberCount: members2.length,
+                      members: members2.map((m: any) => ({
+                        address: m.key,
+                        permissions: {
+                          initiate: (m.permissions?.mask & 1) !== 0,
+                          vote: (m.permissions?.mask & 2) !== 0,
+                          execute: (m.permissions?.mask & 4) !== 0,
+                        },
+                      })),
+                    },
+                  },
+                });
+                return;
+              }
+            }
           }
         }
       } catch {}
