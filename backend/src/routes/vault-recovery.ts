@@ -179,6 +179,7 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
 
     // Build TX1 instructions
     const tx1Instructions = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
       ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
       multisigLib.instructions.configTransactionCreate({
         multisigPda,
@@ -224,6 +225,7 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
 
     // Also build TX2 (execute) — stored for later use after threshold is met
     const tx2Instructions = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
       ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
       multisigLib.instructions.configTransactionExecute({
         multisigPda,
@@ -263,67 +265,7 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * POST /send-signed-tx
- * Broadcast a signed transaction via RPC.
- * Body: { signedTransaction: string (base64) }
- */
-router.post('/send-signed-tx', async (req: Request, res: Response) => {
-  try {
-    const { signedTransaction, blockhash, lastValidBlockHeight } = req.body;
-    if (!signedTransaction) {
-      res.status(400).json({ success: false, error: 'signedTransaction is required' });
-      return;
-    }
 
-    const { Connection } = await import('@solana/web3.js');
-    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-    const conn = new Connection(rpcUrl, 'confirmed');
-
-    const txBytes = Buffer.from(signedTransaction, 'base64');
-
-    // Get confirmation strategy
-    let confirmBlockhash: string;
-    let confirmLastValidBlockHeight: number;
-    if (blockhash && lastValidBlockHeight) {
-      confirmBlockhash = blockhash;
-      confirmLastValidBlockHeight = lastValidBlockHeight;
-    } else {
-      const latest = await conn.getLatestBlockhash('confirmed');
-      confirmBlockhash = latest.blockhash;
-      confirmLastValidBlockHeight = latest.lastValidBlockHeight;
-    }
-
-    // Send and keep resending until confirmed or expired
-    const signature = await conn.sendRawTransaction(txBytes, {
-      skipPreflight: true,
-      maxRetries: 0, // We handle retries ourselves
-    });
-    console.log(`Recovery TX sent: ${signature}`);
-
-    // Aggressively resend every 2 seconds while polling for confirmation
-    const resendInterval = setInterval(async () => {
-      try {
-        await conn.sendRawTransaction(txBytes, { skipPreflight: true, maxRetries: 0 });
-      } catch {}
-    }, 2000);
-
-    try {
-      await conn.confirmTransaction(
-        { signature, blockhash: confirmBlockhash, lastValidBlockHeight: confirmLastValidBlockHeight },
-        'confirmed',
-      );
-      console.log(`Recovery TX confirmed: ${signature}`);
-    } finally {
-      clearInterval(resendInterval);
-    }
-
-    res.json({ success: true, data: { signature } });
-  } catch (error: any) {
-    console.error('Error sending signed tx:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to send transaction' });
-  }
-});
 
 /**
  * POST /create-proposal
@@ -476,6 +418,7 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
       payerKey: memberPubkey,
       recentBlockhash: blockhash,
       instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
         ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
         approveIx,
       ],

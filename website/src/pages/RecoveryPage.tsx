@@ -155,12 +155,12 @@ export default function RecoveryPage() {
         chain: 'solana:mainnet',
       });
 
-      // Send via backend
-      const sendRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/send-approve-tx`, {
+      // Send via backend's existing /solana/v1/send endpoint
+      const sendRes = await fetch(`${API_BASE}/solana/v1/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          signedTransaction: btoa(String.fromCharCode(...new Uint8Array(signedTransaction))),
+          transaction: btoa(String.fromCharCode(...new Uint8Array(signedTransaction))),
         }),
       });
       if (!sendRes.ok) {

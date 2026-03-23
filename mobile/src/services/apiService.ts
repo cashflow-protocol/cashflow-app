@@ -428,18 +428,18 @@ class ApiService {
     return res.data;
   }
 
-  async sendSignedRecoveryTx(signedTransaction: string, blockhash?: string, lastValidBlockHeight?: number): Promise<{ signature: string }> {
-    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/send-signed-tx`, {
+  async sendSignedRecoveryTx(signedTransaction: string): Promise<{ signature: string }> {
+    const r = await fetch(`${this.baseUrl}/solana/v1/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ signedTransaction, blockhash, lastValidBlockHeight }),
+      body: JSON.stringify({ transaction: signedTransaction }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({ error: 'Failed' }));
       throw new Error(err.error || `API error: ${r.status}`);
     }
     const res = await r.json();
-    return res.data;
+    return res;
   }
 
   async findVaultByAddress(

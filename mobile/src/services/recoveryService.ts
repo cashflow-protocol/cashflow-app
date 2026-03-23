@@ -129,7 +129,7 @@ export async function buildAndSubmitRecoveryProposal(
   // Send TX1 via backend RPC
   onProgress?.('Sending proposal on-chain...');
   const signedTx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  await apiService.sendSignedRecoveryTx(signedTx1Base64, blockhash, lastValidBlockHeight);
+  await apiService.sendSignedRecoveryTx(signedTx1Base64);
 
   // Step 5: Determine required signers
   const recoveryEmails = await getRecoveryEmails();
