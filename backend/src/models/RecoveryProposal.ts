@@ -65,8 +65,8 @@ export class RecoveryProposal {
   public actions!: AddMemberAction[];
 
   /** Serialized TX1 message bytes (base64) — signers sign this */
-  @prop({ required: true })
-  public tx1MessageBase64!: string;
+  @prop()
+  public tx1MessageBase64?: string;
 
   /** Full serialized TX1 (base64) with empty signature slots */
   @prop({ required: true })
