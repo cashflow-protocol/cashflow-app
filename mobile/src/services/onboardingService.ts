@@ -1,5 +1,8 @@
+import { Platform } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 import { API_CONFIG } from '../config/api';
 import { logError } from './analyticsService';
+import { IS_SOLANA_MOBILE } from '../config/constants';
 
 const BASE = `${API_CONFIG.baseUrl}/onboarding/v1`;
 
@@ -58,10 +61,17 @@ export async function redeemInviteCode(code: string, publicKey: string): Promise
 // ─── Waitlist ───
 
 export async function registerWaitlist(publicKey: string): Promise<boolean> {
+  const deviceId = await DeviceInfo.getUniqueId();
   const res = await fetch(`${BASE}/waitlist/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ publicKey }),
+    body: JSON.stringify({
+      publicKey,
+      platform: Platform.OS,
+      isSolanaMobile: IS_SOLANA_MOBILE,
+      deviceId,
+      device: `${DeviceInfo.getBrand()} ${DeviceInfo.getModel()}`,
+    }),
   });
   const data = await res.json();
   return data.success;

@@ -107,7 +107,7 @@ router.post('/redeem-invite', async (req, res) => {
  */
 router.post('/waitlist/register', async (req, res) => {
   try {
-    const { publicKey } = req.body;
+    const { publicKey, platform, isSolanaMobile, deviceId, device } = req.body;
     if (!publicKey || typeof publicKey !== 'string') {
       res.status(400).json({ success: false, error: 'publicKey is required' });
       return;
@@ -117,7 +117,19 @@ router.post('/waitlist/register', async (req, res) => {
     if (!existing) {
       await WaitlistUserModel.create({ publicKey, xp: 0, status: 'waiting', completedTasks: [] });
       const total = await WaitlistUserModel.countDocuments();
-      telegram.notifyAdmin(`🆕 New waitlist signup!\n\nWallet: <code>${publicKey.slice(0, 6)}...${publicKey.slice(-4)}</code>\nTotal waitlist: ${total}`);
+      const ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+      const platformLabel = platform === 'ios' ? '🍎 iOS' : platform === 'android' ? '🤖 Android' : platform || 'unknown';
+      const lines = [
+        `🆕 New waitlist signup!`,
+        ``,
+        `Wallet: <code>${publicKey.slice(0, 6)}...${publicKey.slice(-4)}</code>`,
+        `Platform: ${platformLabel}${isSolanaMobile ? ' (Solana Mobile 📱)' : ''}`,
+        device ? `Device: ${device}` : null,
+        `Device ID: <code>${deviceId || 'unknown'}</code>`,
+        `IP: <code>${ip}</code>`,
+        `Total waitlist: ${total}`,
+      ].filter(Boolean).join('\n');
+      telegram.notifyAdmin(lines);
     }
 
     res.json({ success: true });
