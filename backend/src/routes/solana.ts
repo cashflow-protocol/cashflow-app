@@ -78,6 +78,7 @@ router.post('/send', async (req: Request, res: Response) => {
           encoding: 'base64',
           commitment: 'confirmed',
           sigVerify: false,
+          replaceRecentBlockhash: true,
         })
         .send();
 
