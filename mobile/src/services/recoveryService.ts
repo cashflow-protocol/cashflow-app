@@ -9,6 +9,7 @@ import {
   VersionedTransaction,
 } from '@solana/web3.js';
 import { API_CONFIG } from '../config/api';
+import { SOLANA_CONFIG } from '../config/solana';
 import {
   generateAndStoreCloudKeypair,
   generateAndStoreDeviceKeypair,
@@ -126,10 +127,43 @@ export async function buildAndSubmitRecoveryProposal(
     tx1.signatures[tx1WalletIndex] = tx1Signed.signatures[tx1WalletIndex];
   }
 
-  // Send TX1 via backend RPC
+  // Send TX1 via backend RPC and wait for confirmation
   onProgress?.('Sending proposal on-chain...');
   const signedTx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  await apiService.sendSignedRecoveryTx(signedTx1Base64);
+  const { signature: tx1Sig } = await apiService.sendSignedRecoveryTx(signedTx1Base64);
+
+  // Poll for TX1 confirmation, resending every few seconds to help it land
+  onProgress?.('Confirming on-chain...');
+  let confirmed = false;
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Resend to increase chances of landing
+    if (i % 2 === 0) {
+      apiService.sendSignedRecoveryTx(signedTx1Base64).catch(() => {});
+    }
+
+    try {
+      const rpcRes = await fetch(SOLANA_CONFIG.rpcEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 1,
+          method: 'getSignatureStatuses',
+          params: [[tx1Sig], { searchTransactionHistory: false }],
+        }),
+      });
+      const rpcData = await rpcRes.json();
+      const status = rpcData?.result?.value?.[0];
+      if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') {
+        confirmed = true;
+        break;
+      }
+    } catch {}
+  }
+  if (!confirmed) {
+    throw new Error('TX1 did not confirm on-chain. Please try again.');
+  }
 
   // Step 5: Determine required signers
   const recoveryEmails = await getRecoveryEmails();
