@@ -9,7 +9,6 @@ import {
   VersionedTransaction,
 } from '@solana/web3.js';
 import { API_CONFIG } from '../config/api';
-import { SOLANA_CONFIG } from '../config/solana';
 import {
   generateAndStoreCloudKeypair,
   generateAndStoreDeviceKeypair,
@@ -89,7 +88,7 @@ export async function buildAndSubmitRecoveryProposal(
     addMemberActions: actions,
   });
 
-  const { tx1Base64, tx2Base64, transactionIndex, blockhash, lastValidBlockHeight } = buildResult;
+  const { tx1Base64, tx2Base64, transactionIndex, blockhash } = buildResult;
 
   // Step 4: Sign TX1 with cloud key + MWA, then send via backend
   onProgress?.('Signing with your wallet...');
@@ -127,42 +126,22 @@ export async function buildAndSubmitRecoveryProposal(
     tx1.signatures[tx1WalletIndex] = tx1Signed.signatures[tx1WalletIndex];
   }
 
-  // Send TX1 via backend RPC and wait for confirmation
+  // Send TX1 via Jito bundle (no auth needed for v1)
   onProgress?.('Sending proposal on-chain...');
   const signedTx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  const { signature: tx1Sig } = await apiService.sendSignedRecoveryTx(signedTx1Base64);
 
-  // Poll for TX1 confirmation, resending every few seconds to help it land
-  onProgress?.('Confirming on-chain...');
-  let confirmed = false;
-  for (let i = 0; i < 30; i++) {
-    await new Promise(r => setTimeout(r, 2000));
-
-    // Resend to increase chances of landing
-    if (i % 2 === 0) {
-      apiService.sendSignedRecoveryTx(signedTx1Base64).catch(() => {});
-    }
-
-    try {
-      const rpcRes = await fetch(SOLANA_CONFIG.rpcEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0', id: 1,
-          method: 'getSignatureStatuses',
-          params: [[tx1Sig], { searchTransactionHistory: false }],
-        }),
-      });
-      const rpcData = await rpcRes.json();
-      const status = rpcData?.result?.value?.[0];
-      if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') {
-        confirmed = true;
-        break;
-      }
-    } catch {}
+  const bundleRes = await fetch(`${API_CONFIG.baseUrl}/solana/v1/send-bundle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactions: [signedTx1Base64] }),
+  });
+  if (!bundleRes.ok) {
+    const err = await bundleRes.json().catch(() => ({ error: 'Failed' }));
+    throw new Error(err.error || 'Failed to send recovery transaction');
   }
-  if (!confirmed) {
-    throw new Error('TX1 did not confirm on-chain. Please try again.');
+  const bundleData = await bundleRes.json();
+  if (bundleData.status !== 'confirmed' && bundleData.status !== 'finalized') {
+    throw new Error('Recovery transaction did not confirm. Please try again.');
   }
 
   // Step 5: Determine required signers

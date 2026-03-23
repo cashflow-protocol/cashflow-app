@@ -201,6 +201,25 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
       }),
     ];
 
+    // Jito tip for landing on mainnet
+    const { SystemProgram } = await import('@solana/web3.js');
+    const JITO_TIP_ACCOUNTS = [
+      'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
+      'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
+      'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
+      'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
+      '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5',
+      'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
+      'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL',
+      '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT',
+    ];
+    const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
+    tx1Instructions.push(SystemProgram.transfer({
+      fromPubkey: walletPubkey,
+      toPubkey: new PublicKey(tipAccount),
+      lamports: 100_000,
+    }));
+
     // Cloud key approves too if provided
     if (cloudKey) {
       const cloudPubkey = new PublicKey(cloudKey);
