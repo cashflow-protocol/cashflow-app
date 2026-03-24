@@ -333,6 +333,13 @@ router.post('/waitlist-tasks/import', async (req, res) => {
       return;
     }
 
+    // Drop legacy taskId index if it still exists (blocks import on fresh envs)
+    try {
+      await WaitlistTaskModel.collection.dropIndex('taskId_1');
+    } catch {
+      // Index doesn't exist — fine
+    }
+
     // Phase 1: Create all tasks without requiresTask
     const titleToId = new Map<string, string>();
     const pendingRequires: { id: string; requiresTitle: string }[] = [];
