@@ -66,7 +66,7 @@ export default function App() {
   const handleEnvToggle = () => {
     const next = env === 'dev' ? 'prod' : 'dev';
     setEnv(next);
-    setEnvState(next);
+    window.location.reload();
   };
 
   if (!loggedIn) {

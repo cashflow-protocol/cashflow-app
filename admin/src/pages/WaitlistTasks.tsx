@@ -80,8 +80,8 @@ export default function WaitlistTasksPage() {
       } else {
         alert(data.error || 'Import failed');
       }
-    } catch {
-      alert('Failed to parse JSON file');
+    } catch (err: any) {
+      alert(err?.message || 'Failed to import tasks');
     }
     e.target.value = '';
   };
