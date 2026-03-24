@@ -370,7 +370,7 @@ router.post('/lookup-privy-emails', async (req: Request, res: Response) => {
     for (const addr of addresses) {
       try {
         const searchRes = await axios.post('https://auth.privy.io/api/v1/users/search', {
-          wallets: [addr],
+          walletAddresses: [addr],
         }, { headers });
 
         if (searchRes.data?.data?.length > 0) {
