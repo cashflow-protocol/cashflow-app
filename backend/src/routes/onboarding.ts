@@ -386,6 +386,17 @@ router.post('/waitlist/connect-email/verify', async (req, res) => {
   }
 });
 
+// ─── Telegram callback data store (callback_data has 64-byte limit) ───
+
+let callbackCounter = 0;
+const pendingCallbacks = new Map<string, { publicKey: string; taskId: string }>();
+
+function storeCallback(publicKey: string, taskId: string): string {
+  const id = (++callbackCounter).toString(36);
+  pendingCallbacks.set(id, { publicKey, taskId });
+  return id;
+}
+
 // ─── Helper: award XP for a task (prevents double award) ───
 
 async function awardTaskXp(publicKey: string, taskQuery: Record<string, any>, extraFields?: Record<string, any>, screenshotUrl?: string) {
@@ -423,10 +434,11 @@ async function awardTaskXp(publicKey: string, taskQuery: Record<string, any>, ex
     if (result.walletAddress) parts.push(`Solana: <code>${result.walletAddress.slice(0, 6)}...${result.walletAddress.slice(-4)}</code>`);
 
     if (screenshotUrl) {
+      const cbId = storeCallback(publicKey, taskId);
       telegram.notifyAdminWithPhoto(screenshotUrl, parts.join('\n'), [
         [
-          { text: '✅ Approve', callback_data: `a:${publicKey}:${taskId}` },
-          { text: '❌ Reject', callback_data: `r:${publicKey}:${taskId}` },
+          { text: '✅ Approve', callback_data: `a:${cbId}` },
+          { text: '❌ Reject', callback_data: `r:${cbId}` },
         ],
       ]);
     } else {
@@ -653,8 +665,11 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
         res.json({ ok: true });
         return;
       }
-      const [action, publicKey, taskId] = callbackQuery.data.split(':');
-      if (action === 'r' && publicKey && taskId) {
+      const [action, cbId] = callbackQuery.data.split(':');
+      const cb = pendingCallbacks.get(cbId);
+      if (action === 'r' && cb) {
+        const { publicKey, taskId } = cb;
+        pendingCallbacks.delete(cbId);
         // Revoke task: remove from completedTasks, deduct XP
         const task = await WaitlistTaskModel.findById(taskId).lean();
         const xpReward = task?.xpReward ?? 0;
@@ -672,7 +687,8 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
           callbackQuery.message.message_id,
           callbackQuery.message.caption + '\n\n❌ <b>REJECTED</b>',
         );
-      } else if (action === 'a') {
+      } else if (action === 'a' && cbId) {
+        pendingCallbacks.delete(cbId);
         await telegram.answerCallbackQuery(callbackQuery.id, '✅ Approved!');
         await telegram.editMessageCaption(
           callbackQuery.message.chat.id,
