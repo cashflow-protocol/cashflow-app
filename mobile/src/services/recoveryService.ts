@@ -90,15 +90,30 @@ export async function buildAndSubmitRecoveryProposal(
 
   const { tx2Base64, transactionIndex, blockhash } = buildResult;
 
-  // Step 4: Sign and send TX1 via MWA signAndSend
-  // MWA handles blockhash refresh internally — no stale blockhash issue
+  // Step 4: Sign TX1 with wallet (sign-only), then send via backend
   onProgress?.('Signing with your wallet...');
 
   const tx1 = VersionedTransaction.deserialize(Buffer.from(buildResult.tx1Base64, 'base64'));
   const tx1Serialized = new Uint8Array(tx1.serialize());
-  await walletService.signAndSendTransactions([tx1Serialized]);
+  const signedBytes = await walletService.signTransactions([tx1Serialized]);
+  if (!signedBytes?.[0]) {
+    throw new Error('Wallet signing failed');
+  }
 
-  onProgress?.('Proposal sent on-chain...');
+  // Send signed TX1 via backend (Helius SWQoS for reliable landing)
+  onProgress?.('Sending proposal on-chain...');
+  const signedTx1Base64 = Buffer.from(signedBytes[0]).toString('base64');
+  const sendRes = await fetch(`${API_CONFIG.baseUrl}/vault-recovery/v1/send-recovery-tx`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transaction: signedTx1Base64 }),
+  });
+  if (!sendRes.ok) {
+    const err = await sendRes.json().catch(() => ({ error: 'Failed' }));
+    throw new Error(err.error || 'Failed to send recovery transaction');
+  }
+
+  onProgress?.('Proposal confirmed on-chain...');
 
   // Step 5: Determine required signers
   const recoveryEmails = await getRecoveryEmails();

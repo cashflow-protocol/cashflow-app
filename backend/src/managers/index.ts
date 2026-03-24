@@ -6,3 +6,4 @@ export { PriceManager } from './PriceManager';
 export { JitoManager } from './JitoManager';
 export { TokenManager } from './TokenManager';
 export { TransferManager } from './TransferManager';
+export { HeliusSender } from './HeliusSender';

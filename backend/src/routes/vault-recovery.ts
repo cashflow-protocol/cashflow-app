@@ -2,11 +2,9 @@ import { Router, Request, Response } from 'express';
 import { RecoveryProposalModel, RecoveryProposalStatus } from '../models/RecoveryProposal';
 import { UserModel } from '../models';
 import { signTransactionWithPrivy } from '../services/privyService';
-import { JitoManager } from '../managers';
-
+import { HeliusSender } from '../managers';
 
 const router = Router();
-const jitoManager = new JitoManager();
 
 const SQUADS_V4_API = 'https://v4-api.squads.so';
 
@@ -273,24 +271,8 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
       }),
     ];
 
-    // Jito tip for landing on mainnet
-    const { SystemProgram } = await import('@solana/web3.js');
-    const JITO_TIP_ACCOUNTS = [
-      'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
-      'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
-      'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
-      'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
-      '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5',
-      'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
-      'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL',
-      '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT',
-    ];
-    const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
-    tx1Instructions.push(SystemProgram.transfer({
-      fromPubkey: walletPubkey,
-      toPubkey: new PublicKey(tipAccount),
-      lamports: 100_000,
-    }));
+    // Helius SWQoS tip for landing on mainnet
+    tx1Instructions.push(HeliusSender.createTipIx(walletPubkey));
 
     // Cloud key approves too if provided
     if (cloudKey) {
@@ -357,6 +339,27 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
 });
 
 
+
+/**
+ * POST /send-recovery-tx
+ * Send a signed transaction via Helius SWQoS and wait for confirmation.
+ * Body: { transaction: string (base64) }
+ */
+router.post('/send-recovery-tx', async (req: Request, res: Response) => {
+  try {
+    const { transaction } = req.body;
+    if (!transaction) {
+      res.status(400).json({ success: false, error: 'transaction is required' });
+      return;
+    }
+
+    const signature = await HeliusSender.sendAndConfirm(transaction);
+    res.json({ success: true, data: { signature } });
+  } catch (error: any) {
+    console.error('Error sending recovery tx:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to send transaction' });
+  }
+});
 
 /**
  * POST /create-proposal
@@ -794,33 +797,22 @@ router.post('/proposal/:proposalId/send-bundle', async (req: Request, res: Respo
       return;
     }
 
-    // Send via Jito
-    const bundleId = await jitoManager.sendBundle(transactions);
-    console.log(`Recovery bundle sent: ${bundleId} (${transactions.length} txs)`);
-
-    // Poll for confirmation
-    let status = null;
-    for (let i = 0; i < 15; i++) {
-      await new Promise((r) => setTimeout(r, 2000));
-      status = await jitoManager.getBundleStatus(bundleId);
-      if (status?.confirmation_status === 'confirmed' || status?.confirmation_status === 'finalized') break;
-      if (status?.err && !('Ok' in status.err)) break;
-    }
-
-    if (status?.err && !('Ok' in status.err)) {
-      res.status(400).json({ success: false, error: 'Bundle execution failed', bundleId });
-      return;
+    // Send each transaction via HeliusSender SWQoS
+    const signatures: string[] = [];
+    for (const tx of transactions) {
+      const sig = await HeliusSender.sendAndConfirm(tx);
+      signatures.push(sig);
     }
 
     // Mark proposal as executed
     proposal.status = RecoveryProposalStatus.EXECUTED;
-    proposal.executionSignature = bundleId;
+    proposal.executionSignature = signatures[0];
     await proposal.save();
 
     res.json({
       success: true,
-      bundleId,
-      status: status?.confirmation_status ?? 'pending',
+      signatures,
+      status: 'confirmed',
     });
   } catch (error: any) {
     console.error('Error sending recovery bundle:', error);

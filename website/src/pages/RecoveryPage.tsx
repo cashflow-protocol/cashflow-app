@@ -155,8 +155,8 @@ export default function RecoveryPage() {
         chain: 'solana:mainnet',
       });
 
-      // Send via backend's existing /solana/v1/send endpoint
-      const sendRes = await fetch(`${API_BASE}/solana/v1/send`, {
+      // Send via backend's Helius SWQoS endpoint
+      const sendRes = await fetch(`${API_BASE}/vault-recovery/v1/send-recovery-tx`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
