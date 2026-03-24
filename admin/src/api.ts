@@ -84,7 +84,6 @@ export async function getWaitlistTasks() {
 }
 
 export async function createWaitlistTask(task: {
-  taskId: string;
   title: string;
   description?: string;
   xpReward: number;
@@ -109,6 +108,17 @@ export async function updateWaitlistTask(id: string, updates: Record<string, any
 
 export async function deleteWaitlistTask(id: string) {
   return apiFetch(`/waitlist-tasks/${id}`, { method: 'DELETE' });
+}
+
+export async function exportWaitlistTasks() {
+  return apiFetch('/waitlist-tasks/export');
+}
+
+export async function importWaitlistTasks(tasks: Record<string, any>[]) {
+  return apiFetch('/waitlist-tasks/import', {
+    method: 'POST',
+    body: JSON.stringify({ tasks }),
+  });
 }
 
 // Waitlist user actions

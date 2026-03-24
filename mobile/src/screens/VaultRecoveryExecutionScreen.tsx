@@ -45,7 +45,7 @@ interface VaultRecoveryExecutionScreenProps {
   onBack: () => void;
 }
 
-type ExecutionStep = 'building' | 'signing' | 'ready' | 'executing' | 'done';
+type ExecutionStep = 'building' | 'error' | 'signing' | 'ready' | 'executing' | 'done';
 
 function truncateAddress(addr: string): string {
   if (!addr) return '';
@@ -88,63 +88,6 @@ export default function VaultRecoveryExecutionScreen({
     setToastVisible(true);
   }, []);
 
-  // Build and submit the proposal on mount
-  useEffect(() => {
-    let cancelled = false;
-
-    async function build() {
-      try {
-        const result = await buildAndSubmitRecoveryProposal(
-          vault.multisigAddress,
-          vault.vaultAddress,
-          walletAddress,
-          vault.members,
-          vault.threshold,
-          (msg) => { if (!cancelled) setStatusText(msg); },
-        );
-
-        if (cancelled) return;
-
-        setProposalId(result.proposalId);
-        setThreshold(result.signaturesRequired);
-        setSignaturesCollected(result.signaturesCollected);
-        setExternalSigningUrl(result.externalSigningUrl);
-
-        if (result.status === 'ready') {
-          setStep('ready');
-        } else {
-          setStep('signing');
-          // Start polling
-          startPolling(result.proposalId);
-        }
-
-        // Load initial signer status
-        const status = await apiService.getRecoveryProposalStatus(result.proposalId);
-        if (!cancelled) {
-          setSigners(status.requiredSigners);
-          setSignaturesCollected(status.signaturesCollected);
-          if (status.status === 'ready') {
-            setStep('ready');
-          }
-        }
-      } catch (err: any) {
-        if (!cancelled) {
-          console.error('Recovery build error:', err);
-          showToast(err.message || 'Failed to build recovery proposal');
-          setStep('building');
-          setStatusText('Failed — tap back to retry');
-        }
-      }
-    }
-
-    build();
-
-    return () => {
-      cancelled = true;
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, []);
-
   const startPolling = useCallback((id: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
 
@@ -160,6 +103,53 @@ export default function VaultRecoveryExecutionScreen({
         }
       } catch {}
     }, 5000);
+  }, []);
+
+  const build = useCallback(async () => {
+    setStep('building');
+    setStatusText('Preparing recovery...');
+    try {
+      const result = await buildAndSubmitRecoveryProposal(
+        vault.multisigAddress,
+        vault.vaultAddress,
+        walletAddress,
+        vault.members,
+        vault.threshold,
+        (msg) => setStatusText(msg),
+      );
+
+      setProposalId(result.proposalId);
+      setThreshold(result.signaturesRequired);
+      setSignaturesCollected(result.signaturesCollected);
+      setExternalSigningUrl(result.externalSigningUrl);
+
+      if (result.status === 'ready') {
+        setStep('ready');
+      } else {
+        setStep('signing');
+        startPolling(result.proposalId);
+      }
+
+      // Load initial signer status
+      const status = await apiService.getRecoveryProposalStatus(result.proposalId);
+      setSigners(status.requiredSigners);
+      setSignaturesCollected(status.signaturesCollected);
+      if (status.status === 'ready') {
+        setStep('ready');
+      }
+    } catch (err: any) {
+      console.error('Recovery build error:', err);
+      setStatusText(err.message || 'Failed to build recovery proposal');
+      setStep('error');
+    }
+  }, [vault, walletAddress, showToast, startPolling]);
+
+  // Build on mount
+  useEffect(() => {
+    build();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, []);
 
   const handlePrivySign = useCallback(async (email: string) => {
@@ -304,6 +294,20 @@ export default function VaultRecoveryExecutionScreen({
             </View>
           )}
 
+          {/* Error state with retry */}
+          {step === 'error' && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{statusText}</Text>
+              <TouchableOpacity
+                style={[styles.retryButton, { backgroundColor: colors.onboardingButton }]}
+                onPress={build}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.retryButtonText, { color: colors.onboardingButtonText }]}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Signers list */}
           {(step === 'signing' || step === 'ready') && signers.length > 0 && (
             <View style={[styles.signersCard, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
@@ -411,6 +415,26 @@ const styles = StyleSheet.create({
   loadingContainer: {
     alignItems: 'center',
     paddingVertical: 40,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 16,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  retryButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   signersCard: {
     borderRadius: 16,

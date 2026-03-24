@@ -23,7 +23,7 @@ const jitoManager = new JitoManager();
 const tokenManager = new TokenManager();
 const transferManager = new TransferManager();
 const priceManager = new PriceManager();
-const kShouldSimulate = false; // Enabled for debugging
+const kShouldSimulate = true;
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 
@@ -78,6 +78,7 @@ router.post('/send', async (req: Request, res: Response) => {
           encoding: 'base64',
           commitment: 'confirmed',
           sigVerify: false,
+          replaceRecentBlockhash: true,
         })
         .send();
 

@@ -19,7 +19,7 @@ interface WaitlistUser {
 }
 
 interface Screenshot {
-  taskId: string;
+  taskId: string; // stores task _id
   imageUrl: string;
   uploadedAt: string;
 }

@@ -1,12 +1,15 @@
+import { Platform } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 import { API_CONFIG } from '../config/api';
 import { logError } from './analyticsService';
+import { IS_SOLANA_MOBILE } from '../config/constants';
 
 const BASE = `${API_CONFIG.baseUrl}/onboarding/v1`;
 
 // ─── Types ───
 
 export interface WaitlistTaskItem {
-  taskId: string;
+  id: string;
   title: string;
   description?: string;
   xpReward: number;
@@ -58,10 +61,17 @@ export async function redeemInviteCode(code: string, publicKey: string): Promise
 // ─── Waitlist ───
 
 export async function registerWaitlist(publicKey: string): Promise<boolean> {
+  const deviceId = await DeviceInfo.getUniqueId();
   const res = await fetch(`${BASE}/waitlist/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ publicKey }),
+    body: JSON.stringify({
+      publicKey,
+      platform: Platform.OS,
+      isSolanaMobile: IS_SOLANA_MOBILE,
+      deviceId,
+      device: `${DeviceInfo.getBrand()} ${DeviceInfo.getModel()}`,
+    }),
   });
   const data = await res.json();
   return data.success;
@@ -191,12 +201,12 @@ export async function startConnectTelegram(publicKey: string): Promise<{ code: s
 
 export async function verifyWaitlistAction(
   publicKey: string,
-  taskId: string,
+  id: string,
 ): Promise<{ verified: boolean; xpAwarded?: number; message?: string }> {
   const res = await fetch(`${BASE}/waitlist/verify-action`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ publicKey, taskId }),
+    body: JSON.stringify({ publicKey, taskId: id }),
   });
   const data = await res.json();
   return { verified: data.verified ?? false, xpAwarded: data.xpAwarded, message: data.message };
@@ -206,13 +216,13 @@ export async function verifyWaitlistAction(
 
 export async function uploadScreenshot(
   publicKey: string,
-  taskId: string,
+  id: string,
   image: { uri: string; type: string; name: string },
 ): Promise<{ success: boolean; xpAwarded?: number }> {
   try {
     const formData = new FormData();
     formData.append('publicKey', publicKey);
-    formData.append('taskId', taskId);
+    formData.append('taskId', id);
     formData.append('image', {
       uri: image.uri,
       type: image.type,

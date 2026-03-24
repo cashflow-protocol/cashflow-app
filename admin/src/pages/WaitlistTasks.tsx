@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
-import { getWaitlistTasks, createWaitlistTask, updateWaitlistTask, deleteWaitlistTask } from '../api';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { getWaitlistTasks, createWaitlistTask, updateWaitlistTask, deleteWaitlistTask, exportWaitlistTasks, importWaitlistTasks } from '../api';
 
 interface Task {
   id: string;
-  taskId: string;
   title: string;
   description: string;
   xpReward: number;
@@ -20,6 +19,7 @@ export default function WaitlistTasksPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,11 +46,58 @@ export default function WaitlistTasksPage() {
     load();
   };
 
+  const handleExport = async () => {
+    try {
+      const data = await exportWaitlistTasks();
+      if (!data.success) return;
+      const blob = new Blob([JSON.stringify(data.tasks, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `waitlist-tasks-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const tasks = JSON.parse(text);
+      if (!Array.isArray(tasks)) {
+        alert('Invalid file: expected a JSON array of tasks');
+        return;
+      }
+      if (!confirm(`Import ${tasks.length} tasks? This will create new tasks (not replace existing ones).`)) return;
+      const data = await importWaitlistTasks(tasks);
+      if (data.success) {
+        alert(`Imported ${data.imported} tasks`);
+        load();
+      } else {
+        alert(data.error || 'Import failed');
+      }
+    } catch {
+      alert('Failed to parse JSON file');
+    }
+    e.target.value = '';
+  };
+
   return (
     <div>
       <div className="page-header">
         <h2>Waitlist Tasks ({tasks.length})</h2>
-        <div className="header-actions">
+        <div className="header-actions" style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-secondary" style={{ width: 'auto' }} onClick={handleExport}>
+            Export
+          </button>
+          <button className="btn-secondary" style={{ width: 'auto' }} onClick={() => importRef.current?.click()}>
+            Import
+          </button>
+          <input ref={importRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
           <button className="btn-primary" style={{ width: 'auto' }} onClick={() => setShowCreate(true)}>
             Add Task
           </button>
@@ -62,7 +109,6 @@ export default function WaitlistTasksPage() {
           <thead>
             <tr>
               <th style={{ width: 50 }}>Order</th>
-              <th>Task ID</th>
               <th>Title</th>
               <th>XP</th>
               <th>Category</th>
@@ -74,13 +120,12 @@ export default function WaitlistTasksPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
             ) : tasks.length === 0 ? (
-              <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40, color: '#999' }}>No tasks found</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: '#999' }}>No tasks found</td></tr>
             ) : tasks.map((t) => (
               <tr key={t.id} style={{ opacity: t.active ? 1 : 0.5 }}>
                 <td style={{ textAlign: 'center' }}>{t.sortOrder}</td>
-                <td className="mono" style={{ fontSize: 12 }}>{t.taskId}</td>
                 <td style={{ fontWeight: 600 }}>{t.title}</td>
                 <td>
                   <span className="badge badge-blue">+{t.xpReward} XP</span>
@@ -88,7 +133,7 @@ export default function WaitlistTasksPage() {
                 <td><span className="badge badge-yellow">{t.category}</span></td>
                 <td>
                   {t.requiresTask
-                    ? <span className="mono" style={{ fontSize: 12 }}>{t.requiresTask}</span>
+                    ? <span style={{ fontSize: 12 }}>{tasks.find((x) => x.id === t.requiresTask)?.title ?? t.requiresTask}</span>
                     : <span style={{ color: '#999' }}>—</span>
                   }
                 </td>
@@ -158,7 +203,6 @@ function TaskFormModal({
   existingTasks: Task[];
 }) {
   const isEdit = !!task;
-  const [taskId, setTaskId] = useState(task?.taskId || '');
   const [title, setTitle] = useState(task?.title || '');
   const [description, setDescription] = useState(task?.description || '');
   const [xpReward, setXpReward] = useState(task?.xpReward || 100);
@@ -173,8 +217,8 @@ function TaskFormModal({
   const [error, setError] = useState('');
 
   const handleSave = async () => {
-    if (!taskId.trim() || !title.trim() || !category.trim()) {
-      setError('Task ID, title, and category are required');
+    if (!title.trim() || !category.trim()) {
+      setError('Title and category are required');
       return;
     }
 
@@ -208,7 +252,6 @@ function TaskFormModal({
         }
       } else {
         const data = await createWaitlistTask({
-          taskId: taskId.trim(),
           title,
           description,
           xpReward: Number(xpReward),
@@ -236,25 +279,13 @@ function TaskFormModal({
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
         <h3>{isEdit ? 'Edit Task' : 'Add Task'}</h3>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div className="form-group">
-            <label>Task ID</label>
-            <input
-              value={taskId}
-              onChange={(e) => setTaskId(e.target.value)}
-              placeholder="e.g. connect_email"
-              disabled={isEdit}
-              style={isEdit ? { opacity: 0.5 } : {}}
-            />
-          </div>
-          <div className="form-group">
-            <label>Category</label>
-            <input
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="e.g. social, action"
-            />
-          </div>
+        <div className="form-group">
+          <label>Category</label>
+          <input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="e.g. social_connect, social_action, action"
+          />
         </div>
 
         <div className="form-group">
@@ -298,9 +329,9 @@ function TaskFormModal({
             <select value={requiresTask} onChange={(e) => setRequiresTask(e.target.value)}>
               <option value="">None</option>
               {existingTasks
-                .filter((t) => t.taskId !== taskId)
+                .filter((t) => t.id !== task?.id)
                 .map((t) => (
-                  <option key={t.taskId} value={t.taskId}>{t.title}</option>
+                  <option key={t.id} value={t.id}>{t.title}</option>
                 ))
               }
             </select>

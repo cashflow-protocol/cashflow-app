@@ -19,13 +19,6 @@ interface VerifyActionSheetProps {
   onSuccess: () => void;
 }
 
-const FALLBACK_URLS: Record<string, string> = {
-  follow_cashflow_x: 'https://x.com/cashflow_fi',
-  follow_heymike_x: 'https://x.com/heymike777',
-  retweet_announcement: 'https://x.com/cashflow_fi',
-  subscribe_founders_tg: 'https://t.me/founders_journey',
-};
-
 export default function VerifyActionSheet({ visible, onClose, task, publicKey, onSuccess }: VerifyActionSheetProps) {
   const { colors } = useTheme();
   const [loading, setLoading] = useState(false);
@@ -40,28 +33,28 @@ export default function VerifyActionSheet({ visible, onClose, task, publicKey, o
 
   const handleOpenAction = useCallback(() => {
     if (!task) return;
-    logVerifyActionOpen(task.taskId);
-    const url = task.metadata?.profileUrl || task.metadata?.tweetUrl || task.metadata?.channelUrl || FALLBACK_URLS[task.taskId] || '';
+    logVerifyActionOpen(task.id);
+    const url = task.metadata?.profileUrl || task.metadata?.tweetUrl || task.metadata?.channelUrl || '';
     if (url) Linking.openURL(url);
   }, [task]);
 
   const handleVerify = useCallback(async () => {
     if (!task) return;
-    logVerifyActionAttempt(task.taskId);
+    logVerifyActionAttempt(task.id);
     setLoading(true);
     setMessage('');
     try {
-      const result = await verifyWaitlistAction(publicKey, task.taskId);
+      const result = await verifyWaitlistAction(publicKey, task.id);
       if (result.verified) {
-        logVerifyActionSuccess(task.taskId);
+        logVerifyActionSuccess(task.id);
         onSuccess();
         setMessage('');
       } else {
-        logVerifyActionError(task.taskId, result.message || 'not_verified');
+        logVerifyActionError(task.id, result.message || 'not_verified');
         setMessage(result.message || 'Could not verify. Please try again.');
       }
     } catch {
-      logVerifyActionError(task.taskId, 'exception');
+      logVerifyActionError(task.id, 'exception');
       setMessage('Verification failed. Please try again.');
     } finally {
       setLoading(false);
@@ -70,9 +63,9 @@ export default function VerifyActionSheet({ visible, onClose, task, publicKey, o
 
   if (!task) return null;
 
-  const actionLabel = task.taskId.startsWith('follow_')
+  const actionLabel = task.metadata?.handle
     ? 'Open Profile'
-    : task.taskId === 'retweet_announcement'
+    : task.metadata?.tweetId || task.metadata?.tweetUrl
       ? 'Open Tweet'
       : 'Open Channel';
 
