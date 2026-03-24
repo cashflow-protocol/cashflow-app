@@ -306,8 +306,6 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
     }
 
     const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
-    console.log(`[build-proposal-tx] RPC: ${rpcUrl}`);
-    console.log(`[build-proposal-tx] blockhash: ${blockhash}, lastValidBlockHeight: ${lastValidBlockHeight}`);
 
     const msg = new TransactionMessage({
       payerKey: walletPubkey,
@@ -315,7 +313,6 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
       instructions: tx1Instructions,
     }).compileToV0Message();
     const tx = new VersionedTransaction(msg);
-    console.log(`[build-proposal-tx] TX1 size: ${tx.serialize().length} bytes, signers: ${tx.message.staticAccountKeys.length} accounts`);
 
     // Also build TX2 (execute) — stored for later use after threshold is met
     const tx2Instructions = [

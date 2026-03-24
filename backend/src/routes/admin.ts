@@ -247,7 +247,6 @@ router.get('/waitlist-tasks', async (req, res) => {
       success: true,
       tasks: tasks.map((t) => ({
         id: t._id,
-        taskId: t.taskId,
         title: t.title,
         description: t.description || '',
         xpReward: t.xpReward,
@@ -271,36 +270,104 @@ router.get('/waitlist-tasks', async (req, res) => {
  */
 router.post('/waitlist-tasks', async (req, res) => {
   try {
-    const { taskId, title, description, xpReward, active, sortOrder, requiresTask, category, metadata } = req.body;
-    if (!taskId || !title || xpReward == null || !category) {
-      res.status(400).json({ success: false, error: 'taskId, title, xpReward, and category are required' });
+    const { title, description, xpReward, active, sortOrder, requiresTask, category, metadata } = req.body;
+    if (!title || xpReward == null || !category) {
+      res.status(400).json({ success: false, error: 'title, xpReward, and category are required' });
       return;
     }
 
-    try {
-      const task = await WaitlistTaskModel.create({
-        taskId,
-        title,
-        description: description || '',
-        xpReward: Number(xpReward),
-        active: active !== false,
-        sortOrder: Number(sortOrder) || 0,
-        requiresTask: requiresTask || undefined,
-        category,
-        metadata: metadata || {},
-      });
+    const task = await WaitlistTaskModel.create({
+      title,
+      description: description || '',
+      xpReward: Number(xpReward),
+      active: active !== false,
+      sortOrder: Number(sortOrder) || 0,
+      requiresTask: requiresTask || undefined,
+      category,
+      metadata: metadata || {},
+    });
 
-      res.json({ success: true, task: { id: task._id, taskId: task.taskId } });
-    } catch (err: any) {
-      if (err.code === 11000) {
-        res.status(409).json({ success: false, error: 'Task ID already exists' });
-        return;
-      }
-      throw err;
-    }
+    res.json({ success: true, task: { id: task._id } });
   } catch (error) {
     console.error('Admin create waitlist task error:', error);
     res.status(500).json({ success: false, error: 'Failed to create task' });
+  }
+});
+
+/**
+ * GET /waitlist-tasks/export
+ * Export all tasks as portable JSON (no _ids, requiresTask as title).
+ */
+router.get('/waitlist-tasks/export', async (req, res) => {
+  try {
+    const tasks = await WaitlistTaskModel.find().sort({ sortOrder: 1 }).lean();
+    const idToTitle = new Map(tasks.map((t) => [t._id.toString(), t.title]));
+
+    const exported = tasks.map((t) => ({
+      title: t.title,
+      description: t.description || '',
+      xpReward: t.xpReward,
+      active: t.active,
+      sortOrder: t.sortOrder,
+      requiresTask: t.requiresTask ? idToTitle.get(t.requiresTask) || null : null,
+      category: t.category,
+      metadata: t.metadata || {},
+    }));
+
+    res.json({ success: true, tasks: exported });
+  } catch (error) {
+    console.error('Admin export waitlist tasks error:', error);
+    res.status(500).json({ success: false, error: 'Failed to export tasks' });
+  }
+});
+
+/**
+ * POST /waitlist-tasks/import
+ * Import tasks from portable JSON. Creates new tasks, resolves requiresTask by title.
+ */
+router.post('/waitlist-tasks/import', async (req, res) => {
+  try {
+    const { tasks } = req.body;
+    if (!Array.isArray(tasks) || tasks.length === 0) {
+      res.status(400).json({ success: false, error: 'tasks array is required' });
+      return;
+    }
+
+    // Phase 1: Create all tasks without requiresTask
+    const titleToId = new Map<string, string>();
+    const pendingRequires: { id: string; requiresTitle: string }[] = [];
+
+    for (const t of tasks) {
+      if (!t.title || !t.category || t.xpReward == null) {
+        continue;
+      }
+      const task = await WaitlistTaskModel.create({
+        title: t.title,
+        description: t.description || '',
+        xpReward: Number(t.xpReward),
+        active: t.active !== false,
+        sortOrder: Number(t.sortOrder) || 0,
+        category: t.category,
+        metadata: t.metadata || {},
+      });
+      titleToId.set(t.title, task._id.toString());
+      if (t.requiresTask) {
+        pendingRequires.push({ id: task._id.toString(), requiresTitle: t.requiresTask });
+      }
+    }
+
+    // Phase 2: Resolve requiresTask references by title
+    for (const { id, requiresTitle } of pendingRequires) {
+      const reqId = titleToId.get(requiresTitle);
+      if (reqId) {
+        await WaitlistTaskModel.findByIdAndUpdate(id, { $set: { requiresTask: reqId } });
+      }
+    }
+
+    res.json({ success: true, imported: titleToId.size });
+  } catch (error) {
+    console.error('Admin import waitlist tasks error:', error);
+    res.status(500).json({ success: false, error: 'Failed to import tasks' });
   }
 });
 
@@ -397,7 +464,7 @@ router.post('/waitlist-users/:id/revoke-task', async (req, res) => {
     }
 
     // Look up XP reward
-    const task = await WaitlistTaskModel.findOne({ taskId }).lean();
+    const task = await WaitlistTaskModel.findById(taskId).lean();
     const xpToDeduct = task?.xpReward ?? 0;
 
     await WaitlistUserModel.findByIdAndUpdate(req.params.id, {

@@ -170,14 +170,14 @@ router.post('/waitlist/tasks', async (req, res) => {
 
     const taskList = tasks
       .map((t, i) => ({
-        taskId: t.taskId,
+        id: t._id.toString(),
         title: t.title,
         description: t.description,
         xpReward: t.xpReward,
         category: t.category,
         requiresTask: t.requiresTask,
         metadata: t.metadata,
-        completed: completedSet.has(t.taskId),
+        completed: completedSet.has(t._id.toString()),
         locked: t.requiresTask ? !completedSet.has(t.requiresTask) : false,
         _sortOrder: i,
       }))
@@ -350,18 +350,21 @@ router.post('/waitlist/connect-email/verify', async (req, res) => {
     pendingEmailCodes.delete(key);
 
     // Find the task to get XP reward
-    const task = await WaitlistTaskModel.findOne({ taskId: 'connect_email' }).lean();
+    const task = await WaitlistTaskModel.findOne({ category: 'social_connect', 'metadata.provider': 'email' }).lean();
+    const taskId = task?._id.toString();
     const xpReward = task?.xpReward ?? 100;
 
     // Update user: save email, mark task complete, award XP (only if not already completed)
-    await WaitlistUserModel.findOneAndUpdate(
-      { publicKey, completedTasks: { $ne: 'connect_email' } },
-      {
-        $set: { email: normalizedEmail, emailVerified: true },
-        $addToSet: { completedTasks: 'connect_email' },
-        $inc: { xp: xpReward },
-      },
-    );
+    if (taskId) {
+      await WaitlistUserModel.findOneAndUpdate(
+        { publicKey, completedTasks: { $ne: taskId } },
+        {
+          $set: { email: normalizedEmail, emailVerified: true },
+          $addToSet: { completedTasks: taskId },
+          $inc: { xp: xpReward },
+        },
+      );
+    }
 
     // Add to Brevo "Cashflow Waitlist" list
     try {
@@ -385,9 +388,12 @@ router.post('/waitlist/connect-email/verify', async (req, res) => {
 
 // ─── Helper: award XP for a task (prevents double award) ───
 
-async function awardTaskXp(publicKey: string, taskId: string, extraFields?: Record<string, any>, screenshotUrl?: string) {
-  const task = await WaitlistTaskModel.findOne({ taskId }).lean();
-  const xpReward = task?.xpReward ?? 100;
+async function awardTaskXp(publicKey: string, taskQuery: Record<string, any>, extraFields?: Record<string, any>, screenshotUrl?: string) {
+  const task = await WaitlistTaskModel.findOne(taskQuery).lean();
+  if (!task) return { awarded: false, xpReward: 0 };
+
+  const taskId = task._id.toString();
+  const xpReward = task.xpReward ?? 100;
 
   const result = await WaitlistUserModel.findOneAndUpdate(
     { publicKey, completedTasks: { $ne: taskId } },
@@ -400,7 +406,7 @@ async function awardTaskXp(publicKey: string, taskId: string, extraFields?: Reco
   );
 
   if (result) {
-    const parts = [`✅ Task completed: <b>${task?.title ?? taskId}</b> (+${xpReward} XP)`];
+    const parts = [`✅ Task completed: <b>${task.title}</b> (+${xpReward} XP)`];
     parts.push(`\nTotal XP: ${result.xp} | Tasks: ${result.completedTasks.length}`);
     parts.push(`Wallet: <code>${publicKey.slice(0, 6)}...${publicKey.slice(-4)}</code>`);
     if (result.email) parts.push(`Email: ${result.email}`);
@@ -438,7 +444,7 @@ router.post('/waitlist/connect-wallet', async (req, res) => {
       return;
     }
 
-    const { awarded, xpReward } = await awardTaskXp(publicKey, 'connect_wallet', {
+    const { awarded, xpReward } = await awardTaskXp(publicKey, { category: 'social_connect', 'metadata.provider': 'wallet' }, {
       walletAddress,
     });
 
@@ -511,7 +517,7 @@ router.get('/waitlist/connect-x/callback', async (req, res) => {
       return;
     }
 
-    await awardTaskXp(pending.publicKey, 'connect_x', {
+    await awardTaskXp(pending.publicKey, { category: 'social_connect', 'metadata.provider': 'x' }, {
       twitterId: twitterUser.id,
       twitterHandle: twitterUser.username,
       twitterAccessToken: twitterUser.accessToken,
@@ -584,7 +590,7 @@ router.get('/waitlist/connect-discord/callback', async (req, res) => {
       return;
     }
 
-    await awardTaskXp(pending.publicKey, 'connect_discord', {
+    await awardTaskXp(pending.publicKey, { category: 'social_connect', 'metadata.provider': 'discord' }, {
       discordId: discordUser.id,
       discordUsername: discordUser.username,
     });
@@ -643,7 +649,7 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
       const [action, publicKey, taskId] = callbackQuery.data.split(':');
       if (action === 'r' && publicKey && taskId) {
         // Revoke task: remove from completedTasks, deduct XP
-        const task = await WaitlistTaskModel.findOne({ taskId }).lean();
+        const task = await WaitlistTaskModel.findById(taskId).lean();
         const xpReward = task?.xpReward ?? 0;
         await WaitlistUserModel.findOneAndUpdate(
           { publicKey },
@@ -703,7 +709,7 @@ router.post('/waitlist/telegram-webhook', async (req, res) => {
 
     pendingTelegramCodes.delete(code);
 
-    await awardTaskXp(pending.publicKey, 'connect_telegram', {
+    await awardTaskXp(pending.publicKey, { category: 'social_connect', 'metadata.provider': 'telegram' }, {
       telegramId: message.from.id.toString(),
       telegramUsername: message.from.username || '',
     });
@@ -736,8 +742,8 @@ const upload = multer({
 
 router.post('/waitlist/upload-screenshot', upload.single('image'), async (req, res) => {
   try {
-    const { publicKey, taskId } = req.body;
-    if (!publicKey || !taskId) {
+    const { publicKey, taskId: id } = req.body;
+    if (!publicKey || !id) {
       res.status(400).json({ success: false, error: 'publicKey and taskId are required' });
       return;
     }
@@ -754,17 +760,17 @@ router.post('/waitlist/upload-screenshot', upload.single('image'), async (req, r
 
     // Upload to DO Spaces
     const ext = req.file.mimetype === 'image/png' ? 'png' : req.file.mimetype === 'image/webp' ? 'webp' : 'jpg';
-    const key = `screenshots/${publicKey}/${taskId}_${Date.now()}.${ext}`;
+    const key = `screenshots/${publicKey}/${id}_${Date.now()}.${ext}`;
     const imageUrl = await storage.uploadFile(req.file.buffer, key, req.file.mimetype);
 
     // Save screenshot reference
     await WaitlistUserModel.findOneAndUpdate(
       { publicKey },
-      { $push: { proofScreenshots: { taskId, imageUrl, uploadedAt: new Date() } } },
+      { $push: { proofScreenshots: { taskId: id, imageUrl, uploadedAt: new Date() } } },
     );
 
     // Auto-approve: award XP (pass screenshot URL for admin notification)
-    const { awarded, xpReward } = await awardTaskXp(publicKey, taskId, undefined, imageUrl);
+    const { awarded, xpReward } = await awardTaskXp(publicKey, { _id: id }, undefined, imageUrl);
 
     res.json({ success: true, xpAwarded: awarded ? xpReward : 0, imageUrl });
   } catch (error: any) {
@@ -785,8 +791,8 @@ router.post('/waitlist/upload-screenshot', upload.single('image'), async (req, r
  */
 router.post('/waitlist/verify-action', async (req, res) => {
   try {
-    const { publicKey, taskId } = req.body;
-    if (!publicKey || !taskId) {
+    const { publicKey, taskId: id } = req.body;
+    if (!publicKey || !id) {
       res.status(400).json({ success: false, error: 'publicKey and taskId are required' });
       return;
     }
@@ -798,59 +804,51 @@ router.post('/waitlist/verify-action', async (req, res) => {
     }
 
     // Check if already completed
-    if (user.completedTasks?.includes(taskId)) {
+    if (user.completedTasks?.includes(id)) {
       res.json({ success: true, verified: true, message: 'Already completed' });
       return;
     }
 
     // Check prerequisite
-    const task = await WaitlistTaskModel.findOne({ taskId }).lean();
+    const task = await WaitlistTaskModel.findById(id).lean();
     if (!task) {
       res.status(400).json({ success: false, error: 'Unknown task' });
       return;
     }
     if (task.requiresTask && !user.completedTasks?.includes(task.requiresTask)) {
-      res.status(400).json({ success: false, error: `Complete "${task.requiresTask}" first` });
+      res.status(400).json({ success: false, error: 'Complete prerequisite task first' });
+      return;
+    }
+
+    if (task.category !== 'social_action') {
+      res.status(400).json({ success: false, error: 'This task cannot be verified this way' });
       return;
     }
 
     let verified = false;
 
-    switch (taskId) {
-      case 'follow_cashflow_x':
-      case 'follow_heymike_x': {
-        if (!user.twitterId || !user.twitterAccessToken) {
-          res.json({ success: true, verified: false, message: 'Connect your X account first.' });
-          return;
-        }
-        const targetHandle = taskId === 'follow_cashflow_x' ? 'cashflow_fi' : 'heymike777';
-        verified = await socialAuth.checkTwitterFollow(user.twitterAccessToken, user.twitterId, targetHandle);
-        break;
-      }
-      case 'retweet_announcement': {
-        if (!user.twitterId) {
-          res.json({ success: true, verified: false, message: 'Connect your X account first.' });
-          return;
-        }
-        const tweetId = task.metadata?.tweetId;
-        if (!tweetId) {
-          res.json({ success: true, verified: false, message: 'Announcement tweet not configured.' });
-          return;
-        }
-        verified = await socialAuth.checkTwitterRetweet(tweetId, user.twitterId);
-        break;
-      }
-      case 'subscribe_founders_tg': {
-        if (!user.telegramId) {
-          res.json({ success: true, verified: false, message: 'Connect your Telegram first.' });
-          return;
-        }
-        verified = await telegram.checkChannelMember(user.telegramId, '@founders_journey');
-        break;
-      }
-      default:
-        res.status(400).json({ success: false, error: 'This task cannot be verified this way' });
+    // Dispatch by metadata — each social_action task carries its verification data
+    if (task.metadata?.handle) {
+      if (!user.twitterId || !user.twitterAccessToken) {
+        res.json({ success: true, verified: false, message: 'Connect your X account first.' });
         return;
+      }
+      verified = await socialAuth.checkTwitterFollow(user.twitterAccessToken, user.twitterId, task.metadata.handle);
+    } else if (task.metadata?.tweetId) {
+      if (!user.twitterId) {
+        res.json({ success: true, verified: false, message: 'Connect your X account first.' });
+        return;
+      }
+      verified = await socialAuth.checkTwitterRetweet(task.metadata.tweetId, user.twitterId);
+    } else if (task.metadata?.channel) {
+      if (!user.telegramId) {
+        res.json({ success: true, verified: false, message: 'Connect your Telegram first.' });
+        return;
+      }
+      verified = await telegram.checkChannelMember(user.telegramId, task.metadata.channel);
+    } else {
+      res.status(400).json({ success: false, error: 'Task is missing verification metadata' });
+      return;
     }
 
     if (!verified) {
@@ -862,7 +860,7 @@ router.post('/waitlist/verify-action', async (req, res) => {
       return;
     }
 
-    const { xpReward } = await awardTaskXp(publicKey, taskId);
+    const { xpReward } = await awardTaskXp(publicKey, { _id: id });
     res.json({ success: true, verified: true, xpAwarded: xpReward });
   } catch (error: any) {
     // Handle Twitter rate limits

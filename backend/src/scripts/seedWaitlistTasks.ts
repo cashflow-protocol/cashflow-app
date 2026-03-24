@@ -2,80 +2,79 @@ import 'dotenv/config';
 import mongoose from 'mongoose';
 import { WaitlistTaskModel } from '../models/WaitlistTask';
 
-const TASKS = [
+const CONNECT_TASKS = [
   {
-    taskId: 'connect_wallet',
     title: 'Connect your wallet',
     xpReward: 100,
     sortOrder: 0,
     category: 'social_connect',
+    metadata: { provider: 'wallet' },
   },
   {
-    taskId: 'connect_email',
     title: 'Connect your email',
     xpReward: 100,
     sortOrder: 1,
     category: 'social_connect',
+    metadata: { provider: 'email' },
   },
   {
-    taskId: 'connect_x',
     title: 'Connect your X',
     xpReward: 100,
     sortOrder: 2,
     category: 'social_connect',
+    metadata: { provider: 'x' },
   },
   {
-    taskId: 'connect_discord',
     title: 'Connect your Discord',
     xpReward: 100,
     sortOrder: 3,
     category: 'social_connect',
+    metadata: { provider: 'discord' },
   },
   {
-    taskId: 'connect_telegram',
     title: 'Connect your Telegram',
     xpReward: 100,
     sortOrder: 4,
     category: 'social_connect',
+    metadata: { provider: 'telegram' },
   },
+];
+
+// Tasks that require a connect task to be completed first
+const ACTION_TASKS = [
   {
-    taskId: 'follow_cashflow_x',
     title: 'Follow @cashflow_fi on X',
     xpReward: 200,
     sortOrder: 5,
-    requiresTask: 'connect_x',
     category: 'social_action',
+    requiresProvider: 'x',
     metadata: { handle: 'cashflow_fi', profileUrl: 'https://x.com/cashflow_fi' },
   },
   {
-    taskId: 'follow_heymike_x',
     title: 'Follow @heymike777 on X',
     xpReward: 200,
     sortOrder: 6,
-    requiresTask: 'connect_x',
     category: 'social_action',
+    requiresProvider: 'x',
     metadata: { handle: 'heymike777', profileUrl: 'https://x.com/heymike777' },
   },
   {
-    taskId: 'retweet_announcement',
     title: 'Retweet our announcement',
     xpReward: 50,
     sortOrder: 7,
-    requiresTask: 'connect_x',
     category: 'social_action',
+    requiresProvider: 'x',
     metadata: { tweetUrl: 'https://x.com/cashflow_fi' },
   },
   {
-    taskId: 'subscribe_founders_tg',
     title: 'Subscribe @founders_journey on Telegram',
     xpReward: 200,
     sortOrder: 8,
-    requiresTask: 'connect_telegram',
     category: 'social_action',
+    requiresProvider: 'telegram',
     metadata: { channel: '@founders_journey', channelUrl: 'https://t.me/founders_journey' },
   },
   {
-    taskId: 'rate_dapp_store',
     title: 'Rate us on dApp Store',
     xpReward: 300,
     sortOrder: 9,
@@ -91,13 +90,28 @@ async function seed() {
   await mongoose.connect(uri);
   console.log('Connected to MongoDB');
 
-  for (const task of TASKS) {
-    await WaitlistTaskModel.findOneAndUpdate(
-      { taskId: task.taskId },
+  // Upsert connect tasks by category + provider (unique key)
+  const providerToId = new Map<string, string>();
+  for (const task of CONNECT_TASKS) {
+    const result = await WaitlistTaskModel.findOneAndUpdate(
+      { category: task.category, 'metadata.provider': task.metadata.provider },
       { $set: task },
-      { upsert: true },
+      { upsert: true, new: true },
     );
-    console.log(`  Upserted task: ${task.taskId}`);
+    providerToId.set(task.metadata.provider, result._id.toString());
+    console.log(`  Upserted: ${task.title} (${result._id})`);
+  }
+
+  // Upsert action tasks, resolving requiresTask to _id
+  for (const { requiresProvider, ...task } of ACTION_TASKS) {
+    const requiresTask = requiresProvider ? providerToId.get(requiresProvider) : undefined;
+    // Use title + category as upsert key for action tasks
+    const result = await WaitlistTaskModel.findOneAndUpdate(
+      { title: task.title, category: task.category },
+      { $set: { ...task, requiresTask } },
+      { upsert: true, new: true },
+    );
+    console.log(`  Upserted: ${task.title} (${result._id})`);
   }
 
   console.log('Seed complete');

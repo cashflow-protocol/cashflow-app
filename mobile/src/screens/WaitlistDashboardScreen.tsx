@@ -141,7 +141,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
     const sub = AppState.addEventListener('change', async (state) => {
       if (state === 'active') {
         const data = await getWaitlistTasks(publicKey);
-        const tgTask = data.tasks.find((t) => t.taskId === 'connect_telegram');
+        const tgTask = data.tasks.find((t) => t.metadata?.provider === 'telegram');
         if (tgTask?.completed) {
           setTelegramSheetVisible(false);
           setTasks(data.tasks);
@@ -157,72 +157,66 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
 
   const handleTaskPress = async (task: WaitlistTaskItem) => {
     if (task.completed || task.locked || !publicKey) return;
-    logWaitlistTaskPress(task.taskId);
+    logWaitlistTaskPress(task.id);
 
-    switch (task.taskId) {
-      case 'connect_wallet': {
-        try {
-          const account = await connectWallet();
-          if (account) {
-            await connectWalletApi(publicKey, account.publicKey as string);
-            loadTasks(publicKey);
+    if (task.category === 'social_connect') {
+      switch (task.metadata?.provider) {
+        case 'wallet': {
+          try {
+            const account = await connectWallet();
+            if (account) {
+              await connectWalletApi(publicKey, account.publicKey as string);
+              loadTasks(publicKey);
+            }
+          } catch (err: any) {
+            const msg = err?.message || '';
+            if (!msg.includes('CancellationException')) {
+              logError('waitlist_connect_wallet', msg);
+              Alert.alert('Error', msg || 'Failed to connect wallet.');
+            }
           }
-        } catch (err: any) {
-          const msg = err?.message || '';
-          if (!msg.includes('CancellationException')) {
-            logError('waitlist_connect_wallet', msg);
-            Alert.alert('Error', msg || 'Failed to connect wallet.');
+          break;
+        }
+        case 'email':
+          setEmailSheetVisible(true);
+          break;
+        case 'x': {
+          const xResult = await startConnectX(publicKey);
+          if (xResult?.authUrl) {
+            Linking.openURL(xResult.authUrl);
+          } else {
+            Alert.alert('Not Available', 'Twitter integration is not configured yet.');
           }
+          break;
         }
-        break;
+        case 'discord': {
+          const dResult = await startConnectDiscord(publicKey);
+          if (dResult?.authUrl) {
+            Linking.openURL(dResult.authUrl);
+          } else {
+            Alert.alert('Not Available', 'Discord integration is not configured yet.');
+          }
+          break;
+        }
+        case 'telegram': {
+          const tResult = await startConnectTelegram(publicKey);
+          if (tResult) {
+            setTelegramCode(tResult.code);
+            setTelegramBotUrl(tResult.botUrl);
+            setTelegramSheetVisible(true);
+          } else {
+            Alert.alert('Not Available', 'Telegram integration is not configured yet.');
+          }
+          break;
+        }
       }
-      case 'connect_email':
-        setEmailSheetVisible(true);
-        break;
-      case 'connect_x': {
-        const xResult = await startConnectX(publicKey);
-        if (xResult?.authUrl) {
-          Linking.openURL(xResult.authUrl);
-        } else {
-          Alert.alert('Not Available', 'Twitter integration is not configured yet.');
-        }
-        break;
-      }
-      case 'connect_discord': {
-        const dResult = await startConnectDiscord(publicKey);
-        if (dResult?.authUrl) {
-          Linking.openURL(dResult.authUrl);
-        } else {
-          Alert.alert('Not Available', 'Discord integration is not configured yet.');
-        }
-        break;
-      }
-      case 'connect_telegram': {
-        const tResult = await startConnectTelegram(publicKey);
-        if (tResult) {
-          setTelegramCode(tResult.code);
-          setTelegramBotUrl(tResult.botUrl);
-          setTelegramSheetVisible(true);
-        } else {
-          Alert.alert('Not Available', 'Telegram integration is not configured yet.');
-        }
-        break;
-      }
-      case 'follow_cashflow_x':
-      case 'follow_heymike_x':
-      case 'retweet_announcement':
-      case 'subscribe_founders_tg':
-        setVerifyTask(task);
-        setVerifySheetVisible(true);
-        break;
-      default:
-        // Screenshot-based tasks (e.g. rate_dapp_store)
-        if (task.metadata?.requiresScreenshot) {
-          setScreenshotTaskId(task.taskId);
-          setScreenshotStoreUrl(task.metadata.storeUrl || 'https://cashflow.fun/download');
-          setScreenshotSheetVisible(true);
-        }
-        break;
+    } else if (task.category === 'social_action') {
+      setVerifyTask(task);
+      setVerifySheetVisible(true);
+    } else if (task.metadata?.requiresScreenshot) {
+      setScreenshotTaskId(task.id);
+      setScreenshotStoreUrl(task.metadata.storeUrl || 'https://cashflow.fun/download');
+      setScreenshotSheetVisible(true);
     }
   };
 
@@ -348,7 +342,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         </View>
         {tasks.map((task) => (
           <TouchableOpacity
-            key={task.taskId}
+            key={task.id}
             style={[
               styles.taskRow,
               { backgroundColor: colors.card, shadowColor: colors.shadowColor },
@@ -383,7 +377,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
                 </Text>
                 {task.locked && task.requiresTask && (
                   <Text style={[styles.taskRequires, { color: colors.textTertiary }]}>
-                    Requires: {tasks.find((t) => t.taskId === task.requiresTask)?.title ?? task.requiresTask}
+                    Requires: {tasks.find((t) => t.id === task.requiresTask)?.title ?? 'prerequisite'}
                   </Text>
                 )}
               </View>
@@ -413,6 +407,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         >
           <Text style={[styles.inviteCodeButtonText, { color: colors.accentBlue }]}>I have an invite code</Text>
         </TouchableOpacity>
+        <Text style={[styles.hackathonHint, { color: colors.textSecondary }]}>For hackathon - enter SEEKER</Text>
 
       </ScrollView>
 
@@ -621,5 +616,11 @@ const styles = StyleSheet.create({
   inviteCodeButtonText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  hackathonHint: {
+    fontSize: 13,
+    fontWeight: '500',
+    opacity: 0.6,
+    marginTop: 8,
   },
 });

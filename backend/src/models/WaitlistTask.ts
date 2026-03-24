@@ -1,4 +1,4 @@
-import { prop, getModelForClass, modelOptions, index } from '@typegoose/typegoose';
+import { prop, getModelForClass, modelOptions } from '@typegoose/typegoose';
 
 @modelOptions({
   schemaOptions: {
@@ -6,11 +6,7 @@ import { prop, getModelForClass, modelOptions, index } from '@typegoose/typegoos
     collection: 'waitlist_tasks',
   },
 })
-@index({ taskId: 1 }, { unique: true })
 export class WaitlistTask {
-  @prop({ required: true })
-  public taskId!: string;
-
   @prop({ required: true })
   public title!: string;
 
