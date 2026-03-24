@@ -365,9 +365,9 @@ router.post('/waitlist-tasks/import', async (req, res) => {
     }
 
     res.json({ success: true, imported: titleToId.size });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Admin import waitlist tasks error:', error);
-    res.status(500).json({ success: false, error: 'Failed to import tasks' });
+    res.status(500).json({ success: false, error: error.message || 'Failed to import tasks' });
   }
 });
 
