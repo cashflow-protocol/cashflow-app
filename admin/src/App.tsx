@@ -50,7 +50,7 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(isLoggedIn());
   const [page, setPageState] = useState<Page>(getPageFromPath());
-  const [env, setEnvState] = useState<Env>(getEnv());
+  const [env] = useState<Env>(getEnv());
 
   const setPage = useCallback((p: Page) => {
     window.history.pushState(null, '', `/${p}`);
