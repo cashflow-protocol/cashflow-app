@@ -47,7 +47,13 @@ export class HeliusSender {
       throw new Error(`HeliusSender error: ${json.error.message}`);
     }
 
-    return json.result;
+    const signature = json.result;
+    if (!signature) {
+      console.error('[HeliusSender] Unexpected response:', JSON.stringify(json));
+      throw new Error('HeliusSender: no signature returned');
+    }
+
+    return signature;
   }
 
   /**
@@ -58,6 +64,7 @@ export class HeliusSender {
     const conn = new Connection(rpcUrl, 'confirmed');
 
     // Send initial
+    console.log(`[HeliusSender] Sending to: ${HELIUS_SENDER_FAST}`);
     const signature = await this.sendTransaction(base64Tx);
     console.log(`[HeliusSender] TX sent: ${signature}`);
 
