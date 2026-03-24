@@ -515,6 +515,7 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
         ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
         ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
         approveIx,
+        HeliusSender.createTipIx(memberPubkey),
       ],
     }).compileToV0Message();
 
