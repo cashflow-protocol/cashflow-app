@@ -132,7 +132,7 @@ export async function signTransactionWithPrivy(
           encoding: 'base64',
         },
       },
-      { headers: { ...headers, 'privy-authorization-signature': userId } },
+      { headers },
     );
   } catch (err: any) {
     const detail = err?.response?.data ? JSON.stringify(err.response.data) : err.message;
