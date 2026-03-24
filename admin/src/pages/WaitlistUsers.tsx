@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getWaitlistUsers, getUserScreenshots, revokeUserTask } from '../api';
+import { getWaitlistUsers, getUserScreenshots, revokeUserTask, getWaitlistTasks } from '../api';
 
 interface WaitlistUser {
   id: string;
@@ -34,6 +34,15 @@ export default function WaitlistUsersPage() {
   const [detailUser, setDetailUser] = useState<WaitlistUser | null>(null);
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [screenshotsLoading, setScreenshotsLoading] = useState(false);
+  const [taskMap, setTaskMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    getWaitlistTasks().then((data) => {
+      const map: Record<string, string> = {};
+      for (const t of data.tasks || []) map[t.id] = t.title;
+      setTaskMap(map);
+    }).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -205,7 +214,7 @@ export default function WaitlistUsersPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
                 {detailUser.completedTasks.map((taskId) => (
                   <div key={taskId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', backgroundColor: '#f9f9f9', borderRadius: 6 }}>
-                    <span className="mono" style={{ fontSize: 13 }}>{taskId}</span>
+                    <span style={{ fontSize: 13 }}>{taskMap[taskId] || taskId}</span>
                     <button
                       className="btn-danger"
                       style={{ fontSize: 11, padding: '2px 8px' }}
@@ -236,7 +245,7 @@ export default function WaitlistUsersPage() {
                       />
                     </a>
                     <div style={{ padding: '6px 8px', fontSize: 12 }}>
-                      <div className="mono">{s.taskId}</div>
+                      <div>{taskMap[s.taskId] || s.taskId}</div>
                       <div style={{ color: '#999' }}>{new Date(s.uploadedAt).toLocaleString()}</div>
                     </div>
                   </div>

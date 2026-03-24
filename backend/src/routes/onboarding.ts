@@ -390,7 +390,10 @@ router.post('/waitlist/connect-email/verify', async (req, res) => {
 
 async function awardTaskXp(publicKey: string, taskQuery: Record<string, any>, extraFields?: Record<string, any>, screenshotUrl?: string) {
   const task = await WaitlistTaskModel.findOne(taskQuery).lean();
-  if (!task) return { awarded: false, xpReward: 0 };
+  if (!task) {
+    console.error('awardTaskXp: task not found for query', taskQuery);
+    return { awarded: false, xpReward: 0 };
+  }
 
   const taskId = task._id.toString();
   const xpReward = task.xpReward ?? 100;
@@ -404,6 +407,10 @@ async function awardTaskXp(publicKey: string, taskQuery: Record<string, any>, ex
     },
     { new: true },
   );
+
+  if (!result) {
+    console.log('awardTaskXp: already completed', taskId, 'for', publicKey);
+  }
 
   if (result) {
     const parts = [`✅ Task completed: <b>${task.title}</b> (+${xpReward} XP)`];

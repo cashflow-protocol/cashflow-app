@@ -407,7 +407,6 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         >
           <Text style={[styles.inviteCodeButtonText, { color: colors.accentBlue }]}>I have an invite code</Text>
         </TouchableOpacity>
-        <Text style={[styles.hackathonHint, { color: colors.textSecondary }]}>For hackathon - enter SEEKER</Text>
 
       </ScrollView>
 
