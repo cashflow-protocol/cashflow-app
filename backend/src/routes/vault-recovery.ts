@@ -515,8 +515,60 @@ router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /build-approve-tx
+ * Build a proposalApprove transaction for a given member.
+ * Body: { memberAddress: string, multisigAddress: string, transactionIndex: number }
+ */
+router.post('/build-approve-tx', async (req: Request, res: Response) => {
+  try {
+    const { memberAddress, multisigAddress, transactionIndex: txIdx } = req.body;
+    if (!memberAddress || !multisigAddress || txIdx == null) {
+      res.status(400).json({ success: false, error: 'memberAddress, multisigAddress, transactionIndex are required' });
+      return;
+    }
+
+    const multisigLib = await import('@sqds/multisig');
+    const { Connection, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl);
+
+    const multisigPda = new PublicKey(multisigAddress);
+    const memberPubkey = new PublicKey(memberAddress);
+    const transactionIndex = BigInt(txIdx);
+
+    const approveIx = multisigLib.instructions.proposalApprove({
+      multisigPda,
+      transactionIndex,
+      member: memberPubkey,
+    });
+
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+
+    const msg = new TransactionMessage({
+      payerKey: memberPubkey,
+      recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+        approveIx,
+        HeliusSender.createTipIx(memberPubkey),
+      ],
+    }).compileToV0Message();
+
+    const tx = new VersionedTransaction(msg);
+    const txBase64 = Buffer.from(tx.serialize()).toString('base64');
+
+    res.json({ success: true, data: { transaction: txBase64, blockhash, lastValidBlockHeight } });
+  } catch (error: any) {
+    console.error('Error building approve tx:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to build approve transaction' });
+  }
+});
+
+/**
  * POST /proposal/:proposalId/build-approve-tx
- * Build a proposalApprove transaction for a given member to sign and send.
+ * Build a proposalApprove transaction for a given member (by proposal ID).
+ * @deprecated Use POST /build-approve-tx instead.
  * Body: { memberAddress: string }
  */
 router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: Response) => {

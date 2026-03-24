@@ -13,6 +13,7 @@ import {
   generateAndStoreCloudKeypair,
   generateAndStoreDeviceKeypair,
   getCloudPublicKey,
+  signWithCloud,
 } from './keypairStorage';
 import walletService from './walletService';
 import apiService from './apiService';
@@ -76,24 +77,40 @@ export async function buildAndSubmitRecoveryProposal(
     actions.push({ memberAddress: newCloudKey, permissions: 'all' });
   }
 
-  // Step 3: Ask backend to build TX1 (without cloud key — only MWA signs)
-  // Cloud key will approve separately after TX1 lands, same as other voters.
+  // Step 3: Ask backend to build TX1
   onProgress?.('Building recovery transaction...');
 
   const buildResult = await apiService.buildRecoveryProposalTx({
     multisigAddress,
     walletAddress,
     members,
+    cloudKey: hasExistingCloud ? existingCloudKey! : undefined,
     addMemberActions: actions,
-    // Don't include cloudKey — MWA is the only signer for TX1
   });
 
   const { tx2Base64, transactionIndex, blockhash } = buildResult;
 
-  // Step 4: Sign TX1 with wallet (sign-only), then send via backend
+  // Step 4: Sign TX1 with cloud key + MWA, then send via backend
   onProgress?.('Signing with your wallet...');
 
   const tx1 = VersionedTransaction.deserialize(Buffer.from(buildResult.tx1Base64, 'base64'));
+
+  // Sign with cloud key first (if it's an existing member)
+  if (hasExistingCloud && existingCloudKey) {
+    const cloudPubkey = new PublicKey(existingCloudKey);
+    const msgBytes = tx1.message.serialize();
+    const msgBase64 = Buffer.from(msgBytes).toString('base64');
+    const cloudSig = await signWithCloud(msgBase64);
+    const cloudSigBytes = new Uint8Array(Buffer.from(cloudSig, 'base64'));
+    const cloudIdx = tx1.message.staticAccountKeys.findIndex(
+      (k: PublicKey) => k.equals(cloudPubkey),
+    );
+    if (cloudIdx !== -1) {
+      tx1.signatures[cloudIdx] = cloudSigBytes;
+    }
+  }
+
+  // Sign with MWA wallet (sign-only)
   const tx1Serialized = new Uint8Array(tx1.serialize());
   const signedBytes = await walletService.signTransactions([tx1Serialized]);
   if (!signedBytes?.[0]) {
