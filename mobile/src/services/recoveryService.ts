@@ -164,7 +164,7 @@ export async function buildAndSubmitRecoveryProposal(
 
     if (addr === walletAddress) {
       type = 'mwa';
-      label = 'Connected Wallet';
+      label = 'Seeker';
     } else if (hasExistingCloud && addr === existingCloudKey) {
       type = 'cloud';
       label = 'Cloud Key';

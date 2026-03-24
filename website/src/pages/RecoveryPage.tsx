@@ -244,7 +244,7 @@ export default function RecoveryPage() {
               <div>
                 <div className="signer-addr">{truncate(s.address)}</div>
                 <div className="signer-type">
-                  {s.type || ''}{s.email ? ' - ' + maskEmail(s.email) : s.label ? ' - ' + s.label : ''}
+                  {s.type === 'mwa' ? 'Seeker' : s.type || ''}{s.email ? ' - ' + maskEmail(s.email) : s.label ? ' - ' + s.label : ''}
                 </div>
               </div>
               {s.signed ? (
