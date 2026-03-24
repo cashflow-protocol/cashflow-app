@@ -19,7 +19,8 @@ export async function getOrCreatePrivyUser(email: string): Promise<{
   // Search for existing user by email
   let user;
   try {
-    user = await privy.users().search({ emails: [email], phoneNumbers: [], walletAddresses: [] });
+    const searchResult = await privy.users().search({ emails: [email], phoneNumbers: [], walletAddresses: [] });
+    user = (searchResult as any).data?.[0];
   } catch {}
 
   if (!user) {
@@ -60,25 +61,20 @@ export async function signTransactionWithPrivy(
   transactionBase64: string,
 ): Promise<{ signature: string; address: string }> {
   // Find user by email
-  const user = await privy.users().search({ emails: [email], phoneNumbers: [], walletAddresses: [] });
+  const searchResult = await privy.users().search({ emails: [email], phoneNumbers: [], walletAddresses: [] });
+  const user = (searchResult as any).data?.[0];
 
   if (!user) {
     throw new Error('Privy user not found for this email');
   }
 
-  console.log('[Privy] User found:', JSON.stringify(user, null, 2));
-
-  // Find their Solana embedded wallet — try different account types
-  const accounts = (user as any).linked_accounts || [];
+  // Find their Solana embedded wallet
+  const accounts = user.linked_accounts || [];
   const solanaWallet = accounts.find(
-    (a: any) =>
-      (a.type === 'wallet' && a.chain_type === 'solana') ||
-      (a.type === 'solana_wallet') ||
-      (a.type === 'embedded_wallet' && a.chain_type === 'solana')
+    (a: any) => a.type === 'wallet' && a.chain_type === 'solana'
   );
 
   if (!solanaWallet) {
-    console.error('[Privy] No Solana wallet found. Account types:', accounts.map((a: any) => `${a.type}/${a.chain_type || ''}`));
     throw new Error('No Solana wallet found for this Privy user');
   }
 
