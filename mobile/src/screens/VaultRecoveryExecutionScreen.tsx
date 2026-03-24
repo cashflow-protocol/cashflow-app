@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  RefreshControl,
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -81,7 +82,23 @@ export default function VaultRecoveryExecutionScreen({
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const handleRefresh = useCallback(async () => {
+    if (!proposalId) return;
+    setRefreshing(true);
+    try {
+      const status = await apiService.getRecoveryProposalStatus(proposalId);
+      setSigners(status.requiredSigners);
+      setSignaturesCollected(status.signaturesCollected);
+      if (status.status === 'ready') {
+        setStep('ready');
+        if (pollRef.current) clearInterval(pollRef.current);
+      }
+    } catch {}
+    setRefreshing(false);
+  }, [proposalId]);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -274,6 +291,14 @@ export default function VaultRecoveryExecutionScreen({
           style={styles.scrollContent}
           contentContainerStyle={styles.scrollInner}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#fff"
+              colors={['#fff']}
+            />
+          }
         >
           {/* Header */}
           <Text style={[styles.title, { color: colors.onboardingText }]}>

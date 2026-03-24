@@ -116,7 +116,27 @@ export async function buildAndSubmitRecoveryProposal(
   onProgress?.('Proposal confirmed on-chain...');
 
   // Step 5: Determine required signers
-  const recoveryEmails = await getRecoveryEmails();
+  // Try local recovery emails first, then ask backend for Privy lookups
+  const localEmails = await getRecoveryEmails();
+  let privyEmails: Record<string, string> = {};
+  try {
+    const unknownAddresses = members
+      .map(m => m.address)
+      .filter(addr => addr !== walletAddress && addr !== existingCloudKey && !localEmails[addr]);
+    if (unknownAddresses.length > 0) {
+      const lookupRes = await fetch(`${API_CONFIG.baseUrl}/vault-recovery/v1/lookup-privy-emails`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addresses: unknownAddresses }),
+      });
+      if (lookupRes.ok) {
+        const lookupData = await lookupRes.json();
+        privyEmails = lookupData.data?.emails || {};
+      }
+    }
+  } catch {}
+
+  const allEmails = { ...localEmails, ...privyEmails };
   const requiredSigners: RecoveryMember[] = [];
 
   for (const member of members) {
@@ -131,9 +151,9 @@ export async function buildAndSubmitRecoveryProposal(
     } else if (hasExistingCloud && addr === existingCloudKey) {
       type = 'cloud';
       label = 'Cloud Key';
-    } else if (recoveryEmails[addr]) {
+    } else if (allEmails[addr]) {
       type = 'privy';
-      email = recoveryEmails[addr];
+      email = allEmails[addr];
       label = `Email (${maskEmail(email)})`;
     } else {
       type = 'external';

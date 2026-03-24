@@ -168,7 +168,13 @@ export default function RecoveryPage() {
         throw new Error(err.error || 'Failed to send transaction');
       }
 
-      // 3. Mark as signed and refresh
+      // 3. Notify backend that this signer approved on-chain
+      await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: addr, signature: 'on-chain' }),
+      }).catch(() => {});
+
       setSigned(true);
       loadProposal();
     } catch (err: any) {

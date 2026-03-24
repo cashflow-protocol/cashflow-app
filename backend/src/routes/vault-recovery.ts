@@ -341,6 +341,56 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
 
 
 /**
+ * POST /lookup-privy-emails
+ * Look up Privy email addresses for given Solana wallet addresses.
+ * Body: { addresses: string[] }
+ */
+router.post('/lookup-privy-emails', async (req: Request, res: Response) => {
+  try {
+    const { addresses } = req.body;
+    if (!Array.isArray(addresses)) {
+      res.status(400).json({ success: false, error: 'addresses array is required' });
+      return;
+    }
+
+    const emails: Record<string, string> = {};
+
+    // Check each address against Privy — look for users whose Solana wallet matches
+    // This is best-effort; we search Privy by iterating known addresses
+    const axios = (await import('axios')).default;
+    const PRIVY_APP_ID = process.env.PRIVY_APP_ID || '';
+    const PRIVY_APP_SECRET = process.env.PRIVY_APP_SECRET || '';
+    const credentials = Buffer.from(`${PRIVY_APP_ID}:${PRIVY_APP_SECRET}`).toString('base64');
+    const headers = {
+      'Authorization': `Basic ${credentials}`,
+      'privy-app-id': PRIVY_APP_ID,
+      'Content-Type': 'application/json',
+    };
+
+    for (const addr of addresses) {
+      try {
+        const searchRes = await axios.post('https://auth.privy.io/api/v1/users/search', {
+          wallets: [addr],
+        }, { headers });
+
+        if (searchRes.data?.data?.length > 0) {
+          const user = searchRes.data.data[0];
+          const emailAccount = user.linked_accounts?.find((a: any) => a.type === 'email');
+          if (emailAccount?.address) {
+            emails[addr] = emailAccount.address;
+          }
+        }
+      } catch {}
+    }
+
+    res.json({ success: true, data: { emails } });
+  } catch (error: any) {
+    console.error('Error looking up Privy emails:', error);
+    res.status(500).json({ success: false, error: 'Failed to look up emails' });
+  }
+});
+
+/**
  * POST /send-recovery-tx
  * Send a signed transaction via Helius SWQoS and wait for confirmation.
  * Body: { transaction: string (base64) }
