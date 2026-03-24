@@ -66,12 +66,19 @@ export async function signTransactionWithPrivy(
     throw new Error('Privy user not found for this email');
   }
 
-  // Find their Solana embedded wallet
-  const solanaWallet = (user as any).linked_accounts?.find(
-    (a: any) => a.type === 'wallet' && a.chain_type === 'solana'
+  console.log('[Privy] User found:', JSON.stringify(user, null, 2));
+
+  // Find their Solana embedded wallet — try different account types
+  const accounts = (user as any).linked_accounts || [];
+  const solanaWallet = accounts.find(
+    (a: any) =>
+      (a.type === 'wallet' && a.chain_type === 'solana') ||
+      (a.type === 'solana_wallet') ||
+      (a.type === 'embedded_wallet' && a.chain_type === 'solana')
   );
 
   if (!solanaWallet) {
+    console.error('[Privy] No Solana wallet found. Account types:', accounts.map((a: any) => `${a.type}/${a.chain_type || ''}`));
     throw new Error('No Solana wallet found for this Privy user');
   }
 
