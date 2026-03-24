@@ -16,7 +16,7 @@ const TIP_ACCOUNTS = [
   '4TQLFNWK8AovT1gFvda5jfw2oJeRMKEmw7aH6MGBJ3or',
 ];
 
-const TIP_LAMPORTS = 100_000;
+const TIP_LAMPORTS = 250_000;
 
 export class HeliusSender {
   /**
@@ -44,7 +44,10 @@ export class HeliusSender {
 
     const json: any = await response.json();
     if (json.error) {
-      throw new Error(`HeliusSender error: ${json.error.message}`);
+      throw new Error(`HeliusSender error: ${json.error.message || json.error}`);
+    }
+    if (json.code && json.message) {
+      throw new Error(`HeliusSender error: ${json.message}`);
     }
 
     const signature = json.result;
