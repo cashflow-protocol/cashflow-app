@@ -353,35 +353,8 @@ router.post('/lookup-privy-emails', async (req: Request, res: Response) => {
       return;
     }
 
-    const emails: Record<string, string> = {};
-
-    // Check each address against Privy — look for users whose Solana wallet matches
-    // This is best-effort; we search Privy by iterating known addresses
-    const axios = (await import('axios')).default;
-    const PRIVY_APP_ID = process.env.PRIVY_APP_ID || '';
-    const PRIVY_APP_SECRET = process.env.PRIVY_APP_SECRET || '';
-    const credentials = Buffer.from(`${PRIVY_APP_ID}:${PRIVY_APP_SECRET}`).toString('base64');
-    const headers = {
-      'Authorization': `Basic ${credentials}`,
-      'privy-app-id': PRIVY_APP_ID,
-      'Content-Type': 'application/json',
-    };
-
-    for (const addr of addresses) {
-      try {
-        const searchRes = await axios.post('https://auth.privy.io/api/v1/users/search', {
-          walletAddresses: [addr],
-        }, { headers });
-
-        if (searchRes.data?.data?.length > 0) {
-          const user = searchRes.data.data[0];
-          const emailAccount = user.linked_accounts?.find((a: any) => a.type === 'email');
-          if (emailAccount?.address) {
-            emails[addr] = emailAccount.address;
-          }
-        }
-      } catch {}
-    }
+    const { lookupPrivyEmails } = await import('../services/privyService');
+    const emails = await lookupPrivyEmails(addresses);
 
     res.json({ success: true, data: { emails } });
   } catch (error: any) {
@@ -748,13 +721,15 @@ router.post('/proposal/:proposalId/submit-signature', async (req: Request, res: 
 
 /**
  * POST /proposal/:proposalId/sign-privy
- * Sign the proposal using a Privy embedded wallet (email recovery key).
+ * Build, sign, and send a proposalApprove TX using a server-owned Privy wallet.
+ * Body: { walletAddress: string }
  */
 router.post('/proposal/:proposalId/sign-privy', async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
-    if (!email) {
-      res.status(400).json({ success: false, error: 'email is required' });
+    const { walletAddress } = req.body;
+    const address = walletAddress || '';
+    if (!address) {
+      res.status(400).json({ success: false, error: 'walletAddress is required' });
       return;
     }
 
@@ -769,9 +744,6 @@ router.post('/proposal/:proposalId/sign-privy', async (req: Request, res: Respon
       return;
     }
 
-    // Sign the transaction with Privy
-    const { signature, address } = await signTransactionWithPrivy(email, proposal.tx1Base64);
-
     // Verify the address is a required signer
     const isRequired = proposal.requiredSigners.some(s => s.address === address);
     if (!isRequired) {
@@ -781,19 +753,59 @@ router.post('/proposal/:proposalId/sign-privy', async (req: Request, res: Respon
 
     // Check if already signed
     const alreadySigned = proposal.collectedSignatures.some(s => s.address === address);
-    if (!alreadySigned) {
-      proposal.collectedSignatures.push({
-        address,
-        signature,
-        collectedAt: new Date(),
-      });
-
-      if (proposal.collectedSignatures.length >= proposal.threshold) {
-        proposal.status = RecoveryProposalStatus.READY;
-      }
-
-      await proposal.save();
+    if (alreadySigned) {
+      res.json({ success: true, data: { status: proposal.status, signerAddress: address, alreadySigned: true } });
+      return;
     }
+
+    // Build approve TX
+    const multisigLib = await import('@sqds/multisig');
+    const { Connection, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl);
+
+    const multisigPda = new PublicKey(proposal.multisigAddress);
+    const memberPubkey = new PublicKey(address);
+    const transactionIndex = BigInt(proposal.transactionIndex);
+
+    const approveIx = multisigLib.instructions.proposalApprove({
+      multisigPda,
+      transactionIndex,
+      member: memberPubkey,
+    });
+
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+    const msg = new TransactionMessage({
+      payerKey: memberPubkey,
+      recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+        approveIx,
+        HeliusSender.createTipIx(memberPubkey),
+      ],
+    }).compileToV0Message();
+    const tx = new VersionedTransaction(msg);
+    const unsignedBase64 = Buffer.from(tx.serialize()).toString('base64');
+
+    // Sign with Privy server-owned wallet
+    const { signedTransaction } = await signTransactionWithPrivy(address, unsignedBase64);
+
+    // Send on-chain via HeliusSender
+    const signature = await HeliusSender.sendAndConfirm(signedTransaction);
+
+    // Mark as signed in proposal
+    proposal.collectedSignatures.push({
+      address,
+      signature,
+      collectedAt: new Date(),
+    });
+
+    if (proposal.collectedSignatures.length >= proposal.threshold) {
+      proposal.status = RecoveryProposalStatus.READY;
+    }
+
+    await proposal.save();
 
     res.json({
       success: true,
@@ -805,9 +817,8 @@ router.post('/proposal/:proposalId/sign-privy', async (req: Request, res: Respon
       },
     });
   } catch (error: any) {
-    const privyError = error?.response?.data || error?.message || 'Failed to sign with Privy';
-    console.error('Error signing with Privy:', JSON.stringify(privyError, null, 2));
-    res.status(500).json({ success: false, error: typeof privyError === 'string' ? privyError : JSON.stringify(privyError) });
+    console.error('Error signing with Privy:', error.message);
+    res.status(500).json({ success: false, error: error.message || 'Failed to sign with Privy' });
   }
 });
 

@@ -500,7 +500,7 @@ class ApiService {
     return res.data;
   }
 
-  async requestPrivySign(proposalId: string, email: string): Promise<{
+  async requestPrivySign(proposalId: string, walletAddress: string): Promise<{
     signaturesCollected: number;
     status: string;
     signerAddress: string;
@@ -508,7 +508,7 @@ class ApiService {
     const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}/sign-privy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ walletAddress }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({ error: 'Failed' }));

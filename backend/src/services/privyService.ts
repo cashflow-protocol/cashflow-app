@@ -2,106 +2,103 @@ import { PrivyClient } from '@privy-io/node';
 
 const PRIVY_APP_ID = process.env.PRIVY_APP_ID || '';
 const PRIVY_APP_SECRET = process.env.PRIVY_APP_SECRET || '';
+const AUTH_KEY_ID = process.env.PRIVY_AUTHORIZATION_ID || '';
+const AUTH_PRIVATE_KEY = process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY || '';
 
 const privy = new PrivyClient({
   appId: PRIVY_APP_ID,
   appSecret: PRIVY_APP_SECRET,
 });
 
+const authContext = AUTH_PRIVATE_KEY
+  ? { authorization_private_keys: [AUTH_PRIVATE_KEY] }
+  : undefined;
+
 /**
- * Create or retrieve a Privy user by email address.
- * Automatically creates an embedded Solana wallet.
+ * Create a server-owned Privy Solana wallet for a recovery email.
+ * The wallet is owned by our authorization key, so we can sign server-side.
  */
-export async function getOrCreatePrivyUser(email: string): Promise<{
-  privyUserId: string;
-  solanaAddress: string | null;
+export async function createRecoveryWallet(email: string): Promise<{
+  walletId: string;
+  solanaAddress: string;
 }> {
-  // Search for existing user by email
-  let user;
-  try {
-    const searchResult = await privy.users().search({ emails: [email], phoneNumbers: [], walletAddresses: [] });
-    user = (searchResult as any).data?.[0];
-  } catch {}
+  // Create a server-owned wallet with our auth key as owner
+  const wallet = await privy.wallets().create({
+    chain_type: 'solana',
+    owner_id: AUTH_KEY_ID,
+  });
 
-  if (!user) {
-    // Create user with email + Solana wallet
-    user = await privy.users().create({
-      linked_accounts: [
-        { type: 'email', address: email },
-      ],
-      wallets: [{ chain_type: 'solana' }],
-    });
-  }
+  console.log(`[Privy] Created server-owned wallet: ${wallet.address} (id: ${wallet.id}) for ${email}`);
 
-  // Find Solana wallet
-  const solanaWallet = (user as any).linked_accounts?.find(
-    (a: any) => a.type === 'wallet' && a.chain_type === 'solana'
-  );
-
-  if (solanaWallet) {
-    return { privyUserId: (user as any).id, solanaAddress: solanaWallet.address };
-  }
-
-  // Create wallet if not found
-  try {
-    const wallet = await privy.wallets().create({ chain_type: 'solana' });
-    return { privyUserId: (user as any).id, solanaAddress: wallet.address };
-  } catch (err: any) {
-    console.error('Failed to create Privy Solana wallet:', err.message);
-    return { privyUserId: (user as any).id, solanaAddress: null };
-  }
+  return {
+    walletId: wallet.id,
+    solanaAddress: wallet.address,
+  };
 }
 
 /**
- * Sign a Solana transaction using a Privy embedded wallet.
- * Uses the Privy Node SDK which handles authorization automatically.
+ * Sign a Solana transaction using a server-owned Privy wallet.
+ * Looks up the wallet by address and signs with our authorization key.
  */
 export async function signTransactionWithPrivy(
-  email: string,
+  walletAddress: string,
   transactionBase64: string,
-): Promise<{ signature: string; address: string }> {
-  // Find user by email
-  const searchResult = await privy.users().search({ emails: [email], phoneNumbers: [], walletAddresses: [] });
-  const user = (searchResult as any).data?.[0];
-
-  if (!user) {
-    throw new Error('Privy user not found for this email');
+): Promise<{ signedTransaction: string; address: string }> {
+  if (!AUTH_PRIVATE_KEY) {
+    throw new Error('PRIVY_AUTHORIZATION_PRIVATE_KEY not configured');
   }
 
-  // Find their Solana embedded wallet
-  const accounts = user.linked_accounts || [];
-  const solanaWallet = accounts.find(
-    (a: any) => a.type === 'wallet' && a.chain_type === 'solana'
-  );
+  // Find the wallet by address
+  const wallets = await privy.wallets().list({ chain_type: 'solana' });
+  let walletId: string | null = null;
 
-  if (!solanaWallet) {
-    throw new Error('No Solana wallet found for this Privy user');
+  for await (const wallet of wallets) {
+    if (wallet.address === walletAddress) {
+      walletId = wallet.id;
+      break;
+    }
   }
 
-  const walletId = solanaWallet.id;
-  const walletAddress = solanaWallet.address;
-
-  // Sign via Privy SDK with authorization key
-  const authPrivateKey = process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY;
-  console.log('[Privy] walletId:', walletId, 'address:', walletAddress);
-  console.log('[Privy] authPrivateKey present:', !!authPrivateKey, 'length:', authPrivateKey?.length);
-  console.log('[Privy] authKeyId:', process.env.PRIVY_AUTHORIZATION_ID || 'not set');
-  try {
-    const result = await privy.wallets().solana().signTransaction(walletId, {
-      transaction: transactionBase64,
-      authorization_context: authPrivateKey
-        ? { authorization_private_keys: [authPrivateKey] }
-        : undefined,
-    });
-
-    return {
-      signature: result.signed_transaction,
-      address: walletAddress,
-    };
-  } catch (err: any) {
-    const status = err?.status || err?.response?.status || '';
-    const body = err?.body ? JSON.stringify(err.body) : err?.response?.data ? JSON.stringify(err.response.data) : '';
-    const detail = `${status} ${body || err.message}`;
-    throw new Error(`Privy signing failed: ${detail}`);
+  if (!walletId) {
+    throw new Error(`Privy wallet not found for address ${walletAddress}`);
   }
+
+  console.log(`[Privy] Signing with wallet ${walletId} (${walletAddress})`);
+
+  const result = await privy.wallets().solana().signTransaction(walletId, {
+    transaction: transactionBase64,
+    authorization_context: authContext,
+  });
+
+  return {
+    signedTransaction: result.signed_transaction,
+    address: walletAddress,
+  };
+}
+
+/**
+ * Look up Privy wallet emails by their Solana addresses.
+ * Searches users who have wallets matching the given addresses.
+ */
+export async function lookupPrivyEmails(addresses: string[]): Promise<Record<string, string>> {
+  const emails: Record<string, string> = {};
+
+  for (const addr of addresses) {
+    try {
+      const user = await privy.users().search({
+        emails: [],
+        phoneNumbers: [],
+        walletAddresses: [addr],
+      });
+      const userData = (user as any).data?.[0];
+      if (userData) {
+        const emailAccount = userData.linked_accounts?.find((a: any) => a.type === 'email');
+        if (emailAccount?.address) {
+          emails[addr] = emailAccount.address;
+        }
+      }
+    } catch {}
+  }
+
+  return emails;
 }

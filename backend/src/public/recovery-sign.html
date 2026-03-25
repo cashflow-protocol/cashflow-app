@@ -243,7 +243,9 @@
         }
 
         if (requiredSigner.signed) {
-          showError('This wallet has already signed this proposal.');
+          document.getElementById('connect-section').classList.add('hidden');
+          document.getElementById('sign-section').classList.add('hidden');
+          document.getElementById('done-section').classList.remove('hidden');
           return;
         }
 

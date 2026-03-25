@@ -169,11 +169,11 @@ export default function VaultRecoveryExecutionScreen({
     };
   }, []);
 
-  const handlePrivySign = useCallback(async (email: string) => {
+  const handlePrivySign = useCallback(async (address: string, email?: string) => {
     if (!proposalId) return;
     try {
-      setStatusText(`Signing with ${maskEmail(email)}...`);
-      const result = await apiService.requestPrivySign(proposalId, email);
+      setStatusText(`Signing with ${email ? maskEmail(email) : truncateAddress(address)}...`);
+      const result = await apiService.requestPrivySign(proposalId, address);
       setSignaturesCollected(result.signaturesCollected);
 
       if (result.status === 'ready') {
@@ -245,10 +245,10 @@ export default function VaultRecoveryExecutionScreen({
     if (signer.signed) {
       return <CheckCircle2 size={20} color="#4ade80" />;
     }
-    if (signer.type === 'privy' && signer.email) {
+    if (signer.type === 'privy') {
       return (
         <TouchableOpacity
-          onPress={() => handlePrivySign(signer.email!)}
+          onPress={() => handlePrivySign(signer.address, signer.email)}
           style={styles.signButton}
           activeOpacity={0.7}
         >
