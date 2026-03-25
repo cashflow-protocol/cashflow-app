@@ -81,10 +81,12 @@ export async function signTransactionWithPrivy(
   const walletId = solanaWallet.id;
   const walletAddress = solanaWallet.address;
 
-  // Sign via Privy SDK
+  // Sign via Privy SDK with authorization key
+  const authPrivateKey = process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY;
   try {
     const result = await privy.wallets().solana().signTransaction(walletId, {
       transaction: transactionBase64,
+      ...(authPrivateKey ? { authorization_context: { authorization_private_keys: [authPrivateKey] } } : {}),
     });
 
     return {
