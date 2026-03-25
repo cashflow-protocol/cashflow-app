@@ -21,10 +21,9 @@ import type { WalletAsset } from '../types/earn';
 import { logSendTokenSelect, logSendMaxPress, logSendPasteAddress, logSendSubmit, logSendSuccess, logSendError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
-import { TARGET_CLOUD_BALANCE as TARGET_CLOUD_BALANCE_NUM } from '../config/constants';
+import { getTargetCloudBalance } from '../config/constants';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
-const TARGET_CLOUD_BALANCE = BigInt(TARGET_CLOUD_BALANCE_NUM);
 
 type Step = 'select' | 'amount';
 
@@ -119,7 +118,7 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
     let maxRaw = BigInt(selectedToken.amount);
     // Reserve SOL for rent if sending native SOL
     if (selectedToken.mint === 'native' || selectedToken.mint === SOL_MINT) {
-      maxRaw = maxRaw > TARGET_CLOUD_BALANCE ? maxRaw - TARGET_CLOUD_BALANCE : 0n;
+      maxRaw = maxRaw > BigInt(getTargetCloudBalance()) ? maxRaw - BigInt(getTargetCloudBalance()) : 0n;
     }
     setAmount(toUiAmount(maxRaw, selectedToken.decimals));
   };
@@ -138,7 +137,7 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
   const maxSendable = selectedToken
     ? (() => {
         const bal = BigInt(selectedToken.amount);
-        if (isSol) return bal > TARGET_CLOUD_BALANCE ? bal - TARGET_CLOUD_BALANCE : 0n;
+        if (isSol) return bal > BigInt(getTargetCloudBalance()) ? bal - BigInt(getTargetCloudBalance()) : 0n;
         return bal;
       })()
     : 0n;

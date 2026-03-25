@@ -32,6 +32,7 @@ import { hasPin } from './src/services/pinStorage';
 import { migrateKeypairsToBiometric, getCloudPublicKey } from './src/services/keypairStorage';
 import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
+import { applyRemoteConfig } from './src/config/constants';
 import { initializePushNotifications, initializeWaitlistPushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
 import { initializeRealtimeNotifications, stopRealtimeNotifications } from './src/services/realtimeNotificationService';
 import Toast from './src/components/Toast';
@@ -76,8 +77,9 @@ function App() {
         hasPin(),
         getCloudPublicKey(),
       ]);
-      if (config?.solanaRpcUrl) {
-        setSolanaRpcEndpoint(config.solanaRpcUrl);
+      if (config) {
+        if (config.solanaRpcUrl) setSolanaRpcEndpoint(config.solanaRpcUrl);
+        applyRemoteConfig(config);
       }
       const hasVault = vault !== null;
       setOnboardingDone(hasVault);

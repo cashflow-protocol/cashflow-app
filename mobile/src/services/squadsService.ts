@@ -25,7 +25,7 @@ import {
 } from './keypairStorage';
 import { createWithdrawInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
-import { IS_SOLANA_MOBILE, TARGET_CLOUD_BALANCE, VAULT_CREATION_FEE } from '../config/constants';
+import { IS_SOLANA_MOBILE, getTargetCloudBalance, getVaultCreationFee } from '../config/constants';
 import { logError } from './analyticsService';
 
 const { Permission, Permissions } = multisig.types;
@@ -344,12 +344,12 @@ export async function createMultisig(
   const fundCloudIx = SystemProgram.transfer({
     fromPubkey: creatorPubkey,
     toPubkey: cloudPubkey,
-    lamports: TARGET_CLOUD_BALANCE,
+    lamports: getTargetCloudBalance(),
   });
 
   // Build vault creation fee instruction (0.05 SOL → treasury)
   const instructions: TransactionInstruction[] = [createMultisigIx, fundCloudIx];
-  if (VAULT_CREATION_FEE > 0) {
+  if (getVaultCreationFee() > 0) {
     const config = await apiService.getConfig();
     if (!config.treasuryWallet) {
       throw new Error('Treasury wallet not configured');
@@ -357,10 +357,10 @@ export async function createMultisig(
     const feeIx = SystemProgram.transfer({
       fromPubkey: creatorPubkey,
       toPubkey: new PublicKey(config.treasuryWallet),
-      lamports: VAULT_CREATION_FEE,
+      lamports: getVaultCreationFee(),
     });
     instructions.push(feeIx);
-    console.log('[createMultisig] vault creation fee:', VAULT_CREATION_FEE, 'lamports');
+    console.log('[createMultisig] vault creation fee:', getVaultCreationFee(), 'lamports');
   }
 
   console.log('[createMultisig] fetching LUTs + blockhash...');
@@ -388,8 +388,8 @@ export async function createMultisig(
   await sleep(2000);
 
   // Record vault creation fee in backend (fire-and-forget)
-  if (VAULT_CREATION_FEE > 0) {
-    apiService.recordVaultCreationFee(walletAddress, VAULT_CREATION_FEE.toString(), signature)
+  if (getVaultCreationFee() > 0) {
+    apiService.recordVaultCreationFee(walletAddress, getVaultCreationFee().toString(), signature)
       .catch(err => console.warn('[createMultisig] failed to record vault creation fee:', err));
   }
 
@@ -792,8 +792,8 @@ export async function executeVaultTransaction(
 
   // Check vault has enough SOL for fees
   const vaultBalance = await connection.getBalance(vaultPda, 'confirmed');
-  if (vaultBalance < TARGET_CLOUD_BALANCE) {
-    const needed = (TARGET_CLOUD_BALANCE / 1e9).toFixed(3);
+  if (vaultBalance < getTargetCloudBalance()) {
+    const needed = (getTargetCloudBalance() / 1e9).toFixed(3);
     const have = (vaultBalance / 1e9).toFixed(4);
     throw new Error(`Insufficient SOL for transaction fees. Need ${needed} SOL but vault only has ${have} SOL. Please deposit SOL to your vault first.`);
   }
@@ -825,12 +825,12 @@ export async function executeVaultTransaction(
       }),
   );
 
-  // Always transfer TARGET_CLOUD_BALANCE from vault to cloud wallet for tx fees + rent
+  // Always transfer getTargetCloudBalance() from vault to cloud wallet for tx fees + rent
   txInstructions.unshift(
     SystemProgram.transfer({
       fromPubkey: vaultPda,
       toPubkey: cloudPubkey,
-      lamports: TARGET_CLOUD_BALANCE,
+      lamports: getTargetCloudBalance(),
     }),
   );
 
@@ -924,7 +924,7 @@ export async function executeVaultTransaction(
     kitIxToWeb3(createWithdrawInstruction(
       kitAddress(cloudPubkey.toBase58()),
       kitAddress(vaultPda.toBase58()),
-      TARGET_CLOUD_BALANCE,
+      getTargetCloudBalance(),
     )),
   );
 

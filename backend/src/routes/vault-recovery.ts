@@ -3,6 +3,7 @@ import { RecoveryProposalModel, RecoveryProposalStatus } from '../models/Recover
 import { UserModel } from '../models';
 import { signTransactionWithPrivy } from '../services/privyService';
 import { HeliusSender } from '../managers';
+import { TARGET_CLOUD_BALANCE } from '../constants';
 
 const router = Router();
 
@@ -403,6 +404,7 @@ router.post('/create-proposal', async (req: Request, res: Response) => {
       requiredSigners,
       collectedSignatures,
       createdByWallet,
+      newCloudKey,
     } = req.body;
 
     if (!multisigAddress || !requiredSigners?.length) {
@@ -424,6 +426,7 @@ router.post('/create-proposal', async (req: Request, res: Response) => {
       collectedSignatures: collectedSignatures || [],
       status: RecoveryProposalStatus.PENDING,
       createdByWallet,
+      newCloudKey: newCloudKey || undefined,
     });
 
     // Check if already at threshold
@@ -962,7 +965,7 @@ router.get('/proposal/:proposalId/build-execute-tx', async (req: Request, res: R
     }
 
     const multisigLib = await import('@sqds/multisig');
-    const { Connection, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram } = await import('@solana/web3.js');
+    const { Connection, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram, SystemProgram } = await import('@solana/web3.js');
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
     const conn = new Connection(rpcUrl, 'confirmed');
 
@@ -991,6 +994,15 @@ router.get('/proposal/:proposalId/build-execute-tx', async (req: Request, res: R
         multisigPda,
         transactionIndex,
         rentCollector: new PublicKey(multisigAccount.rentCollector),
+      }));
+    }
+
+    // Fund new cloud key so it can pay for tx fees
+    if (proposal.newCloudKey) {
+      instructions.push(SystemProgram.transfer({
+        fromPubkey: memberPubkey,
+        toPubkey: new PublicKey(proposal.newCloudKey),
+        lamports: TARGET_CLOUD_BALANCE,
       }));
     }
 

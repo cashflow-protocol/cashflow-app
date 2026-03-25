@@ -203,6 +203,7 @@ export async function buildAndSubmitRecoveryProposal(
     requiredSigners,
     collectedSignatures,
     createdByWallet: walletAddress,
+    newCloudKey: newCloudKey || undefined,
   });
 
   // Build external signing URL

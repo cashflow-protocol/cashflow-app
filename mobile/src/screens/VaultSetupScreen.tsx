@@ -20,7 +20,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import authService from '../services/authService';
 import { deleteAllKeypairs } from '../services/keypairStorage';
 import Toast from '../components/Toast';
-import { MIN_LAMPORTS_FOR_VAULT } from '../config/constants';
+import { getMinLamportsForVault } from '../config/constants';
 import { logScreenView, logVaultSetupStart, logVaultSetupWalletConnected, logVaultSetupSuccess, logVaultSetupError, logVaultSetupInsufficientBalance } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -93,7 +93,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRec
 
       setStatusText('Checking balance...');
       const balanceSol = await walletService.getBalance(account.publicKey);
-      const minSol = MIN_LAMPORTS_FOR_VAULT / 1e9;
+      const minSol = getMinLamportsForVault() / 1e9;
       if (balanceSol < minSol) {
         logVaultSetupInsufficientBalance(balanceSol);
         setToastMessage('Insufficient SOL Balance');
