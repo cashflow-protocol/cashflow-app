@@ -83,10 +83,14 @@ export async function signTransactionWithPrivy(
 
   // Sign via Privy SDK with authorization key
   const authPrivateKey = process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY;
+  console.log('[Privy] walletId:', walletId);
+  console.log('[Privy] authPrivateKey present:', !!authPrivateKey, 'length:', authPrivateKey?.length);
   try {
     const result = await privy.wallets().solana().signTransaction(walletId, {
       transaction: transactionBase64,
-      ...(authPrivateKey ? { authorization_context: { authorization_private_keys: [authPrivateKey] } } : {}),
+      authorization_context: authPrivateKey
+        ? { authorization_private_keys: [authPrivateKey] }
+        : undefined,
     });
 
     return {
@@ -94,7 +98,9 @@ export async function signTransactionWithPrivy(
       address: walletAddress,
     };
   } catch (err: any) {
-    const detail = err?.message || 'Unknown error';
+    const status = err?.status || err?.response?.status || '';
+    const body = err?.body ? JSON.stringify(err.body) : err?.response?.data ? JSON.stringify(err.response.data) : '';
+    const detail = `${status} ${body || err.message}`;
     throw new Error(`Privy signing failed: ${detail}`);
   }
 }
