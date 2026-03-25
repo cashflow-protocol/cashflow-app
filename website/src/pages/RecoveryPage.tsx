@@ -98,7 +98,7 @@ export default function RecoveryPage() {
     if (!s) {
       setError(`Wallet ${truncate(addr)} is not a required signer for this proposal.`);
     } else if (s.signed) {
-      setError('This wallet has already signed this proposal.');
+      setSigned(true);
     }
   }, [connectedAddress, proposal]);
 
