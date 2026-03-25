@@ -935,6 +935,91 @@ router.post('/proposal/:proposalId/send-bundle', async (req: Request, res: Respo
 });
 
 /**
+ * GET /proposal/:proposalId/build-execute-tx
+ * Build a fresh execute transaction with a current blockhash.
+ * TX1 (create + propose + approvals) is already on-chain.
+ * This returns an unsigned TX2 for the mobile app to sign and send.
+ */
+router.get('/proposal/:proposalId/build-execute-tx', async (req: Request, res: Response) => {
+  try {
+    const proposal = await RecoveryProposalModel.findById(req.params.proposalId);
+    if (!proposal) {
+      res.status(404).json({ success: false, error: 'Proposal not found' });
+      return;
+    }
+
+    if (proposal.status === RecoveryProposalStatus.EXECUTED) {
+      res.status(400).json({ success: false, error: 'Already executed' });
+      return;
+    }
+
+    if (proposal.status !== RecoveryProposalStatus.READY) {
+      res.status(400).json({
+        success: false,
+        error: `Proposal is ${proposal.status}, need ${proposal.threshold - proposal.collectedSignatures.length} more signatures`,
+      });
+      return;
+    }
+
+    const multisigLib = await import('@sqds/multisig');
+    const { Connection, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl, 'confirmed');
+
+    const multisigPda = new PublicKey(proposal.multisigAddress);
+    const transactionIndex = BigInt(proposal.transactionIndex);
+
+    // Use the creator wallet (who initiated recovery) as payer/member
+    const memberPubkey = new PublicKey(proposal.createdByWallet);
+
+    // Check for rent collector
+    const multisigAccount = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
+
+    const instructions = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+      multisigLib.instructions.configTransactionExecute({
+        multisigPda,
+        transactionIndex,
+        member: memberPubkey,
+        rentPayer: memberPubkey,
+      }),
+    ];
+
+    if (multisigAccount.rentCollector) {
+      instructions.push(multisigLib.instructions.configTransactionAccountsClose({
+        multisigPda,
+        transactionIndex,
+        rentCollector: new PublicKey(multisigAccount.rentCollector),
+      }));
+    }
+
+    // Helius SWQoS tip for reliable landing
+    instructions.push(HeliusSender.createTipIx(memberPubkey));
+
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+    const msg = new TransactionMessage({
+      payerKey: memberPubkey,
+      recentBlockhash: blockhash,
+      instructions,
+    }).compileToV0Message();
+    const tx = new VersionedTransaction(msg);
+
+    res.json({
+      success: true,
+      data: {
+        transaction: Buffer.from(tx.serialize()).toString('base64'),
+        blockhash,
+        lastValidBlockHeight,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error building execute tx:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to build execute transaction' });
+  }
+});
+
+/**
  * GET /sign/:proposalId
  * Redirect to the website recovery page.
  */

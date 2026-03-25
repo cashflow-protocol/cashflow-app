@@ -220,42 +220,67 @@ export async function buildAndSubmitRecoveryProposal(
 }
 
 /**
- * Assemble and submit the recovery transaction bundle after threshold is met.
+ * Execute the recovery proposal after threshold is met.
+ *
+ * TX1 (create + propose + approvals) is already confirmed on-chain.
+ * This only needs to send a fresh execute transaction (TX2) signed by the
+ * initiating wallet.
  */
 export async function executeRecoveryProposal(
   proposalId: string,
   onProgress?: (msg: string) => void,
 ): Promise<string> {
-  onProgress?.('Fetching signed transactions...');
+  // Fetch a fresh execute TX from backend (new blockhash)
+  onProgress?.('Building execute transaction...');
 
-  const { tx1Base64, tx2Base64, signatures } = await apiService.getAssembledRecoveryTx(proposalId);
+  const res = await fetch(
+    `${API_CONFIG.baseUrl}/vault-recovery/v1/proposal/${proposalId}/build-execute-tx`,
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed' }));
+    throw new Error(err.error || 'Failed to build execute transaction');
+  }
+  const { data } = await res.json();
+  const txBytes = Buffer.from(data.transaction, 'base64');
+  const tx = VersionedTransaction.deserialize(txBytes);
 
-  // Deserialize transactions
-  const tx1 = VersionedTransaction.deserialize(Buffer.from(tx1Base64, 'base64'));
-  const tx2 = VersionedTransaction.deserialize(Buffer.from(tx2Base64, 'base64'));
-
-  // Insert collected signatures into TX1
-  for (const { address, signature } of signatures) {
-    const pubkey = new PublicKey(address);
-    const sigIndex = tx1.message.staticAccountKeys.findIndex(
-      (k: PublicKey) => k.equals(pubkey),
-    );
-    if (sigIndex !== -1) {
-      const existingSig = tx1.signatures[sigIndex];
-      const isZero = existingSig.every((b: number) => b === 0);
-      if (isZero) {
-        tx1.signatures[sigIndex] = new Uint8Array(Buffer.from(signature, 'base64'));
-      }
-    }
+  // Sign with MWA wallet
+  onProgress?.('Signing execute transaction...');
+  const serialized = new Uint8Array(tx.serialize());
+  const signedBytes = await walletService.signTransactions([serialized]);
+  if (!signedBytes?.[0]) {
+    throw new Error('Wallet signing failed');
   }
 
-  // Send as Jito bundle via unauthenticated recovery endpoint
-  onProgress?.('Submitting recovery transaction...');
-  const bundleTx1 = Buffer.from(tx1.serialize()).toString('base64');
-  const bundleTx2 = Buffer.from(tx2.serialize()).toString('base64');
+  // Send signed execute TX via HeliusSender
+  onProgress?.('Submitting execute transaction...');
+  const signedBase64 = Buffer.from(signedBytes[0]).toString('base64');
+  const sendRes = await fetch(
+    `${API_CONFIG.baseUrl}/vault-recovery/v1/send-recovery-tx`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transaction: signedBase64 }),
+    },
+  );
+  if (!sendRes.ok) {
+    const err = await sendRes.json().catch(() => ({ error: 'Failed' }));
+    throw new Error(err.error || 'Failed to send execute transaction');
+  }
 
-  const bundleResult = await apiService.sendRecoveryBundle(proposalId, [bundleTx1, bundleTx2]);
+  const result = await sendRes.json();
+  const txSignature = result.data?.signature || 'confirmed';
+
+  // Mark proposal as executed
+  await fetch(
+    `${API_CONFIG.baseUrl}/vault-recovery/v1/proposal/${proposalId}/mark-executed`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signature: txSignature }),
+    },
+  );
 
   onProgress?.('Confirming...');
-  return bundleResult.bundleId;
+  return txSignature;
 }
