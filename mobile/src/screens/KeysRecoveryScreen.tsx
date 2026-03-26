@@ -770,7 +770,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
             <Text style={[styles.addRecoveryTitle, { color: colors.textPrimary }]}>Crypto Wallet</Text>
             <Text style={[styles.cryptoSubtitle, { color: colors.textPrimary }]}>
-              Enter a wallet address{'\n'}in the field below
+              Enter a wallet address in the field below
             </Text>
 
             <View style={[styles.cryptoInputRow, { backgroundColor: colors.cardSecondary }]}>
@@ -824,7 +824,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
             <Text style={[styles.addRecoveryTitle, { color: colors.textPrimary }]}>Email</Text>
             <Text style={[styles.cryptoSubtitle, { color: colors.textPrimary }]}>
-              Enter email address{'\n'}in the field below
+              Enter email address in the field below
             </Text>
 
             <View style={[styles.cryptoInputRow, { backgroundColor: colors.cardSecondary }]}>
