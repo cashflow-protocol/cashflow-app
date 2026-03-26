@@ -220,7 +220,7 @@ router.post('/find-vault-by-address', async (req: Request, res: Response) => {
  */
 router.post('/build-proposal-tx', async (req: Request, res: Response) => {
   try {
-    const { multisigAddress, walletAddress, members, cloudKey, addMemberActions } = req.body;
+    const { multisigAddress, walletAddress, members, cloudKey, addMemberActions, newRentCollector } = req.body;
     if (!multisigAddress || !walletAddress || !addMemberActions?.length) {
       res.status(400).json({ success: false, error: 'Missing required fields' });
       return;
@@ -239,14 +239,22 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
     const multisigAccount = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
     const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
-    // Build add member actions for the Squads instruction
-    const parsedActions = addMemberActions.map((a: any) => ({
+    // Build config transaction actions
+    const parsedActions: any[] = addMemberActions.map((a: any) => ({
       __kind: 'AddMember' as const,
       newMember: {
         key: new PublicKey(a.memberAddress),
         permissions: Permissions.all(),
       },
     }));
+
+    // Set new cloud key as rent collector if provided
+    if (newRentCollector) {
+      parsedActions.push({
+        __kind: 'SetRentCollector' as const,
+        newRentCollector: new PublicKey(newRentCollector),
+      });
+    }
 
     // Build TX1 instructions
     const tx1Instructions = [

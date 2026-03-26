@@ -413,6 +413,7 @@ class ApiService {
     members: Array<{ address: string; permissions: any }>;
     cloudKey?: string;
     addMemberActions: Array<{ memberAddress: string; permissions: string }>;
+    newRentCollector?: string;
   }): Promise<{
     tx1Base64: string;
     tx2Base64: string;

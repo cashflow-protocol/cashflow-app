@@ -86,6 +86,7 @@ export async function buildAndSubmitRecoveryProposal(
     members,
     cloudKey: hasExistingCloud ? existingCloudKey! : undefined,
     addMemberActions: actions,
+    newRentCollector: newCloudKey || undefined,
   });
 
   const { tx2Base64, transactionIndex, blockhash } = buildResult;
