@@ -124,3 +124,51 @@ export async function authenticate(reason: string): Promise<boolean> {
 export async function migrateKeypairsToBiometric(): Promise<boolean> {
   return getModule().migrateKeypairsToBiometric();
 }
+
+/**
+ * Cache the PIN in native memory for cloud key encryption/decryption.
+ * Call after PIN entry (unlock or setup). The PIN is held in memory only.
+ */
+export async function cachePin(pin: string): Promise<void> {
+  return getModule().cachePin(pin);
+}
+
+/**
+ * Clear the cached PIN from native memory. Call when app locks.
+ */
+export async function clearCachedPin(): Promise<void> {
+  return getModule().clearCachedPin();
+}
+
+/**
+ * Re-encrypt the cloud key with a new PIN (SharedPreferences + Block Store).
+ * Uses the currently cached PIN to decrypt, then re-encrypts with newPin.
+ */
+export async function reEncryptCloudKeyWithPin(newPin: string): Promise<void> {
+  return getModule().reEncryptCloudKeyWithPin(newPin);
+}
+
+/**
+ * Back up the cloud key to Google Block Store, encrypted with PIN.
+ * Android only — no-ops silently on iOS.
+ */
+export async function backupCloudKeyToBlockStore(pin: string): Promise<void> {
+  return getModule().backupCloudKeyToBlockStore(pin);
+}
+
+/**
+ * Restore the cloud key from Google Block Store using PIN.
+ * Returns the base58 public key on success.
+ * Throws ERR_WRONG_PIN if PIN is incorrect, ERR_NO_BACKUP if no backup exists.
+ */
+export async function restoreCloudKeyFromBlockStore(pin: string): Promise<string> {
+  return getModule().restoreCloudKeyFromBlockStore(pin);
+}
+
+/**
+ * Check if a cloud key backup exists in Google Block Store.
+ */
+export async function hasBlockStoreBackup(): Promise<boolean> {
+  if (!NativeCashflowSigning) return false;
+  return NativeCashflowSigning.hasBlockStoreBackup();
+}

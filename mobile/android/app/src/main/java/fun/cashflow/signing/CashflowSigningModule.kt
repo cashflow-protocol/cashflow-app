@@ -21,6 +21,10 @@ import javax.crypto.Mac
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import com.google.android.gms.auth.blockstore.Blockstore
+import com.google.android.gms.auth.blockstore.StoreBytesData
+import com.google.android.gms.auth.blockstore.RetrieveBytesRequest
+import org.json.JSONObject
 import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
@@ -43,9 +47,63 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     // this salt to recover the seed. Must match iOS. Changing this invalidates all stored keys.
     private val AES_SALT = "cashflow:android:v1:9c5f2d7b".toByteArray(Charsets.UTF_8)
     private val HKDF_INFO = "aes-gcm-encryption".toByteArray(Charsets.UTF_8)
+    // Block Store backup encryption (distinct from Keystore HKDF)
+    private val BLOCKSTORE_SALT = "cashflow:blockstore:v1:a3e8f1c4".toByteArray(Charsets.UTF_8)
+    private val BLOCKSTORE_HKDF_INFO = "blockstore-aes-gcm".toByteArray(Charsets.UTF_8)
+    private const val BLOCKSTORE_KEY = "cf_cloud_backup"
   }
 
   override fun getName(): String = NAME
+
+  // --- PIN cache for cloud key encryption/decryption ---
+  private var cachedPin: String? = null
+
+  @ReactMethod
+  override fun cachePin(pin: String, promise: Promise) {
+    cachedPin = pin
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  override fun clearCachedPin(promise: Promise) {
+    cachedPin = null
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  override fun reEncryptCloudKeyWithPin(newPin: String, promise: Promise) {
+    try {
+      val prefs = getPrefs()
+      val encryptedBase64 = prefs.getString("cloud_seed", null)
+        ?: throw Exception("No cloud keypair found")
+      val pubBase64 = prefs.getString("cloud_pub", null)
+        ?: throw Exception("No cloud public key found")
+
+      val oldPin = cachedPin ?: throw Exception("No PIN cached — unlock first")
+      val pubBytes = Base64.decode(pubBase64, Base64.NO_WRAP)
+      val encrypted = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+
+      // Decrypt with old PIN
+      val seed = decryptWithPin(encrypted, pubBytes, oldPin)
+      try {
+        // Re-encrypt with new PIN
+        val reEncrypted = encryptWithPin(seed, pubBytes, newPin)
+        prefs.edit()
+          .putString("cloud_seed", Base64.encodeToString(reEncrypted, Base64.NO_WRAP))
+          .apply()
+
+        // Update cached PIN
+        cachedPin = newPin
+
+        // Also re-backup to Block Store with new PIN
+        backupToBlockStoreInternal(seed, pubBytes, newPin, promise)
+      } finally {
+        seed.fill(0)
+      }
+    } catch (e: Exception) {
+      promise.reject("ERR_REENCRYPT", "Failed to re-encrypt cloud key: ${e.message}", e)
+    }
+  }
 
   @ReactMethod
   override fun generateKeypair(tag: String, cloudSync: Boolean, promise: Promise) {
@@ -62,18 +120,21 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
       val useBio = !cloudSync && isBiometricAvailable()
 
       if (useBio) {
-        // Ensure the biometric Keystore key exists before prompting
+        // Device key: biometric-protected Keystore encryption
         getOrCreateAesKey(biometric = true)
 
-        // Try encrypting — may throw UserNotAuthenticatedException
         try {
           val encrypted = encryptWithKeystore(seed, biometric = true)
           saveAndResolve(tag, seed, pubKey, encrypted, useBio = true, promise)
         } catch (e: UserNotAuthenticatedException) {
-          // Prompt biometric, then retry encryption
           promptBiometricThenEncrypt(tag, seed, pubKey, promise)
         }
+      } else if (cloudSync && cachedPin != null) {
+        // Cloud key: PIN-based encryption (same scheme as Block Store)
+        val encrypted = encryptWithPin(seed, pubKey, cachedPin!!)
+        saveAndResolve(tag, seed, pubKey, encrypted, useBio = false, promise)
       } else {
+        // Fallback: Keystore encryption (no PIN available)
         val encrypted = encryptWithKeystore(seed, biometric = false)
         saveAndResolve(tag, seed, pubKey, encrypted, useBio = false, promise)
       }
@@ -199,7 +260,8 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
           }
         }
       } else {
-        val seed = decryptWithKeystore(encrypted, biometric = false)
+        // Cloud key: decrypt with cached PIN; fallback to Keystore for legacy data
+        val seed = decryptSeed(tag, encrypted)
         try {
           val privateKey = Ed25519PrivateKeyParameters(seed, 0)
           val pubKey = privateKey.generatePublicKey().encoded
@@ -242,7 +304,8 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
           }
         }
       } else {
-        val seed = decryptWithKeystore(encrypted, biometric = false)
+        // Cloud key: decrypt with cached PIN; fallback to Keystore for legacy data
+        val seed = decryptSeed(tag, encrypted)
         try {
           val message = Base64.decode(messageBase64, Base64.NO_WRAP)
           val privateKey = Ed25519PrivateKeyParameters(seed, 0)
@@ -525,8 +588,247 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     return result
   }
 
+  // --- PIN-based encryption for cloud keys (same scheme as Block Store) ---
+
+  /** Version prefix for PIN-encrypted data to distinguish from Keystore-encrypted data. */
+  private val ENCRYPT_VERSION_PIN: Byte = 0x03
+
+  /** Encrypt seed with HKDF(salt, pubkey + pin) — no Keystore involved. */
+  private fun encryptWithPin(seed: ByteArray, pubKey: ByteArray, pin: String): ByteArray {
+    val ikm = pubKey + pin.toByteArray(Charsets.UTF_8)
+    val derivedKey = hkdfDeriveBlockStore(ikm, 32)
+    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+    cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(derivedKey, "AES"))
+    val iv = cipher.iv
+    val ciphertext = cipher.doFinal(seed)
+    // Prefix with version byte so decryptSeed knows to use PIN-based decryption
+    return byteArrayOf(ENCRYPT_VERSION_PIN) + iv + ciphertext
+  }
+
+  /** Decrypt seed with HKDF(salt, pubkey + pin). */
+  private fun decryptWithPin(data: ByteArray, pubKey: ByteArray, pin: String): ByteArray {
+    // Strip version prefix if present
+    val payload = if (data.isNotEmpty() && data[0] == ENCRYPT_VERSION_PIN) data.copyOfRange(1, data.size) else data
+    val ikm = pubKey + pin.toByteArray(Charsets.UTF_8)
+    val derivedKey = hkdfDeriveBlockStore(ikm, 32)
+    val iv = payload.copyOfRange(0, 12)
+    val ciphertext = payload.copyOfRange(12, payload.size)
+    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+    cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(derivedKey, "AES"), GCMParameterSpec(GCM_TAG_LENGTH, iv))
+    return cipher.doFinal(ciphertext)
+  }
+
+  /**
+   * Decrypt a seed from SharedPreferences, auto-detecting the encryption format:
+   * - v3 (ENCRYPT_VERSION_PIN): PIN-based → uses cachedPin
+   * - v2/v1: Keystore-based → uses decryptWithKeystore (legacy)
+   */
+  private fun decryptSeed(tag: String, encrypted: ByteArray): ByteArray {
+    if (encrypted.isNotEmpty() && encrypted[0] == ENCRYPT_VERSION_PIN) {
+      // PIN-encrypted
+      val pin = cachedPin ?: throw Exception("No PIN cached — unlock first")
+      val prefs = getPrefs()
+      val pubBase64 = prefs.getString("${tag}_pub", null)
+        ?: throw Exception("No public key found for tag: $tag")
+      val pubBytes = Base64.decode(pubBase64, Base64.NO_WRAP)
+      return decryptWithPin(encrypted, pubBytes, pin)
+    }
+    // Legacy Keystore-encrypted data
+    return decryptWithKeystore(encrypted, biometric = false)
+  }
+
+  /** Internal helper: backup seed to Block Store (used by both backup and re-encrypt). */
+  private fun backupToBlockStoreInternal(seed: ByteArray, pubBytes: ByteArray, pin: String, promise: Promise) {
+    val pubBase58 = base58Encode(pubBytes)
+    val ikm = pubBytes + pin.toByteArray(Charsets.UTF_8)
+    val derivedKey = hkdfDeriveBlockStore(ikm, 32)
+    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+    cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(derivedKey, "AES"))
+    val iv = cipher.iv
+    val ciphertext = cipher.doFinal(seed)
+    val encPayload = iv + ciphertext
+
+    val json = JSONObject()
+    json.put("pub", pubBase58)
+    json.put("enc", Base64.encodeToString(encPayload, Base64.NO_WRAP))
+    val payload = json.toString().toByteArray(Charsets.UTF_8)
+
+    val storeData = StoreBytesData.Builder()
+      .setBytes(payload)
+      .setKey(BLOCKSTORE_KEY)
+      .setShouldBackupToCloud(true)
+      .build()
+    Blockstore.getClient(reactApplicationContext).storeBytes(storeData)
+      .addOnSuccessListener { promise.resolve(null) }
+      .addOnFailureListener { e ->
+        promise.reject("ERR_BLOCKSTORE", "Block Store backup failed: ${e.message}", e)
+      }
+  }
+
   private fun getPrefs(): SharedPreferences {
     return reactApplicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+  }
+
+  // --- Block Store backup ---
+
+  @ReactMethod
+  override fun backupCloudKeyToBlockStore(pin: String, promise: Promise) {
+    try {
+      val prefs = getPrefs()
+      val encryptedBase64 = prefs.getString("cloud_seed", null)
+        ?: throw Exception("No cloud keypair to back up")
+      val pubBase64 = prefs.getString("cloud_pub", null)
+        ?: throw Exception("No cloud public key found")
+
+      val encrypted = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+      val pubBytes = Base64.decode(pubBase64, Base64.NO_WRAP)
+
+      // Decrypt seed — auto-detects PIN-based (v3) vs Keystore (v1/v2)
+      val seed = decryptSeed("cloud", encrypted)
+      try {
+        backupToBlockStoreInternal(seed, pubBytes, pin, promise)
+      } finally {
+        seed.fill(0)
+      }
+    } catch (e: Exception) {
+      promise.reject("ERR_BLOCKSTORE", "Block Store backup failed: ${e.message}", e)
+    }
+  }
+
+  @ReactMethod
+  override fun restoreCloudKeyFromBlockStore(pin: String, promise: Promise) {
+    try {
+      val request = RetrieveBytesRequest.Builder()
+        .setKeys(listOf(BLOCKSTORE_KEY))
+        .build()
+      Blockstore.getClient(reactApplicationContext).retrieveBytes(request)
+        .addOnSuccessListener { result ->
+          try {
+            val blockData = result.blockstoreDataMap[BLOCKSTORE_KEY]
+            if (blockData == null || blockData.bytes.isEmpty()) {
+              promise.reject("ERR_NO_BACKUP", "No cloud key backup found in Block Store")
+              return@addOnSuccessListener
+            }
+
+            val json = JSONObject(String(blockData.bytes, Charsets.UTF_8))
+            val pubBase58 = json.getString("pub")
+            val encBase64 = json.getString("enc")
+
+            val pubBytes = base58Decode(pubBase58)
+            val encPayload = Base64.decode(encBase64, Base64.NO_WRAP)
+
+            // Derive same key: HKDF(salt, pubkey + pin)
+            val ikm = pubBytes + pin.toByteArray(Charsets.UTF_8)
+            val derivedKey = hkdfDeriveBlockStore(ikm, 32)
+
+            // Decrypt: first 12 bytes = IV, rest = ciphertext + tag
+            val iv = encPayload.copyOfRange(0, 12)
+            val ciphertext = encPayload.copyOfRange(12, encPayload.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(derivedKey, "AES"), GCMParameterSpec(GCM_TAG_LENGTH, iv))
+            val seed = cipher.doFinal(ciphertext)
+
+            try {
+              // Verify: derive pubkey from seed and check it matches
+              val privateKey = Ed25519PrivateKeyParameters(seed, 0)
+              val derivedPub = privateKey.generatePublicKey().encoded
+              if (!derivedPub.contentEquals(pubBytes)) {
+                promise.reject("ERR_WRONG_PIN", "Incorrect PIN — public key mismatch")
+                return@addOnSuccessListener
+              }
+
+              // Re-encrypt with local Keystore and save to SharedPreferences
+              val localEncrypted = encryptWithKeystore(seed, biometric = false)
+              val prefs = getPrefs()
+              prefs.edit()
+                .putString("cloud_seed", Base64.encodeToString(localEncrypted, Base64.NO_WRAP))
+                .putString("cloud_pub", Base64.encodeToString(pubBytes, Base64.NO_WRAP))
+                .putBoolean("cloud_bio", false)
+                .apply()
+
+              promise.resolve(pubBase58)
+            } finally {
+              seed.fill(0)
+            }
+          } catch (e: javax.crypto.AEADBadTagException) {
+            promise.reject("ERR_WRONG_PIN", "Incorrect PIN")
+          } catch (e: Exception) {
+            promise.reject("ERR_BLOCKSTORE", "Failed to restore from Block Store: ${e.message}", e)
+          }
+        }
+        .addOnFailureListener { e ->
+          promise.reject("ERR_BLOCKSTORE", "Block Store retrieval failed: ${e.message}", e)
+        }
+    } catch (e: Exception) {
+      promise.reject("ERR_BLOCKSTORE", "Block Store restore failed: ${e.message}", e)
+    }
+  }
+
+  @ReactMethod
+  override fun hasBlockStoreBackup(promise: Promise) {
+    try {
+      val request = RetrieveBytesRequest.Builder()
+        .setKeys(listOf(BLOCKSTORE_KEY))
+        .build()
+      Blockstore.getClient(reactApplicationContext).retrieveBytes(request)
+        .addOnSuccessListener { result ->
+          val blockData = result.blockstoreDataMap[BLOCKSTORE_KEY]
+          promise.resolve(blockData != null && blockData.bytes.isNotEmpty())
+        }
+        .addOnFailureListener {
+          promise.resolve(false)
+        }
+    } catch (e: Exception) {
+      promise.resolve(false)
+    }
+  }
+
+  /** HKDF-SHA256 for Block Store encryption — uses caller-provided IKM (pubkey + pin). */
+  private fun hkdfDeriveBlockStore(ikm: ByteArray, length: Int): ByteArray {
+    // HKDF-Extract: PRK = HMAC-SHA256(salt, IKM)
+    val mac = Mac.getInstance("HmacSHA256")
+    mac.init(SecretKeySpec(BLOCKSTORE_SALT, "HmacSHA256"))
+    val prk = mac.doFinal(ikm)
+
+    // HKDF-Expand
+    val result = ByteArray(length)
+    var t = ByteArray(0)
+    var offset = 0
+    var counter: Byte = 1
+    while (offset < length) {
+      mac.init(SecretKeySpec(prk, "HmacSHA256"))
+      mac.update(t)
+      mac.update(BLOCKSTORE_HKDF_INFO)
+      mac.update(counter)
+      t = mac.doFinal()
+      val toCopy = minOf(t.size, length - offset)
+      System.arraycopy(t, 0, result, offset, toCopy)
+      offset += toCopy
+      counter++
+    }
+    return result
+  }
+
+  // --- Base58 encoding/decoding ---
+
+  private fun base58Decode(input: String): ByteArray {
+    var leadingOnes = 0
+    for (c in input) {
+      if (c == '1') leadingOnes++ else break
+    }
+
+    var num = java.math.BigInteger.ZERO
+    for (c in input) {
+      val digit = ALPHABET.indexOf(c)
+      if (digit < 0) throw IllegalArgumentException("Invalid base58 character: $c")
+      num = num.multiply(java.math.BigInteger.valueOf(58)).add(java.math.BigInteger.valueOf(digit.toLong()))
+    }
+
+    val bytes = num.toByteArray()
+    // Remove leading zero byte added by BigInteger for sign
+    val stripped = if (bytes.isNotEmpty() && bytes[0] == 0.toByte()) bytes.copyOfRange(1, bytes.size) else bytes
+    val result = ByteArray(leadingOnes) + stripped
+    return result
   }
 
   // --- Base58 encoding ---

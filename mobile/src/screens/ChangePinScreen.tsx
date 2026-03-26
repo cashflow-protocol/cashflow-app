@@ -3,8 +3,9 @@ import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import PinPad from '../components/PinPad';
+import { Platform } from 'react-native';
 import { verifyPin, savePin } from '../services/pinStorage';
-import { authenticate } from '../services/keypairStorage';
+import { authenticate, reEncryptCloudKeyWithPin } from '../services/keypairStorage';
 import { logScreenView, logPinChangeStart, logPinChangeComplete, logPinChangeWrongPin, logPinChangeMismatch } from '../services/analyticsService';
 
 interface ChangePinScreenProps {
@@ -56,6 +57,14 @@ export default function ChangePinScreen({ onComplete, onBack }: ChangePinScreenP
         return;
       }
       await savePin(pin);
+
+      // Re-encrypt cloud key in SharedPreferences + Block Store with new PIN
+      if (Platform.OS === 'android') {
+        reEncryptCloudKeyWithPin(pin).catch(err => {
+          console.warn('[ChangePin] Cloud key re-encryption failed:', err);
+        });
+      }
+
       logPinChangeComplete();
       onComplete();
     },

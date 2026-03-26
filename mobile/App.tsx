@@ -29,7 +29,7 @@ import TabBar, { type TabName } from './src/components/TabBar';
 import { getVault } from './src/services/vaultStorage';
 import { checkWaitlistStatus } from './src/services/onboardingService';
 import { hasPin } from './src/services/pinStorage';
-import { migrateKeypairsToBiometric, getCloudPublicKey } from './src/services/keypairStorage';
+import { migrateKeypairsToBiometric, getCloudPublicKey, cachePin, clearCachedPin } from './src/services/keypairStorage';
 import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
 import { applyRemoteConfig } from './src/config/constants';
@@ -51,7 +51,7 @@ import {
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | 'keys-recovery' | 'add-recovery-key' | null;
-type OnboardingStep = 'carousel' | 'invite-code' | 'vault-setup' | 'waitlist' | 'vault-recovery' | null;
+type OnboardingStep = 'carousel' | 'invite-code' | 'pin-setup' | 'vault-setup' | 'waitlist' | 'vault-recovery' | null;
 
 function App() {
   const [checkingVault, setCheckingVault] = useState(true);
@@ -63,6 +63,7 @@ function App() {
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('carousel');
   const [inviteCodeFrom, setInviteCodeFrom] = useState<'carousel' | 'waitlist'>('carousel');
   const [inviteCode, setInviteCode] = useState('');
+  const [pendingPin, setPendingPin] = useState<string | null>(null);
   const backgroundedAt = useRef<number | null>(null);
   const recentNotifs = useRef(new Set<string>());
   const [toastVisible, setToastVisible] = useState(false);
@@ -97,9 +98,9 @@ function App() {
         try {
           const status = await checkWaitlistStatus(cloudPk);
           if (status.approved && status.inviteCode) {
-            // Already approved — go straight to vault setup
+            // Already approved — go through PIN setup first
             setInviteCode(status.inviteCode);
-            setOnboardingStep('vault-setup');
+            setOnboardingStep('pin-setup');
           } else {
             setOnboardingStep('waitlist');
           }
@@ -177,6 +178,7 @@ function App() {
         backgroundedAt.current = null;
         if (elapsed >= LOCK_TIMEOUT_MS && onboardingDone) {
           logAppLocked();
+          clearCachedPin();
           setLocked(true);
         }
       }
@@ -261,7 +263,10 @@ function App() {
       <ThemeProvider>
         <SafeAreaProvider>
           <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-          <BiometricLockScreen onUnlock={() => setLocked(false)} />
+          <BiometricLockScreen
+            onUnlock={() => setLocked(false)}
+            onPinUnlock={(pin) => cachePin(pin)}
+          />
         </SafeAreaProvider>
       </ThemeProvider>
     );
@@ -270,7 +275,8 @@ function App() {
   if (!onboardingDone) {
     const handleVaultComplete = () => {
       setOnboardingDone(true);
-      setNeedsPinSetup(true);
+      setNeedsPinSetup(false); // PIN already created before vault setup
+      setPendingPin(null);
       setOnboardingStep('carousel');
       setInviteCode('');
       setUserHasVault(true);
@@ -289,9 +295,17 @@ function App() {
           <InviteCodeScreen
             onValidCode={(code) => {
               setInviteCode(code);
-              setOnboardingStep('vault-setup');
+              setOnboardingStep('pin-setup');
             }}
             onBack={() => setOnboardingStep(inviteCodeFrom)}
+          />
+        );
+        break;
+      case 'pin-setup':
+        onboardingContent = (
+          <PinSetupScreen
+            onPinConfirmed={(pin) => { setPendingPin(pin); cachePin(pin); }}
+            onComplete={() => setOnboardingStep('vault-setup')}
           />
         );
         break;
@@ -299,6 +313,7 @@ function App() {
         onboardingContent = (
           <VaultSetupScreen
             inviteCode={inviteCode}
+            pin={pendingPin ?? undefined}
             onComplete={handleVaultComplete}
             onRecovery={() => setOnboardingStep('vault-recovery')}
           />
@@ -309,7 +324,7 @@ function App() {
           <WaitlistDashboardScreen
             onApproved={(code) => {
               setInviteCode(code);
-              setOnboardingStep('vault-setup');
+              setOnboardingStep('pin-setup');
             }}
             onBack={() => setOnboardingStep('carousel')}
             onHaveInviteCode={() => { setInviteCodeFrom('waitlist'); setOnboardingStep('invite-code'); }}

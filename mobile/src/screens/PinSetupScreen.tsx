@@ -8,9 +8,10 @@ import { logScreenView, logPinSetupComplete, logPinSetupMismatch } from '../serv
 
 interface PinSetupScreenProps {
   onComplete: () => void;
+  onPinConfirmed?: (pin: string) => void;
 }
 
-export default function PinSetupScreen({ onComplete }: PinSetupScreenProps) {
+export default function PinSetupScreen({ onComplete, onPinConfirmed }: PinSetupScreenProps) {
   const [step, setStep] = useState<'create' | 'confirm'>('create');
   const [firstPin, setFirstPin] = useState('');
   const [error, setError] = useState('');
@@ -34,6 +35,7 @@ export default function PinSetupScreen({ onComplete }: PinSetupScreenProps) {
       }
       await savePin(pin);
       logPinSetupComplete();
+      onPinConfirmed?.(pin);
       onComplete();
     },
     [firstPin, onComplete],
