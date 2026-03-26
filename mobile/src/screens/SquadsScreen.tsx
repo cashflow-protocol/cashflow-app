@@ -236,6 +236,7 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Vault Address Card */}
         <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>

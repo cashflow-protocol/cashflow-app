@@ -214,7 +214,7 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
               autoCorrect={false}
             />
           </View>
-          <ScrollView style={styles.tokenList} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.tokenList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {sendableAssets.length === 0 ? (
               <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{search ? 'No matching tokens' : 'No tokens available'}</Text>
             ) : (

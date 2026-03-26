@@ -158,6 +158,7 @@ export default function EarnScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filtersContainer}
             style={styles.filtersScroll}
+            keyboardShouldPersistTaps="handled"
           >
             {filters.map((filter) => (
               <TouchableOpacity
@@ -190,6 +191,7 @@ export default function EarnScreen() {
               keyExtractor={(item) => `${item.type}:${item.mint}${item.vaultAddress ? `:${item.vaultAddress}` : ''}`}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
               onRefresh={refresh}
               refreshing={refreshing}
               renderItem={({ item }) => (

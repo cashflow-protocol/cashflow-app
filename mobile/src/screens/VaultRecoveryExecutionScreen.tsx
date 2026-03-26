@@ -291,6 +291,7 @@ export default function VaultRecoveryExecutionScreen({
           style={styles.scrollContent}
           contentContainerStyle={styles.scrollInner}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

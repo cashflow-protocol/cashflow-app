@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import {
   View,
   Modal,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   Animated,
@@ -99,14 +100,17 @@ export default function BottomSheet({
   };
 
   const sheetContent = (
-    <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+    <ScrollView
+      scrollEnabled={false}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={[styles.sheetContent, { backgroundColor: colors.sheetBackground }]}>
         <View style={styles.handleContainer}>
           <View style={[styles.handle, { backgroundColor: colors.sheetHandle }]} />
         </View>
         {children}
       </View>
-    </TouchableOpacity>
+    </ScrollView>
   );
 
   return (

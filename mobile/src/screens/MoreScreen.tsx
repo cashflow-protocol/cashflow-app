@@ -228,6 +228,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Squads Section */}
         <View style={styles.content}>

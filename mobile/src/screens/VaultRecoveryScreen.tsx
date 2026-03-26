@@ -260,6 +260,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       <FlatList
         data={vaults}
         keyExtractor={(item) => item.multisigAddress}
+        keyboardShouldPersistTaps="handled"
         renderItem={({ item }) => (
           <TouchableOpacity
             style={[styles.vaultCard, { backgroundColor: 'rgba(255,255,255,0.12)' }]}
