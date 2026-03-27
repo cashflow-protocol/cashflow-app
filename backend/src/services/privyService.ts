@@ -1,150 +1,104 @@
-import axios from 'axios';
+import { PrivyClient } from '@privy-io/node';
 
 const PRIVY_APP_ID = process.env.PRIVY_APP_ID || '';
 const PRIVY_APP_SECRET = process.env.PRIVY_APP_SECRET || '';
-const PRIVY_BASE_URL = 'https://auth.privy.io/api/v1';
+const AUTH_KEY_ID = process.env.PRIVY_AUTHORIZATION_ID || '';
+const AUTH_PRIVATE_KEY = process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY || '';
 
-function getHeaders() {
-  const credentials = Buffer.from(`${PRIVY_APP_ID}:${PRIVY_APP_SECRET}`).toString('base64');
+const privy = new PrivyClient({
+  appId: PRIVY_APP_ID,
+  appSecret: PRIVY_APP_SECRET,
+});
+
+const authContext = AUTH_PRIVATE_KEY
+  ? { authorization_private_keys: [AUTH_PRIVATE_KEY] }
+  : undefined;
+
+/**
+ * Create a server-owned Privy Solana wallet for a recovery email.
+ * The wallet is owned by our authorization key, so we can sign server-side.
+ */
+export async function createRecoveryWallet(email: string): Promise<{
+  walletId: string;
+  solanaAddress: string;
+}> {
+  // Create a server-owned wallet with our auth key as owner
+  const wallet = await privy.wallets().create({
+    chain_type: 'solana',
+    owner_id: AUTH_KEY_ID,
+  });
+
+  console.log(`[Privy] Created server-owned wallet: ${wallet.address} (id: ${wallet.id}) for ${email}`);
+
   return {
-    'Authorization': `Basic ${credentials}`,
-    'privy-app-id': PRIVY_APP_ID,
-    'Content-Type': 'application/json',
+    walletId: wallet.id,
+    solanaAddress: wallet.address,
   };
 }
 
 /**
- * Create or retrieve a Privy user by email address.
- * If the user already exists, returns the existing user.
- * Automatically creates an embedded Solana wallet.
- */
-export async function getOrCreatePrivyUser(email: string): Promise<{
-  privyUserId: string;
-  solanaAddress: string | null;
-}> {
-  const headers = getHeaders();
-
-  // Try to find existing user by email
-  let userId: string | null = null;
-
-  try {
-    const searchRes = await axios.post(`${PRIVY_BASE_URL}/users/search`, {
-      emails: [email],
-    }, { headers });
-
-    if (searchRes.data?.data?.length > 0) {
-      userId = searchRes.data.data[0].id;
-    }
-  } catch {
-    // User doesn't exist yet
-  }
-
-  // Create user if not found
-  if (!userId) {
-    const createRes = await axios.post(`${PRIVY_BASE_URL}/users`, {
-      linked_accounts: [
-        { type: 'email', address: email },
-      ],
-      create_solana_wallet: true,
-    }, { headers });
-
-    userId = createRes.data.id;
-
-    // The wallet may be in the create response
-    const wallets = createRes.data.linked_accounts?.filter(
-      (a: any) => a.type === 'wallet' && a.chain_type === 'solana'
-    );
-    if (wallets?.length > 0) {
-      return { privyUserId: userId!, solanaAddress: wallets[0].address };
-    }
-  }
-
-  // Fetch user to get wallet
-  const userRes = await axios.get(`${PRIVY_BASE_URL}/users/${userId}`, { headers });
-  const solanaWallets = userRes.data.linked_accounts?.filter(
-    (a: any) => a.type === 'wallet' && a.chain_type === 'solana'
-  );
-
-  // If no Solana wallet yet, create one
-  if (!solanaWallets || solanaWallets.length === 0) {
-    try {
-      const walletRes = await axios.post(`${PRIVY_BASE_URL}/users/${userId}/wallets`, {
-        chain_type: 'solana',
-      }, { headers });
-
-      return { privyUserId: userId!, solanaAddress: walletRes.data.address || null };
-    } catch (err: any) {
-      console.error('Failed to create Privy Solana wallet:', err?.response?.data || err.message);
-      return { privyUserId: userId!, solanaAddress: null };
-    }
-  }
-
-  return { privyUserId: userId!, solanaAddress: solanaWallets[0].address };
-}
-
-/**
- * Sign a Solana transaction message using a Privy embedded wallet.
- * Looks up the user by email, finds their Solana wallet, and signs via Privy API.
- *
- * @param email The email address of the Privy user
- * @param transactionBase64 Base64-encoded serialized transaction (VersionedTransaction)
- * @returns Base64-encoded signature (64 bytes)
+ * Sign a Solana transaction using a server-owned Privy wallet.
+ * Looks up the wallet by address and signs with our authorization key.
  */
 export async function signTransactionWithPrivy(
-  email: string,
+  walletAddress: string,
   transactionBase64: string,
-): Promise<{ signature: string; address: string }> {
-  const headers = getHeaders();
-
-  // Find user by email
-  const searchRes = await axios.post(`${PRIVY_BASE_URL}/users/search`, {
-    emails: [email],
-  }, { headers });
-
-  if (!searchRes.data?.data?.length) {
-    throw new Error('Privy user not found for this email');
+): Promise<{ signedTransaction: string; address: string }> {
+  if (!AUTH_PRIVATE_KEY) {
+    throw new Error('PRIVY_AUTHORIZATION_PRIVATE_KEY not configured');
   }
 
-  const user = searchRes.data.data[0];
-  const userId = user.id;
+  // Find the wallet by address
+  const wallets = await privy.wallets().list({ chain_type: 'solana' });
+  let walletId: string | null = null;
 
-  // Find their Solana embedded wallet
-  const solanaWallets = user.linked_accounts?.filter(
-    (a: any) => a.type === 'wallet' && a.chain_type === 'solana'
-  );
-
-  if (!solanaWallets?.length) {
-    throw new Error('No Solana wallet found for this Privy user');
+  for await (const wallet of wallets) {
+    if (wallet.address === walletAddress) {
+      walletId = wallet.id;
+      break;
+    }
   }
 
-  const walletId = solanaWallets[0].id;
-  const walletAddress = solanaWallets[0].address;
-
-  // Sign transaction via Privy wallet RPC
-  let signRes;
-  try {
-    signRes = await axios.post(
-      `${PRIVY_BASE_URL}/wallets/${walletId}/rpc`,
-      {
-        method: 'signTransaction',
-        params: {
-          transaction: transactionBase64,
-          encoding: 'base64',
-        },
-      },
-      { headers: { ...headers, 'privy-authorization-signature': userId } },
-    );
-  } catch (err: any) {
-    const detail = err?.response?.data ? JSON.stringify(err.response.data) : err.message;
-    throw new Error(`Privy signing failed: ${detail}`);
+  if (!walletId) {
+    throw new Error(`Privy wallet not found for address ${walletAddress}`);
   }
 
-  if (!signRes.data?.data?.signature) {
-    throw new Error('Privy signing failed — no signature returned');
-  }
+  console.log(`[Privy] Signing with wallet ${walletId} (${walletAddress})`);
+
+  const result = await privy.wallets().solana().signTransaction(walletId, {
+    transaction: transactionBase64,
+    authorization_context: authContext,
+  });
 
   return {
-    signature: signRes.data.data.signature,
+    signedTransaction: result.signed_transaction,
     address: walletAddress,
   };
+}
+
+/**
+ * Look up Privy wallet emails by their Solana addresses.
+ * Searches users who have wallets matching the given addresses.
+ */
+export async function lookupPrivyEmails(addresses: string[]): Promise<Record<string, string>> {
+  const emails: Record<string, string> = {};
+
+  for (const addr of addresses) {
+    try {
+      const user = await privy.users().search({
+        emails: [],
+        phoneNumbers: [],
+        walletAddresses: [addr],
+      });
+      const userData = (user as any).data?.[0];
+      if (userData) {
+        const emailAccount = userData.linked_accounts?.find((a: any) => a.type === 'email');
+        if (emailAccount?.address) {
+          emails[addr] = emailAccount.address;
+        }
+      }
+    } catch {}
+  }
+
+  return emails;
 }

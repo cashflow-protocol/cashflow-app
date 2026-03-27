@@ -10,6 +10,12 @@ export interface Spec extends TurboModule {
   deleteKeypair(tag: string): Promise<void>;
   authenticate(reason: string): Promise<boolean>;
   migrateKeypairsToBiometric(): Promise<boolean>;
+  cachePin(pin: string): Promise<void>;
+  clearCachedPin(): Promise<void>;
+  reEncryptCloudKeyWithPin(newPin: string): Promise<void>;
+  backupCloudKeyToBlockStore(pin: string): Promise<void>;
+  restoreCloudKeyFromBlockStore(pin: string): Promise<string>;
+  hasBlockStoreBackup(): Promise<boolean>;
 }
 
 export default TurboModuleRegistry.get<Spec>('CashflowSigning');

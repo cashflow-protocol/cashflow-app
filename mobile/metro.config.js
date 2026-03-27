@@ -13,6 +13,9 @@ const config = {
       stream: require.resolve('readable-stream'),
       buffer: require.resolve('buffer'),
     },
+    // Handle package exports for Privy SDK dependencies
+    unstable_enablePackageExports: true,
+    unstable_conditionNames: ['react-native', 'browser', 'require'],
   },
 };
 

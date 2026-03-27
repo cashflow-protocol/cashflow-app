@@ -37,11 +37,17 @@ class ApiService {
     return res.json();
   }
 
-  async getConfig(): Promise<{ lookupTableAddress: string | null; solanaRpcUrl: string | null; treasuryWallet: string | null }> {
+  async getConfig(): Promise<{
+    lookupTableAddress: string | null;
+    solanaRpcUrl: string | null;
+    treasuryWallet: string | null;
+    targetCloudBalance: number | null;
+    vaultCreationFee: number | null;
+  }> {
     // Config is needed during vault creation (before auth is available) — bypass auth
     const r = await fetch(`${this.baseUrl}/config/v1`);
     if (!r.ok) throw new Error(`API error: ${r.status}`);
-    const res: { success: boolean; data: { lookupTableAddress: string | null; solanaRpcUrl: string | null; treasuryWallet: string | null } } = await r.json();
+    const res = await r.json();
     return res.data;
   }
 
@@ -407,6 +413,7 @@ class ApiService {
     members: Array<{ address: string; permissions: any }>;
     cloudKey?: string;
     addMemberActions: Array<{ memberAddress: string; permissions: string }>;
+    newRentCollector?: string;
   }): Promise<{
     tx1Base64: string;
     tx2Base64: string;
@@ -474,6 +481,7 @@ class ApiService {
     requiredSigners: Array<{ address: string; type: string; label?: string; email?: string }>;
     collectedSignatures: Array<{ address: string; signature: string }>;
     createdByWallet: string;
+    newCloudKey?: string;
   }): Promise<{ proposalId: string; status: string; signaturesCollected: number; signaturesRequired: number }> {
     const r = await fetch(`${this.baseUrl}/vault-recovery/v1/create-proposal`, {
       method: 'POST',
@@ -500,7 +508,7 @@ class ApiService {
     return res.data;
   }
 
-  async requestPrivySign(proposalId: string, email: string): Promise<{
+  async requestPrivySign(proposalId: string, walletAddress: string): Promise<{
     signaturesCollected: number;
     status: string;
     signerAddress: string;
@@ -508,7 +516,7 @@ class ApiService {
     const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}/sign-privy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ walletAddress }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({ error: 'Failed' }));

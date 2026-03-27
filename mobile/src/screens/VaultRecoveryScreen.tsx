@@ -13,7 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { ArrowLeft, Wallet, CheckCircle2, ChevronRight, SearchX } from 'lucide-react-native';
 import { useWallet } from '../hooks/useWallet';
-import { getCloudPublicKey } from '../services/keypairStorage';
+import { Platform } from 'react-native';
+import { getCloudPublicKey, hasBlockStoreBackup, restoreCloudKeyFromBlockStore } from '../services/keypairStorage';
+import PinPad from '../components/PinPad';
 import apiService from '../services/apiService';
 import Toast from '../components/Toast';
 import { useTheme } from '../theme/ThemeContext';
@@ -25,7 +27,7 @@ interface VaultRecoveryScreenProps {
   onBack: () => void;
 }
 
-type RecoveryStep = 'connect' | 'searching' | 'no-results' | 'select' | 'confirm' | 'executing';
+type RecoveryStep = 'connect' | 'searching' | 'no-results' | 'select' | 'confirm' | 'pin-restore' | 'executing';
 
 interface MultisigResult {
   multisigAddress: string;
@@ -55,6 +57,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
   const [manualModalVisible, setManualModalVisible] = useState(false);
   const [manualAddress, setManualAddress] = useState('');
   const [manualLoading, setManualLoading] = useState(false);
+  const [pinError, setPinError] = useState('');
 
   // Animations
   const contentOpacity = useRef(new Animated.Value(0)).current;
@@ -159,6 +162,18 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       setLoading(false);
     }
 
+    // On Android, check if Block Store has a cloud key backup
+    if (Platform.OS === 'android') {
+      try {
+        const hasBackup = await hasBlockStoreBackup();
+        if (hasBackup) {
+          setPinError('');
+          setStep('pin-restore');
+          return;
+        }
+      } catch {}
+    }
+
     setStep('executing');
   }, [selectedVault, walletAddress, connectWallet, showToast]);
 
@@ -245,6 +260,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       <FlatList
         data={vaults}
         keyExtractor={(item) => item.multisigAddress}
+        keyboardShouldPersistTaps="handled"
         renderItem={({ item }) => (
           <TouchableOpacity
             style={[styles.vaultCard, { backgroundColor: 'rgba(255,255,255,0.12)' }]}
@@ -307,6 +323,30 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
     </View>
   );
 
+  const handlePinRestore = useCallback(async (pin: string) => {
+    try {
+      const restoredPub = await restoreCloudKeyFromBlockStore(pin);
+      console.log('[Recovery] Cloud key restored from Block Store:', restoredPub);
+
+      // Re-check if the restored cloud key matches the selected vault
+      if (selectedVault) {
+        const matchesMember = selectedVault.members.some(m => m.address === restoredPub);
+        if (matchesMember) {
+          setSelectedVault({ ...selectedVault, matchesCloudKey: true });
+        }
+      }
+
+      setStep('executing');
+    } catch (err: any) {
+      if (err?.code === 'ERR_WRONG_PIN') {
+        setPinError('Incorrect PIN');
+      } else {
+        setPinError('Failed to restore cloud key');
+        console.error('[Recovery] Block Store restore error:', err);
+      }
+    }
+  }, [selectedVault]);
+
   const renderStepContent = () => {
 
     switch (step) {
@@ -315,6 +355,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       case 'no-results': return renderNoResults();
       case 'select': return renderSelect();
       case 'confirm': return renderConfirm();
+      case 'pin-restore': return null; // Rendered as full-screen PinPad below
       case 'executing': return null; // Handled by full-screen execution component
     }
   };
@@ -388,6 +429,32 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
         return null;
     }
   };
+
+  // Render PIN restore screen
+  if (step === 'pin-restore') {
+    return (
+      <View style={styles.container}>
+        <LinearGradient
+          colors={colors.onboardingGradient}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+          <PinPad
+            title="Enter Your PIN"
+            subtitle="Restore your cloud key from backup"
+            error={pinError}
+            onComplete={handlePinRestore}
+            onCancel={() => {
+              // Skip restoration — proceed without cloud key
+              setStep('executing');
+            }}
+          />
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   // Render execution screen when recovering
   if (step === 'executing' && selectedVault) {

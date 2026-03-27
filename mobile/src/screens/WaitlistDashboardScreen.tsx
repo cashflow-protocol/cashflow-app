@@ -328,6 +328,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
       <ScrollView
         style={styles.taskList}
         contentContainerStyle={styles.taskListContent}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

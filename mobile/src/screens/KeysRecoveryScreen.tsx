@@ -72,7 +72,7 @@ function classifyMembers(
   return { coreMembers, recoveryMembers };
 }
 
-const MAX_RECOVERY_KEYS = 3;
+const MAX_RECOVERY_KEYS = 10;
 
 function getKeyIcon(label: MemberLabel, color?: string) {
   switch (label) {
@@ -376,7 +376,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     return {
       title: "What's a Recovery Key?",
       items: [
-        { icon: <KeyRound size={20} color={colors.textPrimary} />, title: 'Wallet recovery', desc: 'A Recovery Key can restore access to your wallet when paired with your Device or Cloud Key. Cashflow supports up to 3 Recovery Keys' },
+        { icon: <KeyRound size={20} color={colors.textPrimary} />, title: 'Wallet recovery', desc: 'A Recovery Key can restore access to your wallet when paired with your Device or Cloud Key. Cashflow supports up to 10 Recovery Keys' },
         { icon: <RotateCcw size={20} color={colors.textPrimary} />, title: 'Recovery only', desc: 'Recovery Keys have limited rights and can never access your Cashflow Vault without an associated Active Key' },
       ],
     };
@@ -452,6 +452,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {loading ? (
           <ActivityIndicator size="large" color={colors.accentGreen} style={{ marginTop: 40 }} />
@@ -721,7 +722,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
                 <View style={styles.addRecoveryInfoText}>
                   <Text style={[styles.addRecoveryInfoTitle, { color: colors.textPrimary }]}>Wallet recovery</Text>
                   <Text style={[styles.addRecoveryInfoDesc, { color: colors.textTertiary }]}>
-                    A Recovery Key can restore access to your wallet when paired with your Device or Cloud Key. Cashflow supports up to 3 Recovery Keys
+                    A Recovery Key can restore access to your wallet when paired with your Device or Cloud Key. Cashflow supports up to 10 Recovery Keys
                   </Text>
                 </View>
               </View>
@@ -769,7 +770,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
             <Text style={[styles.addRecoveryTitle, { color: colors.textPrimary }]}>Crypto Wallet</Text>
             <Text style={[styles.cryptoSubtitle, { color: colors.textPrimary }]}>
-              Enter a wallet address{'\n'}in the field below
+              Enter a wallet address in the field below
             </Text>
 
             <View style={[styles.cryptoInputRow, { backgroundColor: colors.cardSecondary }]}>
@@ -823,7 +824,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
             <Text style={[styles.addRecoveryTitle, { color: colors.textPrimary }]}>Email</Text>
             <Text style={[styles.cryptoSubtitle, { color: colors.textPrimary }]}>
-              Enter email address{'\n'}in the field below
+              Enter email address in the field below
             </Text>
 
             <View style={[styles.cryptoInputRow, { backgroundColor: colors.cardSecondary }]}>

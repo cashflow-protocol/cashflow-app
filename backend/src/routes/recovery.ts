@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { BrevoClient } from '@getbrevo/brevo';
-import { getOrCreatePrivyUser } from '../services/privyService';
+import { createRecoveryWallet } from '../services/privyService';
 
 const router = Router();
 
@@ -91,8 +91,8 @@ router.post('/verify', async (req, res) => {
     // Code verified — clean up
     pendingRecoveryCodes.delete(normalizedEmail);
 
-    // Create or get Privy user with embedded Solana wallet
-    const { solanaAddress } = await getOrCreatePrivyUser(normalizedEmail);
+    // Create server-owned Privy wallet for recovery
+    const { solanaAddress } = await createRecoveryWallet(normalizedEmail);
 
     if (!solanaAddress) {
       res.status(500).json({ success: false, error: 'Failed to create recovery wallet' });

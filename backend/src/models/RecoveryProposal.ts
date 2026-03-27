@@ -91,6 +91,10 @@ export class RecoveryProposal {
   @prop({ required: true })
   public createdByWallet!: string;
 
+  /** If a new cloud key was created during recovery, fund it on execute */
+  @prop()
+  public newCloudKey?: string;
+
   @prop()
   public executionSignature?: string;
 }

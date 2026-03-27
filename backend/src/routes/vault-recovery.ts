@@ -2,11 +2,10 @@ import { Router, Request, Response } from 'express';
 import { RecoveryProposalModel, RecoveryProposalStatus } from '../models/RecoveryProposal';
 import { UserModel } from '../models';
 import { signTransactionWithPrivy } from '../services/privyService';
-import { JitoManager } from '../managers';
-
+import { HeliusSender } from '../managers';
+import { TARGET_CLOUD_BALANCE } from '../constants';
 
 const router = Router();
-const jitoManager = new JitoManager();
 
 const SQUADS_V4_API = 'https://v4-api.squads.so';
 
@@ -221,7 +220,7 @@ router.post('/find-vault-by-address', async (req: Request, res: Response) => {
  */
 router.post('/build-proposal-tx', async (req: Request, res: Response) => {
   try {
-    const { multisigAddress, walletAddress, members, cloudKey, addMemberActions } = req.body;
+    const { multisigAddress, walletAddress, members, cloudKey, addMemberActions, newRentCollector } = req.body;
     if (!multisigAddress || !walletAddress || !addMemberActions?.length) {
       res.status(400).json({ success: false, error: 'Missing required fields' });
       return;
@@ -240,14 +239,22 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
     const multisigAccount = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
     const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
-    // Build add member actions for the Squads instruction
-    const parsedActions = addMemberActions.map((a: any) => ({
+    // Build config transaction actions
+    const parsedActions: any[] = addMemberActions.map((a: any) => ({
       __kind: 'AddMember' as const,
       newMember: {
         key: new PublicKey(a.memberAddress),
         permissions: Permissions.all(),
       },
     }));
+
+    // Set new cloud key as rent collector if provided
+    if (newRentCollector) {
+      parsedActions.push({
+        __kind: 'SetRentCollector' as const,
+        newRentCollector: new PublicKey(newRentCollector),
+      });
+    }
 
     // Build TX1 instructions
     const tx1Instructions = [
@@ -273,24 +280,8 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
       }),
     ];
 
-    // Jito tip for landing on mainnet
-    const { SystemProgram } = await import('@solana/web3.js');
-    const JITO_TIP_ACCOUNTS = [
-      'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
-      'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
-      'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
-      'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
-      '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5',
-      'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
-      'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL',
-      '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT',
-    ];
-    const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
-    tx1Instructions.push(SystemProgram.transfer({
-      fromPubkey: walletPubkey,
-      toPubkey: new PublicKey(tipAccount),
-      lamports: 100_000,
-    }));
+    // Helius SWQoS tip for landing on mainnet
+    tx1Instructions.push(HeliusSender.createTipIx(walletPubkey));
 
     // Cloud key approves too if provided
     if (cloudKey) {
@@ -359,6 +350,50 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
 
 
 /**
+ * POST /lookup-privy-emails
+ * Look up Privy email addresses for given Solana wallet addresses.
+ * Body: { addresses: string[] }
+ */
+router.post('/lookup-privy-emails', async (req: Request, res: Response) => {
+  try {
+    const { addresses } = req.body;
+    if (!Array.isArray(addresses)) {
+      res.status(400).json({ success: false, error: 'addresses array is required' });
+      return;
+    }
+
+    const { lookupPrivyEmails } = await import('../services/privyService');
+    const emails = await lookupPrivyEmails(addresses);
+
+    res.json({ success: true, data: { emails } });
+  } catch (error: any) {
+    console.error('Error looking up Privy emails:', error);
+    res.status(500).json({ success: false, error: 'Failed to look up emails' });
+  }
+});
+
+/**
+ * POST /send-recovery-tx
+ * Send a signed transaction via Helius SWQoS and wait for confirmation.
+ * Body: { transaction: string (base64) }
+ */
+router.post('/send-recovery-tx', async (req: Request, res: Response) => {
+  try {
+    const { transaction } = req.body;
+    if (!transaction) {
+      res.status(400).json({ success: false, error: 'transaction is required' });
+      return;
+    }
+
+    const signature = await HeliusSender.sendAndConfirm(transaction);
+    res.json({ success: true, data: { signature } });
+  } catch (error: any) {
+    console.error('Error sending recovery tx:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to send transaction' });
+  }
+});
+
+/**
  * POST /create-proposal
  * Store a recovery proposal after TX1 has been confirmed on-chain.
  */
@@ -377,6 +412,7 @@ router.post('/create-proposal', async (req: Request, res: Response) => {
       requiredSigners,
       collectedSignatures,
       createdByWallet,
+      newCloudKey,
     } = req.body;
 
     if (!multisigAddress || !requiredSigners?.length) {
@@ -398,6 +434,7 @@ router.post('/create-proposal', async (req: Request, res: Response) => {
       collectedSignatures: collectedSignatures || [],
       status: RecoveryProposalStatus.PENDING,
       createdByWallet,
+      newCloudKey: newCloudKey || undefined,
     });
 
     // Check if already at threshold
@@ -462,8 +499,60 @@ router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /build-approve-tx
+ * Build a proposalApprove transaction for a given member.
+ * Body: { memberAddress: string, multisigAddress: string, transactionIndex: number }
+ */
+router.post('/build-approve-tx', async (req: Request, res: Response) => {
+  try {
+    const { memberAddress, multisigAddress, transactionIndex: txIdx } = req.body;
+    if (!memberAddress || !multisigAddress || txIdx == null) {
+      res.status(400).json({ success: false, error: 'memberAddress, multisigAddress, transactionIndex are required' });
+      return;
+    }
+
+    const multisigLib = await import('@sqds/multisig');
+    const { Connection, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl);
+
+    const multisigPda = new PublicKey(multisigAddress);
+    const memberPubkey = new PublicKey(memberAddress);
+    const transactionIndex = BigInt(txIdx);
+
+    const approveIx = multisigLib.instructions.proposalApprove({
+      multisigPda,
+      transactionIndex,
+      member: memberPubkey,
+    });
+
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+
+    const msg = new TransactionMessage({
+      payerKey: memberPubkey,
+      recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+        approveIx,
+        HeliusSender.createTipIx(memberPubkey),
+      ],
+    }).compileToV0Message();
+
+    const tx = new VersionedTransaction(msg);
+    const txBase64 = Buffer.from(tx.serialize()).toString('base64');
+
+    res.json({ success: true, data: { transaction: txBase64, blockhash, lastValidBlockHeight } });
+  } catch (error: any) {
+    console.error('Error building approve tx:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to build approve transaction' });
+  }
+});
+
+/**
  * POST /proposal/:proposalId/build-approve-tx
- * Build a proposalApprove transaction for a given member to sign and send.
+ * Build a proposalApprove transaction for a given member (by proposal ID).
+ * @deprecated Use POST /build-approve-tx instead.
  * Body: { memberAddress: string }
  */
 router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: Response) => {
@@ -512,6 +601,7 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
         ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
         ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
         approveIx,
+        HeliusSender.createTipIx(memberPubkey),
       ],
     }).compileToV0Message();
 
@@ -642,13 +732,15 @@ router.post('/proposal/:proposalId/submit-signature', async (req: Request, res: 
 
 /**
  * POST /proposal/:proposalId/sign-privy
- * Sign the proposal using a Privy embedded wallet (email recovery key).
+ * Build, sign, and send a proposalApprove TX using a server-owned Privy wallet.
+ * Body: { walletAddress: string }
  */
 router.post('/proposal/:proposalId/sign-privy', async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
-    if (!email) {
-      res.status(400).json({ success: false, error: 'email is required' });
+    const { walletAddress } = req.body;
+    const address = walletAddress || '';
+    if (!address) {
+      res.status(400).json({ success: false, error: 'walletAddress is required' });
       return;
     }
 
@@ -663,9 +755,6 @@ router.post('/proposal/:proposalId/sign-privy', async (req: Request, res: Respon
       return;
     }
 
-    // Sign the transaction with Privy
-    const { signature, address } = await signTransactionWithPrivy(email, proposal.tx1Base64);
-
     // Verify the address is a required signer
     const isRequired = proposal.requiredSigners.some(s => s.address === address);
     if (!isRequired) {
@@ -675,19 +764,59 @@ router.post('/proposal/:proposalId/sign-privy', async (req: Request, res: Respon
 
     // Check if already signed
     const alreadySigned = proposal.collectedSignatures.some(s => s.address === address);
-    if (!alreadySigned) {
-      proposal.collectedSignatures.push({
-        address,
-        signature,
-        collectedAt: new Date(),
-      });
-
-      if (proposal.collectedSignatures.length >= proposal.threshold) {
-        proposal.status = RecoveryProposalStatus.READY;
-      }
-
-      await proposal.save();
+    if (alreadySigned) {
+      res.json({ success: true, data: { status: proposal.status, signerAddress: address, alreadySigned: true } });
+      return;
     }
+
+    // Build approve TX
+    const multisigLib = await import('@sqds/multisig');
+    const { Connection, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl);
+
+    const multisigPda = new PublicKey(proposal.multisigAddress);
+    const memberPubkey = new PublicKey(address);
+    const transactionIndex = BigInt(proposal.transactionIndex);
+
+    const approveIx = multisigLib.instructions.proposalApprove({
+      multisigPda,
+      transactionIndex,
+      member: memberPubkey,
+    });
+
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+    const msg = new TransactionMessage({
+      payerKey: memberPubkey,
+      recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+        approveIx,
+        HeliusSender.createTipIx(memberPubkey),
+      ],
+    }).compileToV0Message();
+    const tx = new VersionedTransaction(msg);
+    const unsignedBase64 = Buffer.from(tx.serialize()).toString('base64');
+
+    // Sign with Privy server-owned wallet
+    const { signedTransaction } = await signTransactionWithPrivy(address, unsignedBase64);
+
+    // Send on-chain via HeliusSender
+    const signature = await HeliusSender.sendAndConfirm(signedTransaction);
+
+    // Mark as signed in proposal
+    proposal.collectedSignatures.push({
+      address,
+      signature,
+      collectedAt: new Date(),
+    });
+
+    if (proposal.collectedSignatures.length >= proposal.threshold) {
+      proposal.status = RecoveryProposalStatus.READY;
+    }
+
+    await proposal.save();
 
     res.json({
       success: true,
@@ -699,9 +828,8 @@ router.post('/proposal/:proposalId/sign-privy', async (req: Request, res: Respon
       },
     });
   } catch (error: any) {
-    const privyError = error?.response?.data || error?.message || 'Failed to sign with Privy';
-    console.error('Error signing with Privy:', JSON.stringify(privyError, null, 2));
-    res.status(500).json({ success: false, error: typeof privyError === 'string' ? privyError : JSON.stringify(privyError) });
+    console.error('Error signing with Privy:', error.message);
+    res.status(500).json({ success: false, error: error.message || 'Failed to sign with Privy' });
   }
 });
 
@@ -794,37 +922,120 @@ router.post('/proposal/:proposalId/send-bundle', async (req: Request, res: Respo
       return;
     }
 
-    // Send via Jito
-    const bundleId = await jitoManager.sendBundle(transactions);
-    console.log(`Recovery bundle sent: ${bundleId} (${transactions.length} txs)`);
-
-    // Poll for confirmation
-    let status = null;
-    for (let i = 0; i < 15; i++) {
-      await new Promise((r) => setTimeout(r, 2000));
-      status = await jitoManager.getBundleStatus(bundleId);
-      if (status?.confirmation_status === 'confirmed' || status?.confirmation_status === 'finalized') break;
-      if (status?.err && !('Ok' in status.err)) break;
-    }
-
-    if (status?.err && !('Ok' in status.err)) {
-      res.status(400).json({ success: false, error: 'Bundle execution failed', bundleId });
-      return;
+    // Send each transaction via HeliusSender SWQoS
+    const signatures: string[] = [];
+    for (const tx of transactions) {
+      const sig = await HeliusSender.sendAndConfirm(tx);
+      signatures.push(sig);
     }
 
     // Mark proposal as executed
     proposal.status = RecoveryProposalStatus.EXECUTED;
-    proposal.executionSignature = bundleId;
+    proposal.executionSignature = signatures[0];
     await proposal.save();
 
     res.json({
       success: true,
-      bundleId,
-      status: status?.confirmation_status ?? 'pending',
+      signatures,
+      status: 'confirmed',
     });
   } catch (error: any) {
     console.error('Error sending recovery bundle:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to send bundle' });
+  }
+});
+
+/**
+ * GET /proposal/:proposalId/build-execute-tx
+ * Build a fresh execute transaction with a current blockhash.
+ * TX1 (create + propose + approvals) is already on-chain.
+ * This returns an unsigned TX2 for the mobile app to sign and send.
+ */
+router.get('/proposal/:proposalId/build-execute-tx', async (req: Request, res: Response) => {
+  try {
+    const proposal = await RecoveryProposalModel.findById(req.params.proposalId);
+    if (!proposal) {
+      res.status(404).json({ success: false, error: 'Proposal not found' });
+      return;
+    }
+
+    if (proposal.status === RecoveryProposalStatus.EXECUTED) {
+      res.status(400).json({ success: false, error: 'Already executed' });
+      return;
+    }
+
+    if (proposal.status !== RecoveryProposalStatus.READY) {
+      res.status(400).json({
+        success: false,
+        error: `Proposal is ${proposal.status}, need ${proposal.threshold - proposal.collectedSignatures.length} more signatures`,
+      });
+      return;
+    }
+
+    const multisigLib = await import('@sqds/multisig');
+    const { Connection, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram, SystemProgram } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl, 'confirmed');
+
+    const multisigPda = new PublicKey(proposal.multisigAddress);
+    const transactionIndex = BigInt(proposal.transactionIndex);
+
+    // Use the creator wallet (who initiated recovery) as payer/member
+    const memberPubkey = new PublicKey(proposal.createdByWallet);
+
+    // Check for rent collector
+    const multisigAccount = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
+
+    const instructions = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+      multisigLib.instructions.configTransactionExecute({
+        multisigPda,
+        transactionIndex,
+        member: memberPubkey,
+        rentPayer: memberPubkey,
+      }),
+    ];
+
+    if (multisigAccount.rentCollector) {
+      instructions.push(multisigLib.instructions.configTransactionAccountsClose({
+        multisigPda,
+        transactionIndex,
+        rentCollector: new PublicKey(multisigAccount.rentCollector),
+      }));
+    }
+
+    // Fund new cloud key so it can pay for tx fees
+    if (proposal.newCloudKey) {
+      instructions.push(SystemProgram.transfer({
+        fromPubkey: memberPubkey,
+        toPubkey: new PublicKey(proposal.newCloudKey),
+        lamports: TARGET_CLOUD_BALANCE,
+      }));
+    }
+
+    // Helius SWQoS tip for reliable landing
+    instructions.push(HeliusSender.createTipIx(memberPubkey));
+
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+    const msg = new TransactionMessage({
+      payerKey: memberPubkey,
+      recentBlockhash: blockhash,
+      instructions,
+    }).compileToV0Message();
+    const tx = new VersionedTransaction(msg);
+
+    res.json({
+      success: true,
+      data: {
+        transaction: Buffer.from(tx.serialize()).toString('base64'),
+        blockhash,
+        lastValidBlockHeight,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error building execute tx:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to build execute transaction' });
   }
 });
 

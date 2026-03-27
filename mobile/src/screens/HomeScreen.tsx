@@ -137,6 +137,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Status Bar Area */}
         <SafeAreaView edges={['top']} style={styles.statusBar}>

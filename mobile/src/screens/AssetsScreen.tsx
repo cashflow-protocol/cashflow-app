@@ -91,6 +91,7 @@ export default function AssetsScreen() {
           keyExtractor={(item) => item.mint}
           renderItem={({ item }) => <AssetRow item={item} />}
           contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accentBlue} />
           }

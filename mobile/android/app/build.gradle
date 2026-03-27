@@ -131,6 +131,9 @@ dependencies {
     // Biometric authentication for wallet key protection
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
 
+    // Google Block Store for cloud key backup across reinstalls
+    implementation("com.google.android.gms:play-services-auth-blockstore:16.4.0")
+
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {

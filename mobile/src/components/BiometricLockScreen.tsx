@@ -9,9 +9,10 @@ import { logScreenView, logBiometricUnlockAttempt, logBiometricUnlockSuccess, lo
 
 interface BiometricLockScreenProps {
   onUnlock: () => void;
+  onPinUnlock?: (pin: string) => void;
 }
 
-export default function BiometricLockScreen({ onUnlock }: BiometricLockScreenProps) {
+export default function BiometricLockScreen({ onUnlock, onPinUnlock }: BiometricLockScreenProps) {
   const [error, setError] = useState('');
 
   const promptBiometric = useCallback(async () => {
@@ -34,6 +35,7 @@ export default function BiometricLockScreen({ onUnlock }: BiometricLockScreenPro
       const valid = await verifyPin(pin);
       if (valid) {
         logPinUnlockSuccess();
+        onPinUnlock?.(pin);
         onUnlock();
       } else {
         logPinUnlockFailed();

@@ -18,14 +18,15 @@ import { useWallet } from '../hooks/useWallet';
 import walletService from '../services/walletService';
 import { ArrowLeft } from 'lucide-react-native';
 import authService from '../services/authService';
-import { deleteAllKeypairs } from '../services/keypairStorage';
+import { deleteAllKeypairs, backupCloudKeyToBlockStore } from '../services/keypairStorage';
 import Toast from '../components/Toast';
-import { MIN_LAMPORTS_FOR_VAULT } from '../config/constants';
+import { getMinLamportsForVault } from '../config/constants';
 import { logScreenView, logVaultSetupStart, logVaultSetupWalletConnected, logVaultSetupSuccess, logVaultSetupError, logVaultSetupInsufficientBalance } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
 interface VaultSetupScreenProps {
   inviteCode: string;
+  pin?: string;
   onComplete: () => void;
   onBack?: () => void;
   onRecovery?: () => void;
@@ -33,7 +34,7 @@ interface VaultSetupScreenProps {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRecovery }: VaultSetupScreenProps) {
+export default function VaultSetupScreen({ inviteCode, pin, onComplete, onBack, onRecovery }: VaultSetupScreenProps) {
   const { colors } = useTheme();
   const { connect: connectWallet } = useWallet();
   const [loading, setLoading] = useState(false);
@@ -93,7 +94,7 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRec
 
       setStatusText('Checking balance...');
       const balanceSol = await walletService.getBalance(account.publicKey);
-      const minSol = MIN_LAMPORTS_FOR_VAULT / 1e9;
+      const minSol = getMinLamportsForVault() / 1e9;
       if (balanceSol < minSol) {
         logVaultSetupInsufficientBalance(balanceSol);
         setToastMessage('Insufficient SOL Balance');
@@ -109,6 +110,14 @@ export default function VaultSetupScreen({ inviteCode, onComplete, onBack, onRec
 
       setStatusText('Creating vault...');
       await createMultisig(account.publicKey as string);
+
+      // Back up cloud key to Google Block Store (Android only, fire-and-forget)
+      if (pin) {
+        backupCloudKeyToBlockStore(pin).catch(err => {
+          console.warn('[VaultSetup] Block Store backup failed:', err);
+        });
+      }
+
       logVaultSetupSuccess();
       onComplete();
     } catch (err: any) {

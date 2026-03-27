@@ -253,7 +253,7 @@ export default function FundWalletModal({ visible, onClose, onSuccess }: FundWal
               autoCorrect={false}
             />
           </View>
-          <ScrollView style={styles.tokenList} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.tokenList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {assetsLoading ? (
               <ActivityIndicator size="small" color={colors.accentBlueDark} style={{ paddingVertical: 32 }} />
             ) : sendableAssets.length === 0 ? (

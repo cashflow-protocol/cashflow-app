@@ -5,10 +5,24 @@ import { Platform } from 'react-native';
 export const IS_SOLANA_MOBILE = Platform.OS === 'android' && Platform.constants.Brand == 'solanamobile' && Platform.constants.Model == 'Seeker';
 console.log('IS_SOLANA_MOBILE:', IS_SOLANA_MOBILE);
 
-/** Lamports to keep in cloud wallet for vault tx fees + rent (~0.025 SOL) */
-export const TARGET_CLOUD_BALANCE = 25_000_000;
+// ── Remote-configurable values ──
+// Defaults match the backend. applyRemoteConfig() overwrites them
+// once GET /config/v1 returns.
 
-export const VAULT_CREATION_FEE = 50_000_000; // 0.05 SOL
+let _targetCloudBalance = 25_000_000;   // 0.025 SOL
+let _vaultCreationFee   = 50_000_000;   // 0.05 SOL
 
-/** Minimum lamports required to create a new vault (0.03 SOL) */
-export const MIN_LAMPORTS_FOR_VAULT = TARGET_CLOUD_BALANCE + VAULT_CREATION_FEE + 5_000_000;
+/** Call once at app startup with the backend config response. */
+export function applyRemoteConfig(config: { targetCloudBalance?: number | null; vaultCreationFee?: number | null }) {
+  if (config.targetCloudBalance != null) _targetCloudBalance = config.targetCloudBalance;
+  if (config.vaultCreationFee != null) _vaultCreationFee = config.vaultCreationFee;
+}
+
+/** Lamports to keep in cloud wallet for vault tx fees + rent */
+export function getTargetCloudBalance(): number { return _targetCloudBalance; }
+
+/** Vault creation fee in lamports */
+export function getVaultCreationFee(): number { return _vaultCreationFee; }
+
+/** Minimum lamports required to create a new vault */
+export function getMinLamportsForVault(): number { return _targetCloudBalance + _vaultCreationFee + 5_000_000; }
