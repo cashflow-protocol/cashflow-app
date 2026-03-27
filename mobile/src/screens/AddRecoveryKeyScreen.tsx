@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
+import { useLoginWithEmail, useEmbeddedSolanaWallet } from '@privy-io/expo';
 import { addMember } from '../services/squadsService';
-import { getVault } from '../services/vaultStorage';
+import { getVault, saveRecoveryEmail } from '../services/vaultStorage';
 import {
   logScreenView,
   logAddRecoveryKeyPress,
@@ -37,7 +38,92 @@ export default function AddRecoveryKeyScreen({ onNavigate, onBack }: AddRecovery
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState('');
 
+  // Privy email recovery
+  const [email, setEmail] = useState('');
+  const [emailCode, setEmailCode] = useState('');
+  const [emailStep, setEmailStep] = useState<'input' | 'code' | 'adding'>('input');
+  const [emailError, setEmailError] = useState('');
+
+  const { sendCode, loginWithCode, state: privyState } = useLoginWithEmail({
+    onLoginSuccess: () => {
+      setEmailStep('adding');
+    },
+    onError: (err) => {
+      setEmailError(err.message || 'Authentication failed');
+    },
+  });
+  const embeddedWallet = useEmbeddedSolanaWallet();
+
   React.useEffect(() => { logScreenView('AddRecoveryKeyScreen'); }, []);
+
+  const handleSendEmailCode = useCallback(async () => {
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+    setEmailError('');
+    try {
+      await sendCode({ email: email.trim() });
+      setEmailStep('code');
+    } catch (err: any) {
+      setEmailError(err.message || 'Failed to send code');
+    }
+  }, [email, sendCode]);
+
+  const handleVerifyEmailCode = useCallback(async () => {
+    if (!emailCode.trim() || emailCode.trim().length !== 6) {
+      setEmailError('Please enter the 6-digit code');
+      return;
+    }
+    setEmailError('');
+    try {
+      await loginWithCode({ code: emailCode.trim() });
+      // onLoginSuccess will set emailStep to 'adding'
+    } catch (err: any) {
+      setEmailError(err.message || 'Invalid code');
+    }
+  }, [emailCode, loginWithCode]);
+
+  // After Privy auth succeeds, get wallet and add as recovery key
+  React.useEffect(() => {
+    if (emailStep !== 'adding') return;
+    const wallets = embeddedWallet.wallets;
+    if (!wallets || wallets.length === 0) return;
+
+    const privyWallet = wallets[0];
+    const privyAddress = privyWallet.address;
+    if (!privyAddress) return;
+
+    (async () => {
+      setSubmitting(true);
+      try {
+        const vaultData = await getVault();
+        if (!vaultData) {
+          Alert.alert('Error', 'No vault found.');
+          return;
+        }
+
+        setStep('Adding recovery key...');
+        await addMember(vaultData.multisigAddress, privyAddress, 'vote');
+
+        // Save email ↔ address mapping
+        await saveRecoveryEmail(privyAddress, email.trim());
+
+        logAddRecoveryKeySuccess();
+        Alert.alert(
+          'Recovery Key Added',
+          `Email recovery key for ${email.trim()} added successfully.`,
+          [{ text: 'OK', onPress: () => onNavigate('keys-recovery') }],
+        );
+      } catch (err: any) {
+        logAddRecoveryKeyError(err?.message || 'unknown');
+        Alert.alert('Error', err?.message || 'Failed to add recovery key.');
+      } finally {
+        setSubmitting(false);
+        setStep('');
+      }
+    })();
+  }, [emailStep, embeddedWallet.wallets]);
 
   const handleAddCryptoWallet = async () => {
     if (!walletAddress.trim()) {
@@ -129,9 +215,6 @@ export default function AddRecoveryKeyScreen({ onNavigate, onBack }: AddRecovery
             <View style={styles.methodInfo}>
               <View style={styles.methodLabelRow}>
                 <Text style={[styles.methodLabel, { color: colors.textPrimary }]}>Email</Text>
-                <View style={styles.comingSoonBadge}>
-                  <Text style={styles.comingSoonText}>Coming Soon</Text>
-                </View>
               </View>
               <Text style={[styles.methodDescription, { color: colors.textSecondary }]}>Restore access via email with a Privy embedded wallet</Text>
             </View>
@@ -175,13 +258,91 @@ export default function AddRecoveryKeyScreen({ onNavigate, onBack }: AddRecovery
           </>
         )}
 
-        {/* Email Placeholder */}
+        {/* Email Recovery via Privy */}
         {method === 'email' && (
-          <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
-            <Text style={[styles.comingSoonMessage, { color: colors.textSecondary }]}>
-              Email recovery via Privy embedded wallets is coming soon. Your contact will receive a wallet that can vote on recovery proposals.
-            </Text>
-          </View>
+          <>
+            <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
+              {emailStep === 'input' && (
+                <>
+                  <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Email Address</Text>
+                  <TextInput
+                    style={[styles.input, { color: colors.textPrimary, borderBottomColor: colors.border }]}
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="recovery@email.com"
+                    placeholderTextColor={colors.placeholderColor}
+                    editable={!submitting && privyState.status !== 'sending-code'}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="email-address"
+                    returnKeyType="done"
+                    onSubmitEditing={handleSendEmailCode}
+                  />
+                  <Text style={[styles.hintText, { color: colors.textSecondary }]}>
+                    A verification code will be sent to this email. A Privy wallet will be created that can vote on recovery proposals.
+                  </Text>
+                </>
+              )}
+
+              {emailStep === 'code' && (
+                <>
+                  <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Verification Code</Text>
+                  <Text style={[styles.hintText, { color: colors.textSecondary, marginBottom: 12 }]}>
+                    Enter the 6-digit code sent to {email}
+                  </Text>
+                  <TextInput
+                    style={[styles.input, styles.codeInput, { color: colors.textPrimary, borderBottomColor: colors.border }]}
+                    value={emailCode}
+                    onChangeText={(t) => setEmailCode(t.replace(/\D/g, ''))}
+                    placeholder="000000"
+                    placeholderTextColor={colors.placeholderColor}
+                    editable={!submitting && privyState.status !== 'submitting-code'}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    returnKeyType="done"
+                    onSubmitEditing={handleVerifyEmailCode}
+                  />
+                </>
+              )}
+
+              {emailStep === 'adding' && (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" color={colors.accentGreen} />
+                  <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{step || 'Setting up recovery wallet...'}</Text>
+                </View>
+              )}
+
+              {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
+            </View>
+
+            {emailStep === 'input' && (
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: colors.accentGreen }, (privyState.status === 'sending-code') && styles.submitButtonDisabled]}
+                onPress={handleSendEmailCode}
+                disabled={!email.trim() || privyState.status === 'sending-code'}
+              >
+                {privyState.status === 'sending-code' ? (
+                  <ActivityIndicator size="small" color={colors.primaryButtonText} />
+                ) : (
+                  <Text style={[styles.submitButtonText, { color: colors.primaryButtonText }]}>Send Verification Code</Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {emailStep === 'code' && (
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: colors.accentGreen }, (privyState.status === 'submitting-code') && styles.submitButtonDisabled]}
+                onPress={handleVerifyEmailCode}
+                disabled={emailCode.length !== 6 || privyState.status === 'submitting-code'}
+              >
+                {privyState.status === 'submitting-code' ? (
+                  <ActivityIndicator size="small" color={colors.primaryButtonText} />
+                ) : (
+                  <Text style={[styles.submitButtonText, { color: colors.primaryButtonText }]}>Verify & Add Recovery Key</Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </>
         )}
       </KeyboardAvoidingView>
     </View>
@@ -252,6 +413,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 8,
     lineHeight: 16,
+  },
+  codeInput: {
+    textAlign: 'center',
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: 8,
+  },
+  errorText: {
+    color: '#E53E3E',
+    fontSize: 13,
+    marginTop: 8,
   },
   methodRow: {
     flexDirection: 'row',

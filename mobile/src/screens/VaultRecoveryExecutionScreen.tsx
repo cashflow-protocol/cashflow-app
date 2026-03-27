@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
@@ -24,10 +25,18 @@ import {
   Cloud,
   Send,
 } from 'lucide-react-native';
+import { useLoginWithEmail, useEmbeddedSolanaWallet } from '@privy-io/expo';
+import { VersionedTransaction, Connection } from '@solana/web3.js';
 import { saveVault, VaultData } from '../services/vaultStorage';
 import { buildAndSubmitRecoveryProposal, executeRecoveryProposal } from '../services/recoveryService';
 import apiService from '../services/apiService';
+import { API_CONFIG } from '../config/api';
+import { SOLANA_CONFIG } from '../config/solana';
+import BottomSheet from '../components/BottomSheet';
 import Toast from '../components/Toast';
+
+// Remove unused import warning - maskEmail used in handlePrivySign display
+
 import { useTheme } from '../theme/ThemeContext';
 
 interface MultisigResult {
@@ -84,6 +93,19 @@ export default function VaultRecoveryExecutionScreen({
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Privy email sign state
+  const [privySheetVisible, setPrivySheetVisible] = useState(false);
+  const [privyEmail, setPrivyEmail] = useState('');
+  const [privyCode, setPrivyCode] = useState('');
+  const [privyStep, setPrivyStep] = useState<'email' | 'code' | 'signing'>('email');
+  const [privyError, setPrivyError] = useState('');
+  const [privySignerAddress, setPrivySignerAddress] = useState('');
+
+  const { sendCode: privySendCode, loginWithCode: privyLoginWithCode, state: privyState } = useLoginWithEmail({
+    onError: (err) => setPrivyError(err.message || 'Authentication failed'),
+  });
+  const embeddedWallet = useEmbeddedSolanaWallet();
 
   const handleRefresh = useCallback(async () => {
     if (!proposalId) return;
@@ -169,25 +191,109 @@ export default function VaultRecoveryExecutionScreen({
     };
   }, []);
 
-  const handlePrivySign = useCallback(async (address: string, email?: string) => {
-    if (!proposalId) return;
-    try {
-      setStatusText(`Signing with ${email ? maskEmail(email) : truncateAddress(address)}...`);
-      const result = await apiService.requestPrivySign(proposalId, address);
-      setSignaturesCollected(result.signaturesCollected);
+  const handlePrivySign = useCallback((address: string, email?: string) => {
+    // Open the Privy email OTP bottom sheet
+    setPrivySignerAddress(address);
+    setPrivyEmail(email || '');
+    setPrivyCode('');
+    setPrivyError('');
+    setPrivyStep('email');
+    setPrivySheetVisible(true);
+  }, []);
 
-      if (result.status === 'ready') {
+  const handlePrivySendCode = useCallback(async () => {
+    if (!privyEmail.trim()) {
+      setPrivyError('Please enter the recovery email');
+      return;
+    }
+    setPrivyError('');
+    try {
+      await privySendCode({ email: privyEmail.trim() });
+      setPrivyStep('code');
+    } catch (err: any) {
+      setPrivyError(err.message || 'Failed to send code');
+    }
+  }, [privyEmail, privySendCode]);
+
+  const handlePrivyVerifyAndSign = useCallback(async () => {
+    if (privyCode.length !== 6) {
+      setPrivyError('Please enter the 6-digit code');
+      return;
+    }
+    setPrivyError('');
+    setPrivyStep('signing');
+
+    try {
+      // Authenticate with Privy
+      await privyLoginWithCode({ code: privyCode.trim() });
+
+      // Wait a moment for wallet to be available
+      await new Promise(r => setTimeout(r, 1000));
+
+      // Get the embedded wallet
+      const wallets = embeddedWallet.wallets;
+      if (!wallets?.length) {
+        throw new Error('No Privy wallet found after authentication');
+      }
+
+      const privyWallet = wallets[0];
+      if (privyWallet.address !== privySignerAddress) {
+        throw new Error(`Wallet address mismatch: expected ${truncateAddress(privySignerAddress)}, got ${truncateAddress(privyWallet.address)}`);
+      }
+
+      // Build approve TX from backend
+      const buildRes = await fetch(`${API_CONFIG.baseUrl}/vault-recovery/v1/build-approve-tx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberAddress: privySignerAddress,
+          multisigAddress: vault.multisigAddress,
+          transactionIndex: threshold, // will be fetched from proposal
+        }),
+      });
+      if (!buildRes.ok) {
+        const err = await buildRes.json().catch(() => ({ error: 'Failed' }));
+        throw new Error(err.error || 'Failed to build approve transaction');
+      }
+      const { data: { transaction: txBase64 } } = await buildRes.json();
+
+      // Deserialize and sign with Privy wallet
+      const txBytes = Buffer.from(txBase64, 'base64');
+      const tx = VersionedTransaction.deserialize(txBytes);
+      const provider = await privyWallet.getProvider();
+      const conn = new Connection(SOLANA_CONFIG.rpcEndpoint);
+
+      const { signature } = await provider.request({
+        method: 'signAndSendTransaction',
+        params: { transaction: tx, connection: conn },
+      });
+
+      console.log('[Privy] Approve TX sent:', signature);
+
+      // Notify backend
+      await fetch(`${API_CONFIG.baseUrl}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: privySignerAddress, signature: 'on-chain' }),
+      }).catch(() => {});
+
+      setPrivySheetVisible(false);
+
+      // Refresh statuses
+      const status = await apiService.getRecoveryProposalStatus(proposalId!);
+      setSigners(status.requiredSigners);
+      setSignaturesCollected(status.signaturesCollected);
+      if (status.status === 'ready') {
         setStep('ready');
         if (pollRef.current) clearInterval(pollRef.current);
       }
 
-      // Refresh signer statuses
-      const status = await apiService.getRecoveryProposalStatus(proposalId);
-      setSigners(status.requiredSigners);
+      showToast('Signed successfully');
     } catch (err: any) {
-      showToast(err.message || 'Failed to sign with email');
+      setPrivyError(err.message || 'Signing failed');
+      setPrivyStep('code');
     }
-  }, [proposalId, showToast]);
+  }, [privyCode, privyLoginWithCode, embeddedWallet, privySignerAddress, proposalId, vault, threshold, showToast]);
 
   const handleCopyUrl = useCallback(() => {
     if (externalSigningUrl) {
@@ -410,6 +516,83 @@ export default function VaultRecoveryExecutionScreen({
           )}
         </View>
       </SafeAreaView>
+
+      {/* Privy email OTP bottom sheet */}
+      <BottomSheet
+        visible={privySheetVisible}
+        onClose={() => setPrivySheetVisible(false)}
+        avoidKeyboard
+      >
+        <Text style={[styles.privySheetTitle, { color: colors.textPrimary }]}>
+          {privyStep === 'email' ? 'Sign with Email' : privyStep === 'code' ? 'Enter Code' : 'Signing...'}
+        </Text>
+
+        {privyStep === 'email' && (
+          <>
+            <Text style={[styles.privySheetSubtitle, { color: colors.textSecondary }]}>
+              Enter the recovery email to verify your identity and sign.
+            </Text>
+            <TextInput
+              style={[styles.privyInput, { backgroundColor: colors.inputBackground, color: colors.textPrimary }]}
+              value={privyEmail}
+              onChangeText={setPrivyEmail}
+              placeholder="recovery@email.com"
+              placeholderTextColor={colors.placeholderColor}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              returnKeyType="done"
+              onSubmitEditing={handlePrivySendCode}
+            />
+            <TouchableOpacity
+              style={[styles.privyButton, { backgroundColor: colors.accentBlue }]}
+              onPress={handlePrivySendCode}
+              disabled={!privyEmail.trim()}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.privyButtonText}>Send Code</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {privyStep === 'code' && (
+          <>
+            <Text style={[styles.privySheetSubtitle, { color: colors.textSecondary }]}>
+              Code sent to {privyEmail}
+            </Text>
+            <TextInput
+              style={[styles.privyInput, styles.privyCodeInput, { backgroundColor: colors.inputBackground, color: colors.textPrimary }]}
+              value={privyCode}
+              onChangeText={(t) => setPrivyCode(t.replace(/\D/g, ''))}
+              placeholder="000000"
+              placeholderTextColor={colors.placeholderColor}
+              keyboardType="number-pad"
+              maxLength={6}
+              returnKeyType="done"
+              onSubmitEditing={handlePrivyVerifyAndSign}
+            />
+            <TouchableOpacity
+              style={[styles.privyButton, { backgroundColor: colors.accentBlue }]}
+              onPress={handlePrivyVerifyAndSign}
+              disabled={privyCode.length !== 6}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.privyButtonText}>Verify & Sign</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {privyStep === 'signing' && (
+          <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+            <ActivityIndicator size="large" color={colors.accentBlue} />
+            <Text style={[styles.privySheetSubtitle, { color: colors.textSecondary, marginTop: 12 }]}>
+              Signing transaction...
+            </Text>
+          </View>
+        )}
+
+        {privyError ? <Text style={styles.privyErrorText}>{privyError}</Text> : null}
+      </BottomSheet>
     </View>
   );
 }
@@ -570,5 +753,38 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: 17,
     fontWeight: '600',
+  },
+  privySheetTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  privySheetSubtitle: {
+    fontSize: 14,
+  },
+  privyInput: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    fontSize: 16,
+  },
+  privyCodeInput: {
+    textAlign: 'center',
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: 8,
+  },
+  privyButton: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  privyButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  privyErrorText: {
+    color: '#E53E3E',
+    fontSize: 13,
   },
 });

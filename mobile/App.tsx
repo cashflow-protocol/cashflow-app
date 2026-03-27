@@ -6,6 +6,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, StatusBar, StyleSheet, AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { PrivyProvider } from '@privy-io/expo';
+import { PRIVY_CONFIG } from './src/config/privy';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { WalletProvider } from './src/hooks/useWallet';
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -412,4 +414,12 @@ const styles = StyleSheet.create({
   },
 });
 
-export default App;
+function AppWithPrivy() {
+  return (
+    <PrivyProvider appId={PRIVY_CONFIG.appId} clientId={PRIVY_CONFIG.clientId}>
+      <App />
+    </PrivyProvider>
+  );
+}
+
+export default AppWithPrivy;

@@ -7,6 +7,8 @@ import {
   useWallet,
   useConnectorClient,
 } from '@solana/connector/react';
+import { usePrivy, useLoginWithEmail } from '@privy-io/react-auth';
+import { useWallets, useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import {
   getTransactionDecoder,
   address,
@@ -66,6 +68,20 @@ export default function RecoveryPage() {
   const { account: connectedAddress } = useWallet();
   const connectorClient = useConnectorClient();
 
+  // Privy hooks for email-based signing
+  const { authenticated: privyAuthenticated, logout: privyLogout } = usePrivy();
+  const { sendCode: privySendCode, loginWithCode: privyLoginWithCode, state: privyAuthState } = useLoginWithEmail();
+  const { wallets: privyWallets } = useWallets();
+  const { signAndSendTransaction: privySignAndSend } = useSignAndSendTransaction();
+
+  // Privy signing state
+  const [privyModalVisible, setPrivyModalVisible] = useState(false);
+  const [privyEmail, setPrivyEmail] = useState('');
+  const [privyCode, setPrivyCode] = useState('');
+  const [privyStep, setPrivyStep] = useState<'email' | 'code' | 'signing'>('email');
+  const [privyError, setPrivyError] = useState('');
+  const [privySignerAddress, setPrivySignerAddress] = useState('');
+
   const loadProposal = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}`);
@@ -101,6 +117,87 @@ export default function RecoveryPage() {
       setSigned(true);
     }
   }, [connectedAddress, proposal]);
+
+  // Privy email signing handlers
+  const handleOpenPrivySign = (signerAddress: string, email?: string) => {
+    setPrivySignerAddress(signerAddress);
+    setPrivyEmail(email || '');
+    setPrivyCode('');
+    setPrivyError('');
+    setPrivyStep('email');
+    setPrivyModalVisible(true);
+  };
+
+  const handlePrivySendCode = async () => {
+    if (!privyEmail.trim()) {
+      setPrivyError('Please enter the recovery email');
+      return;
+    }
+    setPrivyError('');
+    try {
+      await privySendCode({ email: privyEmail.trim() });
+      setPrivyStep('code');
+    } catch (err: any) {
+      setPrivyError(err.message || 'Failed to send code');
+    }
+  };
+
+  const handlePrivyVerifyAndSign = async () => {
+    if (privyCode.length !== 6) {
+      setPrivyError('Please enter the 6-digit code');
+      return;
+    }
+    setPrivyError('');
+    setPrivyStep('signing');
+
+    try {
+      await privyLoginWithCode({ code: privyCode.trim() });
+
+      // Wait for wallet to be available
+      await new Promise(r => setTimeout(r, 1500));
+
+      const privyWallet = privyWallets.find(w => w.address === privySignerAddress);
+      if (!privyWallet) {
+        throw new Error(`Privy wallet not found for ${truncate(privySignerAddress)}`);
+      }
+
+      // Build approve TX from backend
+      const buildRes = await fetch(`${API_BASE}/vault-recovery/v1/build-approve-tx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberAddress: privySignerAddress,
+          multisigAddress: proposal!.multisigAddress,
+          transactionIndex: proposal!.signaturesCollected, // gets from proposal
+        }),
+      });
+      if (!buildRes.ok) {
+        const err = await buildRes.json().catch(() => ({ error: 'Failed' }));
+        throw new Error(err.error || 'Failed to build approve transaction');
+      }
+      const { data: { transaction: txBase64 } } = await buildRes.json();
+
+      // Sign and send via Privy
+      const txBytes = Uint8Array.from(atob(txBase64), c => c.charCodeAt(0));
+      await privySignAndSend({
+        transaction: txBytes,
+        wallet: privyWallet as any,
+      });
+
+      // Notify backend
+      await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: privySignerAddress, signature: 'on-chain' }),
+      }).catch(() => {});
+
+      setPrivyModalVisible(false);
+      loadProposal();
+    } catch (err: any) {
+      setPrivyError(err.message || 'Signing failed');
+      setPrivyStep('code');
+    }
+  };
 
   const handleConnect = (walletId: string) => {
     setError('');
@@ -251,6 +348,10 @@ export default function RecoveryPage() {
                 <span className="badge badge-signed">Signed</span>
               ) : connectedAddr && s.address === connectedAddr ? (
                 <span className="badge badge-you">You</span>
+              ) : s.type === 'privy' && !s.signed ? (
+                <button className="badge badge-privy-sign" onClick={() => handleOpenPrivySign(s.address, s.email)}>
+                  Sign with Email
+                </button>
               ) : (
                 <span className="badge badge-pending">Pending</span>
               )}
@@ -312,6 +413,61 @@ export default function RecoveryPage() {
 
         {error && <div className="status error">{error}</div>}
       </div>
+
+      {/* Privy email OTP modal */}
+      {privyModalVisible && (
+        <div className="wallet-overlay" onClick={(e) => { if (e.target === e.currentTarget) setPrivyModalVisible(false); }}>
+          <div className="wallet-sheet">
+            <div className="wallet-sheet-handle" />
+            <div className="wallet-sheet-title">
+              {privyStep === 'email' ? 'Sign with Email' : privyStep === 'code' ? 'Enter Code' : 'Signing...'}
+            </div>
+
+            {privyStep === 'email' && (
+              <div className="privy-form">
+                <p className="privy-subtitle">Enter the recovery email to verify your identity.</p>
+                <input
+                  type="email"
+                  className="privy-input"
+                  value={privyEmail}
+                  onChange={(e) => setPrivyEmail(e.target.value)}
+                  placeholder="recovery@email.com"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handlePrivySendCode(); }}
+                />
+                <button className="privy-btn" onClick={handlePrivySendCode} disabled={!privyEmail.trim()}>
+                  Send Code
+                </button>
+              </div>
+            )}
+
+            {privyStep === 'code' && (
+              <div className="privy-form">
+                <p className="privy-subtitle">Code sent to {maskEmail(privyEmail)}</p>
+                <input
+                  type="text"
+                  className="privy-input privy-code-input"
+                  value={privyCode}
+                  onChange={(e) => setPrivyCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="000000"
+                  maxLength={6}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handlePrivyVerifyAndSign(); }}
+                />
+                <button className="privy-btn" onClick={handlePrivyVerifyAndSign} disabled={privyCode.length !== 6}>
+                  Verify & Sign
+                </button>
+              </div>
+            )}
+
+            {privyStep === 'signing' && (
+              <div className="privy-form" style={{ textAlign: 'center', padding: '24px 0' }}>
+                <div className="privy-subtitle">Signing transaction...</div>
+              </div>
+            )}
+
+            {privyError && <div className="status error" style={{ marginTop: 8 }}>{privyError}</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
