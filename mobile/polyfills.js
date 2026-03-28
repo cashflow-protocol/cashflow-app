@@ -1,7 +1,5 @@
-// Import polyfills required for Solana libraries and Privy in React Native
-import 'fast-text-encoding';
+// Import polyfills required for Solana libraries in React Native
 import 'react-native-get-random-values';
-import '@ethersproject/shims';
 import 'react-native-url-polyfill/auto';
 import { Buffer } from 'buffer';
 

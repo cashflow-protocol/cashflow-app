@@ -6,8 +6,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, StatusBar, StyleSheet, AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { PrivyProvider } from '@privy-io/expo';
-import { PRIVY_CONFIG } from './src/config/privy';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { WalletProvider } from './src/hooks/useWallet';
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -60,6 +58,7 @@ function App() {
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [needsPinSetup, setNeedsPinSetup] = useState(false);
   const [locked, setLocked] = useState(true);
+  const [pinCached, setPinCached] = useState(false);
   const [activeTab, setActiveTab] = useState<TabName>('home');
   const [subScreen, setSubScreen] = useState<SubScreen>(null);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('carousel');
@@ -122,11 +121,6 @@ function App() {
         migrateKeypairsToBiometric().catch((err) => {
           console.error('Migration failed:', err);
         });
-
-        // Initialize push notifications for authenticated users
-        initializePushNotifications().catch((err) => {
-          console.error('Push notification init failed:', err);
-        });
       }
     })();
   }, []);
@@ -161,14 +155,14 @@ function App() {
     return unsubscribe;
   }, [checkingVault, handleIncomingNotification]);
 
-  // Set up Firebase RTDB realtime notification listener
+  // Set up Firebase RTDB realtime notification listener (requires cached PIN for API auth)
   useEffect(() => {
-    if (!onboardingDone || locked) return;
+    if (!onboardingDone || locked || !pinCached) return;
     initializeRealtimeNotifications((title, body, data) => {
       handleIncomingNotification(title, body, data);
     });
     return () => stopRealtimeNotifications();
-  }, [onboardingDone, locked, handleIncomingNotification]);
+  }, [onboardingDone, locked, pinCached, handleIncomingNotification]);
 
   // Lock app when returning from background after timeout
   useEffect(() => {
@@ -181,6 +175,7 @@ function App() {
         if (elapsed >= LOCK_TIMEOUT_MS && onboardingDone) {
           logAppLocked();
           clearCachedPin();
+          setPinCached(false);
           setLocked(true);
         }
       }
@@ -267,7 +262,14 @@ function App() {
           <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
           <BiometricLockScreen
             onUnlock={() => setLocked(false)}
-            onPinUnlock={(pin) => cachePin(pin)}
+            onPinUnlock={async (pin) => {
+              await cachePin(pin);
+              setPinCached(true);
+              // Initialize push notifications after PIN is cached (signing requires PIN)
+              initializePushNotifications().catch((err) => {
+                console.error('Push notification init failed:', err);
+              });
+            }}
           />
         </SafeAreaProvider>
       </ThemeProvider>
@@ -306,7 +308,7 @@ function App() {
       case 'pin-setup':
         onboardingContent = (
           <PinSetupScreen
-            onPinConfirmed={(pin) => { setPendingPin(pin); cachePin(pin); }}
+            onPinConfirmed={(pin) => { setPendingPin(pin); cachePin(pin); setPinCached(true); }}
             onComplete={() => setOnboardingStep('vault-setup')}
           />
         );
@@ -414,12 +416,4 @@ const styles = StyleSheet.create({
   },
 });
 
-function AppWithPrivy() {
-  return (
-    <PrivyProvider appId={PRIVY_CONFIG.appId} clientId={PRIVY_CONFIG.clientId}>
-      <App />
-    </PrivyProvider>
-  );
-}
-
-export default AppWithPrivy;
+export default App;
