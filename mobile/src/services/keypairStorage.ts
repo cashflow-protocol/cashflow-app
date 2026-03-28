@@ -141,6 +141,22 @@ export async function clearCachedPin(): Promise<void> {
 }
 
 /**
+ * Store the PIN encrypted with biometric-protected Keystore key.
+ * Call after PIN entry so future biometric unlocks can retrieve it.
+ */
+export async function storePinForBiometric(pin: string): Promise<void> {
+  return getModule().storePinForBiometric(pin);
+}
+
+/**
+ * Retrieve and cache the PIN using biometric authentication.
+ * Returns the PIN on success, or null if no stored PIN or auth failed.
+ */
+export async function retrievePinWithBiometric(): Promise<string | null> {
+  return getModule().retrievePinWithBiometric();
+}
+
+/**
  * Re-encrypt the cloud key with a new PIN (SharedPreferences + Block Store).
  * Uses the currently cached PIN to decrypt, then re-encrypts with newPin.
  */

@@ -12,6 +12,8 @@ export interface Spec extends TurboModule {
   migrateKeypairsToBiometric(): Promise<boolean>;
   cachePin(pin: string): Promise<void>;
   clearCachedPin(): Promise<void>;
+  storePinForBiometric(pin: string): Promise<void>;
+  retrievePinWithBiometric(): Promise<string | null>;
   reEncryptCloudKeyWithPin(newPin: string): Promise<void>;
   backupCloudKeyToBlockStore(pin: string): Promise<void>;
   restoreCloudKeyFromBlockStore(pin: string): Promise<string>;

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
-import { authenticate } from '../services/keypairStorage';
+import { retrievePinWithBiometric } from '../services/keypairStorage';
 import { verifyPin } from '../services/pinStorage';
 import PinPad from './PinPad';
 import { logScreenView, logBiometricUnlockAttempt, logBiometricUnlockSuccess, logPinUnlockSuccess, logPinUnlockFailed } from '../services/analyticsService';
@@ -17,12 +17,13 @@ export default function BiometricLockScreen({ onUnlock, onPinUnlock }: Biometric
 
   const promptBiometric = useCallback(async () => {
     logBiometricUnlockAttempt();
-    const success = await authenticate('Unlock Cashflow');
-    if (success) {
+    const pin = await retrievePinWithBiometric();
+    if (pin) {
       logBiometricUnlockSuccess();
+      onPinUnlock?.(pin);
       onUnlock();
     }
-  }, [onUnlock]);
+  }, [onUnlock, onPinUnlock]);
 
   // Auto-prompt biometric on mount
   useEffect(() => {

@@ -71,6 +71,69 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
+  override fun storePinForBiometric(pin: String, promise: Promise) {
+    try {
+      if (!isBiometricAvailable()) {
+        promise.resolve(null)
+        return
+      }
+      getOrCreateAesKey(biometric = true)
+      val pinBytes = pin.toByteArray(Charsets.UTF_8)
+      try {
+        val encrypted = encryptWithKeystore(pinBytes, biometric = true)
+        getPrefs().edit()
+          .putString("bio_pin", Base64.encodeToString(encrypted, Base64.NO_WRAP))
+          .apply()
+        promise.resolve(null)
+      } catch (e: UserNotAuthenticatedException) {
+        // Biometric key needs recent auth — prompt then encrypt
+        promptBiometricUnlock("Enable biometric unlock") { success, authError ->
+          if (!success) {
+            promise.resolve(null)
+            return@promptBiometricUnlock
+          }
+          try {
+            val encrypted = encryptWithKeystore(pinBytes, biometric = true)
+            getPrefs().edit()
+              .putString("bio_pin", Base64.encodeToString(encrypted, Base64.NO_WRAP))
+              .apply()
+            promise.resolve(null)
+          } catch (e2: Exception) {
+            promise.resolve(null)
+          }
+        }
+      }
+    } catch (e: Exception) {
+      promise.reject("ERR_STORE_PIN", "Failed to store PIN for biometric: ${e.message}", e)
+    }
+  }
+
+  @ReactMethod
+  override fun retrievePinWithBiometric(promise: Promise) {
+    try {
+      val prefs = getPrefs()
+      val encryptedBase64 = prefs.getString("bio_pin", null)
+      if (encryptedBase64 == null) {
+        promise.resolve(null)
+        return
+      }
+      val encrypted = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+      decryptWithBiometric(encrypted, "Unlock Cashflow") { pinBytes, error ->
+        if (error != null || pinBytes == null) {
+          promise.resolve(null)
+          return@decryptWithBiometric
+        }
+        val pin = String(pinBytes, Charsets.UTF_8)
+        cachedPin = pin
+        pinBytes.fill(0)
+        promise.resolve(pin)
+      }
+    } catch (e: Exception) {
+      promise.resolve(null)
+    }
+  }
+
+  @ReactMethod
   override fun reEncryptCloudKeyWithPin(newPin: String, promise: Promise) {
     try {
       val prefs = getPrefs()

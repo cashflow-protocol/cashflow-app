@@ -5,7 +5,7 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import PinPad from '../components/PinPad';
 import { Platform } from 'react-native';
 import { verifyPin, savePin } from '../services/pinStorage';
-import { authenticate, reEncryptCloudKeyWithPin } from '../services/keypairStorage';
+import { authenticate, reEncryptCloudKeyWithPin, storePinForBiometric } from '../services/keypairStorage';
 import { logScreenView, logPinChangeStart, logPinChangeComplete, logPinChangeWrongPin, logPinChangeMismatch } from '../services/analyticsService';
 
 interface ChangePinScreenProps {
@@ -64,6 +64,9 @@ export default function ChangePinScreen({ onComplete, onBack }: ChangePinScreenP
           console.warn('[ChangePin] Cloud key re-encryption failed:', err);
         });
       }
+
+      // Update biometric-stored PIN
+      storePinForBiometric(pin).catch(() => {});
 
       logPinChangeComplete();
       onComplete();

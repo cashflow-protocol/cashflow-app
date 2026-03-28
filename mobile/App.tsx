@@ -29,7 +29,7 @@ import TabBar, { type TabName } from './src/components/TabBar';
 import { getVault } from './src/services/vaultStorage';
 import { checkWaitlistStatus } from './src/services/onboardingService';
 import { hasPin } from './src/services/pinStorage';
-import { migrateKeypairsToBiometric, getCloudPublicKey, cachePin, clearCachedPin } from './src/services/keypairStorage';
+import { migrateKeypairsToBiometric, getCloudPublicKey, cachePin, clearCachedPin, storePinForBiometric } from './src/services/keypairStorage';
 import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
 import { applyRemoteConfig } from './src/config/constants';
@@ -58,7 +58,6 @@ function App() {
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [needsPinSetup, setNeedsPinSetup] = useState(false);
   const [locked, setLocked] = useState(true);
-  const [pinCached, setPinCached] = useState(false);
   const [activeTab, setActiveTab] = useState<TabName>('home');
   const [subScreen, setSubScreen] = useState<SubScreen>(null);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('carousel');
@@ -157,12 +156,12 @@ function App() {
 
   // Set up Firebase RTDB realtime notification listener (requires cached PIN for API auth)
   useEffect(() => {
-    if (!onboardingDone || locked || !pinCached) return;
+    if (!onboardingDone || locked) return;
     initializeRealtimeNotifications((title, body, data) => {
       handleIncomingNotification(title, body, data);
     });
     return () => stopRealtimeNotifications();
-  }, [onboardingDone, locked, pinCached, handleIncomingNotification]);
+  }, [onboardingDone, locked, handleIncomingNotification]);
 
   // Lock app when returning from background after timeout
   useEffect(() => {
@@ -175,7 +174,6 @@ function App() {
         if (elapsed >= LOCK_TIMEOUT_MS && onboardingDone) {
           logAppLocked();
           clearCachedPin();
-          setPinCached(false);
           setLocked(true);
         }
       }
@@ -264,8 +262,7 @@ function App() {
             onUnlock={() => setLocked(false)}
             onPinUnlock={async (pin) => {
               await cachePin(pin);
-              setPinCached(true);
-              // Initialize push notifications after PIN is cached (signing requires PIN)
+              storePinForBiometric(pin).catch(() => {});
               initializePushNotifications().catch((err) => {
                 console.error('Push notification init failed:', err);
               });
@@ -308,7 +305,7 @@ function App() {
       case 'pin-setup':
         onboardingContent = (
           <PinSetupScreen
-            onPinConfirmed={(pin) => { setPendingPin(pin); cachePin(pin); setPinCached(true); }}
+            onPinConfirmed={(pin) => { setPendingPin(pin); cachePin(pin); storePinForBiometric(pin).catch(() => {}); }}
             onComplete={() => setOnboardingStep('vault-setup')}
           />
         );
