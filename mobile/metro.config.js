@@ -25,24 +25,32 @@ const resolveRequestWithPackageExports = (context, moduleName, platform) => {
     return ctx.resolveRequest(ctx, moduleName, platform);
   }
 
-  // Enable package exports for @privy-io/* (needed for RN < 0.79)
+  // Enable package exports for @privy-io/*
   if (moduleName.startsWith('@privy-io/')) {
     const ctx = { ...context, unstable_enablePackageExports: true };
     return ctx.resolveRequest(ctx, moduleName, platform);
   }
 
-  return context.resolveRequest(context, moduleName, platform);
+  // Disable package exports for everything else — prevents @noble/curves ./utils.js breakage
+  const ctx = { ...context, unstable_enablePackageExports: false };
+  return ctx.resolveRequest(ctx, moduleName, platform);
 };
+
+const defaultConfig = getDefaultConfig(__dirname);
 
 const config = {
   resolver: {
+    ...defaultConfig.resolver,
     extraNodeModules: {
+      ...defaultConfig.resolver?.extraNodeModules,
       crypto: require.resolve('react-native-quick-crypto'),
       stream: require.resolve('readable-stream'),
       buffer: require.resolve('buffer'),
+      'bn.js': require.resolve('bn.js'),
     },
+    unstable_enablePackageExports: false,
     resolveRequest: resolveRequestWithPackageExports,
   },
 };
 
-module.exports = mergeConfig(getDefaultConfig(__dirname), config);
+module.exports = mergeConfig(defaultConfig, config);
