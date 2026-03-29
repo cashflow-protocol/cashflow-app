@@ -261,65 +261,41 @@
     async function signTransaction() {
       const btn = document.getElementById('sign-btn');
       btn.disabled = true;
-      btn.textContent = 'Signing...';
+      btn.textContent = 'Building transaction...';
 
       try {
-        // Fetch the raw TX1 to sign
-        const txRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/assembled-tx`);
+        // Build an approve TX for this signer
+        const buildRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/build-approve-tx`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ memberAddress: connectedWallet }),
+        });
 
-        // If not ready yet, we sign the pending tx1 directly
-        const proposalRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}`);
-        const proposalData = (await proposalRes.json()).data;
-
-        // Get TX1 bytes from the proposal
-        const fullRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/assembled-tx`);
-        let tx1Base64;
-        if (fullRes.ok) {
-          const fullData = (await fullRes.json()).data;
-          tx1Base64 = fullData.tx1Base64;
-        } else {
-          // Proposal not ready, but we can still sign the raw tx
-          // Re-fetch proposal to get tx1 directly
-          const rawRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}`);
-          // We need the tx1Base64 from a dedicated endpoint
-          showError('Cannot sign — threshold not met yet. Try again when more signers have signed.');
-          btn.disabled = false;
-          btn.textContent = 'Sign Recovery Proposal';
-          return;
+        if (!buildRes.ok) {
+          const err = await buildRes.json();
+          throw new Error(err.error || 'Failed to build approve transaction');
         }
 
-        // Deserialize, sign with connected wallet
-        const txBytes = Uint8Array.from(atob(tx1Base64), c => c.charCodeAt(0));
+        const buildData = (await buildRes.json()).data;
+        const txBytes = Uint8Array.from(atob(buildData.transaction), c => c.charCodeAt(0));
         const tx = solanaWeb3.VersionedTransaction.deserialize(txBytes);
 
         // Sign via wallet provider
+        btn.textContent = 'Waiting for wallet...';
         const signedTx = await provider.signTransaction(tx);
 
-        // Extract our signature
-        const accountKeys = tx.message.staticAccountKeys;
-        const walletPubkey = new solanaWeb3.PublicKey(connectedWallet);
-        const walletIndex = accountKeys.findIndex(k => k.equals(walletPubkey));
-
-        if (walletIndex === -1) {
-          showError('Wallet not found in transaction signers');
-          btn.disabled = false;
-          btn.textContent = 'Sign Recovery Proposal';
-          return;
-        }
-
-        const sigBytes = signedTx.signatures[walletIndex];
-        const sigBase64 = btoa(String.fromCharCode(...sigBytes));
-
-        // Submit signature to backend
-        const submitRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
+        // Send signed TX on-chain via backend
+        btn.textContent = 'Sending transaction...';
+        const signedBase64 = btoa(String.fromCharCode(...signedTx.serialize()));
+        const sendRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/send-approve-tx`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ address: connectedWallet, signature: sigBase64 }),
+          body: JSON.stringify({ signedTransaction: signedBase64 }),
         });
 
-        if (!submitRes.ok) {
-          const err = await submitRes.json();
-          throw new Error(err.error || 'Failed to submit signature');
+        if (!sendRes.ok) {
+          const err = await sendRes.json();
+          throw new Error(err.error || 'Transaction failed to land on-chain');
         }
 
         // Show success

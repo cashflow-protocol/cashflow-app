@@ -693,24 +693,27 @@ router.post('/proposal/:proposalId/send-approve-tx', async (req: Request, res: R
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
     const conn = new Connection(rpcUrl, 'confirmed');
 
-    const txBytes = Buffer.from(signedTransaction, 'base64');
+    const signature = await HeliusSender.sendAndConfirm(signedTransaction);
+    console.log(`Approve TX confirmed: ${signature}`);
 
-    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
-
-    const signature = await conn.sendRawTransaction(txBytes, { skipPreflight: true, maxRetries: 0 });
-    console.log(`Approve TX sent: ${signature}`);
-
-    const resendInterval = setInterval(async () => {
-      try {
-        await conn.sendRawTransaction(txBytes, { skipPreflight: true, maxRetries: 0 });
-      } catch {}
-    }, 2000);
-
+    // Update proposal signer status from on-chain
     try {
-      await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
-      console.log(`Approve TX confirmed: ${signature}`);
-    } finally {
-      clearInterval(resendInterval);
+      const proposal = await RecoveryProposalModel.findById(req.params.proposalId);
+      if (proposal) {
+        const multisigLib = await import('@sqds/multisig');
+        const { PublicKey } = await import('@solana/web3.js');
+        const multisigPda = new PublicKey(proposal.multisigAddress);
+        const transactionIndex = BigInt(proposal.transactionIndex);
+        const [proposalPda] = multisigLib.getProposalPda({ multisigPda, transactionIndex });
+        const proposalAccount = await multisigLib.accounts.Proposal.fromAccountAddress(conn, proposalPda);
+        const approvedCount = (proposalAccount.approved || []).length;
+        if (approvedCount >= proposal.threshold && proposal.status === RecoveryProposalStatus.PENDING) {
+          proposal.status = RecoveryProposalStatus.READY;
+          await proposal.save();
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to update proposal status after approve:', (e as Error).message);
     }
 
     res.json({ success: true, data: { signature } });
