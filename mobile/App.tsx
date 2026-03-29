@@ -421,13 +421,6 @@ function App() {
     <PrivyProvider
       appId={PRIVY_CONFIG.appId}
       clientId={PRIVY_CONFIG.clientId}
-      config={{
-        embedded: {
-          solana: {
-            createOnLogin: 'all-users',
-          },
-        },
-      }}
     >
       <ThemeProvider>
         <SafeAreaProvider>
