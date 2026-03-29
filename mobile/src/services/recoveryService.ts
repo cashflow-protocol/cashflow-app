@@ -282,8 +282,8 @@ export async function executeRecoveryProposal(
   const result = await sendRes.json();
   const txSignature = result.data?.signature || 'confirmed';
 
-  // Mark proposal as executed
-  await fetch(
+  // Mark proposal as executed (verifies on-chain that members were added)
+  const markRes = await fetch(
     `${API_CONFIG.baseUrl}/vault-recovery/v1/proposal/${proposalId}/mark-executed`,
     {
       method: 'POST',
@@ -291,6 +291,10 @@ export async function executeRecoveryProposal(
       body: JSON.stringify({ signature: txSignature }),
     },
   );
+  if (!markRes.ok) {
+    const markErr = await markRes.json().catch(() => ({ error: 'Failed' }));
+    throw new Error(markErr.error || 'Recovery transaction may have failed on-chain');
+  }
 
   onProgress?.('Confirming...');
   return txSignature;
