@@ -916,6 +916,45 @@ router.post('/proposal/:proposalId/mark-executed', async (req: Request, res: Res
       return;
     }
 
+    // Verify on-chain that the new members were actually added
+    try {
+      const { Connection, PublicKey } = await import('@solana/web3.js');
+      const multisigLib = await import('@sqds/multisig');
+      const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+      const conn = new Connection(rpcUrl, 'confirmed');
+
+      const multisigPda = new PublicKey(proposal.multisigAddress);
+      const multisigAccount = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
+      const onChainMembers = new Set(
+        multisigAccount.members.map((m: any) => new PublicKey(m.key).toBase58()),
+      );
+
+      const missingMembers = proposal.actions
+        .filter(a => !onChainMembers.has(a.memberAddress));
+
+      if (missingMembers.length > 0) {
+        console.error('[Recovery] Execute TX confirmed but members not added on-chain:', {
+          signature,
+          multisig: proposal.multisigAddress,
+          missing: missingMembers.map(m => m.memberAddress),
+          onChainMembers: Array.from(onChainMembers),
+        });
+        res.status(400).json({
+          success: false,
+          error: 'Execute transaction confirmed but new members were not added on-chain. The transaction may have failed silently.',
+        });
+        return;
+      }
+
+      console.log('[Recovery] Verified: new members added on-chain', {
+        signature,
+        multisig: proposal.multisigAddress,
+        addedMembers: proposal.actions.map(a => a.memberAddress),
+      });
+    } catch (verifyErr) {
+      console.warn('[Recovery] Could not verify on-chain members, marking as executed anyway:', (verifyErr as Error).message);
+    }
+
     proposal.status = RecoveryProposalStatus.EXECUTED;
     proposal.executionSignature = signature;
     await proposal.save();
