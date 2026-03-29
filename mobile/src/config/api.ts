@@ -9,5 +9,5 @@ export const API_CONFIG = {
 
 export const PRIVY_CONFIG = {
   appId: 'cmmz2xt0y00170ci6dxwc9cst',
-  clientId: 'client-WY6WxJKfDhMRyN7K4w4zvFrqBNJvuqpwGA6o2b71Ze6Qp', // TODO: Set your Privy Client ID from the Privy Dashboard
+  clientId: 'client-WY6WxJKfDhMRyN7K4w4zvFrqBNJvuqpwGA6o2b71Ze6Qp',
 };

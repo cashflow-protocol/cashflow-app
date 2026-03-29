@@ -283,7 +283,6 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       setAddingStep('Creating recovery wallet...');
       let solanaAddress: string | null = null;
 
-      // Poll for wallet readiness (auto-created on login)
       for (let i = 0; i < 20; i++) {
         if (wallet.status === 'connected' && wallet.wallets.length > 0) {
           solanaAddress = wallet.wallets[0].address;

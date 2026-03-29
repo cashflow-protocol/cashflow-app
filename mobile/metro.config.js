@@ -13,6 +13,12 @@ const config = {
       stream: require.resolve('readable-stream'),
       buffer: require.resolve('buffer'),
     },
+    unstable_enablePackageExports: true,
+    unstable_conditionNames: ['require', 'react-native', 'browser', 'import'],
+    unstable_conditionsByPlatform: {
+      ios: ['ios', 'react-native'],
+      android: ['android', 'react-native'],
+    },
   },
 };
 
