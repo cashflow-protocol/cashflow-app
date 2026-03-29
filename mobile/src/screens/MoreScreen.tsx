@@ -145,7 +145,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
         setReclaimStatus(msg);
       });
       logReclaimRentSuccess(result.closed, result.skipped, result.failed);
-      setReclaimStatus(`Done! Closed: ${result.closed}, Skipped: ${result.skipped}, Failed: ${result.failed}`);
+      setReclaimStatus(`Done! Cancelled: ${result.cancelled}, Closed: ${result.closed}, Skipped: ${result.skipped}, Failed: ${result.failed}`);
       setTimeout(() => setReclaimStatus(null), 5000);
     } catch (err: any) {
       logReclaimRentError(err.message);

@@ -1157,7 +1157,7 @@ async function setRentCollector(
 export async function reclaimRent(
   multisigAddress: string,
   onProgress?: (msg: string) => void,
-): Promise<{ closed: number; skipped: number; failed: number }> {
+): Promise<{ closed: number; skipped: number; failed: number; cancelled: number }> {
   const multisigPda = new PublicKey(multisigAddress);
 
   const cloudPubBase58 = await getCloudPublicKey();
@@ -1208,13 +1208,18 @@ export async function reclaimRent(
   let closed = 0;
   let skipped = 0;
   let failed = 0;
+  let cancelled = 0;
 
-  // Step 2: Collect all closeable accounts
+  // Step 2: Cancel any Active/Approved proposals so they become closeable
+  const CLOSEABLE_STATUSES = ['Executed', 'Rejected', 'Cancelled'];
+  const CANCELLABLE_STATUSES = ['Active', 'Approved'];
+
   interface CloseableAccount {
     txIndex: bigint;
     isVaultTx: boolean;
   }
   const closeable: CloseableAccount[] = [];
+  const luts = await getLuts(connection);
 
   for (let i = 1; i <= updatedTotal; i++) {
     const txIndex = BigInt(i);
@@ -1226,17 +1231,71 @@ export async function reclaimRent(
       continue;
     }
 
-    // Check proposal status — can only close Executed, Rejected, or Cancelled
+    // Check proposal status
     const [proposalPda] = multisig.getProposalPda({ multisigPda, transactionIndex: txIndex });
+    let status: string;
     try {
       const proposal = await multisig.accounts.Proposal.fromAccountAddress(connection, proposalPda);
-      const status = proposal.status.__kind;
-      if (status !== 'Executed' && status !== 'Rejected' && status !== 'Cancelled') {
-        onProgress?.(`Skipping ${i}/${updatedTotal} (status: ${status})`);
+      status = proposal.status.__kind;
+    } catch {
+      skipped++;
+      continue;
+    }
+
+    // Cancel Active/Approved proposals first
+    if (CANCELLABLE_STATUSES.includes(status)) {
+      onProgress?.(`Cancelling proposal ${i}/${updatedTotal} (status: ${status})...`);
+      try {
+        const cancelIxs: TransactionInstruction[] = [
+          multisig.instructions.proposalCancel({
+            multisigPda,
+            transactionIndex: txIndex,
+            member: cloudPubkey,
+          }),
+          multisig.instructions.proposalCancel({
+            multisigPda,
+            transactionIndex: txIndex,
+            member: devicePubkey,
+          }),
+        ];
+        if (IS_SOLANA_MOBILE && walletPubkey) {
+          cancelIxs.push(
+            multisig.instructions.proposalCancel({
+              multisigPda,
+              transactionIndex: txIndex,
+              member: walletPubkey,
+            }),
+          );
+        }
+        cancelIxs.push(jitoTipIx(cloudPubkey));
+
+        const { blockhash } = await connection.getLatestBlockhash('confirmed');
+        const msg = new TransactionMessage({
+          payerKey: cloudPubkey,
+          recentBlockhash: blockhash,
+          instructions: cancelIxs,
+        }).compileToV0Message(luts);
+        const tx = new VersionedTransaction(msg);
+        await signTransactionNatively(tx, [
+          { pubkey: cloudPubkey, signFn: signWithCloud },
+          { pubkey: devicePubkey, signFn: signWithDevice },
+        ]);
+        if (IS_SOLANA_MOBILE && walletPubkey) {
+          await signTransactionsWithWallet([tx], [0], walletPubkey);
+        }
+        await apiService.sendBundle([Buffer.from(tx.serialize()).toString('base64')]);
+        cancelled++;
+        status = 'Cancelled';
+      } catch (err: any) {
+        logError('squads_reclaim_rent', `cancel_failed_${i}: ${err.message || 'unknown'}`);
+        onProgress?.(`Failed to cancel proposal ${i}: ${err.message || 'unknown'}`);
         skipped++;
         continue;
       }
-    } catch {
+    }
+
+    if (!CLOSEABLE_STATUSES.includes(status)) {
+      onProgress?.(`Skipping ${i}/${updatedTotal} (status: ${status})`);
       skipped++;
       continue;
     }
@@ -1256,7 +1315,6 @@ export async function reclaimRent(
   }
 
   // Step 3: Batch close in groups of up to 5 via Jito bundles
-  const luts = await getLuts(connection);
   const BATCH_SIZE = 1;
   for (let b = 0; b < closeable.length; b += BATCH_SIZE) {
     const batch = closeable.slice(b, b + BATCH_SIZE);
@@ -1308,7 +1366,7 @@ export async function reclaimRent(
     }
   }
 
-  return { closed, skipped, failed };
+  return { closed, skipped, failed, cancelled };
 }
 
 /**
