@@ -109,6 +109,13 @@ export async function deleteAllKeypairs(): Promise<void> {
 }
 
 /**
+ * Delete only the device keypair from native storage.
+ */
+export async function deleteDeviceKeypair(): Promise<void> {
+  return getModule().deleteKeypair('device');
+}
+
+/**
  * Prompt the user for biometric authentication (Face ID / Touch ID / passcode).
  * Returns true if authenticated, false if cancelled or failed.
  */

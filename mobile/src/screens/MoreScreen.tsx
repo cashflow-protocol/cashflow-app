@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { LifetimeEarnedIcon, Last7DIcon } from '../assets/stat-icons';
 import { getVault, clearVault, type VaultData } from '../services/vaultStorage';
-import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey, getDevicePrivateKey, deleteAllKeypairs } from '../services/keypairStorage';
+import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey, getDevicePrivateKey, deleteAllKeypairs, deleteDeviceKeypair } from '../services/keypairStorage';
 import { reclaimRent } from '../services/squadsService';
 import apiService from '../services/apiService';
 import { APP_VERSION, BUILD_NUMBER } from '../config/version';
@@ -153,6 +153,43 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
       setTimeout(() => setReclaimStatus(null), 5000);
     }
   }, [vault]);
+
+  const handleRemoveDeviceKey = useCallback(() => {
+    Alert.alert(
+      'Remove Device Key',
+      'This will delete the device signing key from this device. The cloud key and vault will not be affected.\n\nYou can generate a new device key later, but you will need to re-add it to your multisig.\n\nAre you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteDeviceKeypair();
+            setDevicePubkey(null);
+            setDeviceBalance(null);
+          },
+        },
+      ],
+    );
+  }, []);
+
+  const handleRemoveVaultData = useCallback(() => {
+    Alert.alert(
+      'Remove Vault Data',
+      'This will delete the local vault data only. Your signing keys will not be removed.\n\nThe app will return to onboarding. You can re-link your vault or create a new one.\n\nAre you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await clearVault();
+            onNavigate?.('onboarding');
+          },
+        },
+      ],
+    );
+  }, []);
 
   const handleRemoveVault = useCallback(() => {
     logRemoveVaultPress();
@@ -360,6 +397,24 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
               activeOpacity={0.7}
             >
               <Text style={[styles.changePinButtonText, { color: colors.textSecondary }]}>Change PIN</Text>
+            </TouchableOpacity>
+
+            {devicePubkey && (
+              <TouchableOpacity
+                style={[styles.removeButton, { backgroundColor: colors.card, borderColor: '#F5A623' }]}
+                onPress={handleRemoveDeviceKey}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.removeButtonText, { color: '#F5A623' }]}>Remove Device Key</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.removeButton, { backgroundColor: colors.card, borderColor: '#F5A623' }]}
+              onPress={handleRemoveVaultData}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.removeButtonText, { color: '#F5A623' }]}>Remove Vault Data</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

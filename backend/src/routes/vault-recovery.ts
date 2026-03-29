@@ -461,6 +461,7 @@ router.post('/create-proposal', async (req: Request, res: Response) => {
 /**
  * GET /proposal/:proposalId
  * Get proposal status, required signers, and collected signatures.
+ * Verifies approval status on-chain from the Squads proposal account.
  */
 router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
   try {
@@ -470,7 +471,36 @@ router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
       return;
     }
 
-    const signedAddresses = new Set(proposal.collectedSignatures.map(s => s.address));
+    // Fetch on-chain approval status from the Squads proposal account
+    let onChainApprovals = new Set<string>();
+    try {
+      const { Connection, PublicKey } = await import('@solana/web3.js');
+      const multisigLib = await import('@sqds/multisig');
+      const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+      const conn = new Connection(rpcUrl);
+
+      const multisigPda = new PublicKey(proposal.multisigAddress);
+      const transactionIndex = BigInt(proposal.transactionIndex);
+      const [proposalPda] = multisigLib.getProposalPda({ multisigPda, transactionIndex });
+
+      const proposalAccount = await multisigLib.accounts.Proposal.fromAccountAddress(conn, proposalPda);
+      onChainApprovals = new Set(
+        (proposalAccount.approved || []).map((pk: InstanceType<typeof PublicKey>) => pk.toBase58()),
+      );
+    } catch (err) {
+      // If on-chain fetch fails (e.g. proposal not yet created), fall back to DB
+      console.warn('[Recovery] Failed to fetch on-chain proposal status, falling back to DB:', (err as Error).message);
+      onChainApprovals = new Set(proposal.collectedSignatures.map(s => s.address));
+    }
+
+    const signaturesCollected = onChainApprovals.size;
+    const isReady = signaturesCollected >= proposal.threshold;
+
+    // Update DB status if on-chain shows ready but DB doesn't
+    if (isReady && proposal.status === RecoveryProposalStatus.PENDING) {
+      proposal.status = RecoveryProposalStatus.READY;
+      await proposal.save();
+    }
 
     res.json({
       success: true,
@@ -479,16 +509,16 @@ router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
         multisigAddress: proposal.multisigAddress,
         vaultAddress: proposal.vaultAddress,
         threshold: proposal.threshold,
-        status: proposal.status,
+        status: isReady ? RecoveryProposalStatus.READY : proposal.status,
         actions: proposal.actions,
-        signaturesCollected: proposal.collectedSignatures.length,
+        signaturesCollected,
         tx1Base64: proposal.tx1Base64,
         requiredSigners: proposal.requiredSigners.map(s => ({
           address: s.address,
           type: s.type,
           label: s.label,
           email: s.email,
-          signed: signedAddresses.has(s.address),
+          signed: onChainApprovals.has(s.address),
         })),
       },
     });

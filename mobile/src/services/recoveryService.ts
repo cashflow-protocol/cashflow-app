@@ -63,11 +63,19 @@ export async function buildAndSubmitRecoveryProposal(
 
   let existingCloudKey = await getCloudPublicKey();
   let newCloudKey: string | null = null;
-  const hasExistingCloud = existingCloudKey && members.some(m => m.address === existingCloudKey);
+  const cloudKeyIsMember = existingCloudKey && members.some(m => m.address === existingCloudKey);
 
-  if (!hasExistingCloud) {
+  if (!existingCloudKey) {
+    // No cloud key at all — generate a new one
     newCloudKey = await generateAndStoreCloudKeypair();
     existingCloudKey = newCloudKey;
+    console.log('[CLOUDKEY] Generated new cloud key:', newCloudKey);
+  } else if (!cloudKeyIsMember) {
+    // Cloud key exists but isn't a member of this vault — add it as a new member
+    newCloudKey = existingCloudKey;
+    console.log('[CLOUDKEY] Existing cloud key not a member, adding:', existingCloudKey);
+  } else {
+    console.log('[CLOUDKEY] Existing cloud key is a member:', existingCloudKey);
   }
 
   // Step 2: Determine AddMember actions
@@ -84,7 +92,7 @@ export async function buildAndSubmitRecoveryProposal(
     multisigAddress,
     walletAddress,
     members,
-    cloudKey: hasExistingCloud ? existingCloudKey! : undefined,
+    cloudKey: cloudKeyIsMember ? existingCloudKey! : undefined,
     addMemberActions: actions,
     newRentCollector: newCloudKey || undefined,
   });
@@ -97,7 +105,8 @@ export async function buildAndSubmitRecoveryProposal(
   const tx1 = VersionedTransaction.deserialize(Buffer.from(buildResult.tx1Base64, 'base64'));
 
   // Sign with cloud key first (if it's an existing member)
-  if (hasExistingCloud && existingCloudKey) {
+  if (cloudKeyIsMember && existingCloudKey) {
+    console.log('[CLOUDKEY] Signing recovery TX with cloud key:', existingCloudKey);
     const cloudPubkey = new PublicKey(existingCloudKey);
     const msgBytes = tx1.message.serialize();
     const msgBase64 = Buffer.from(msgBytes).toString('base64');
@@ -166,7 +175,7 @@ export async function buildAndSubmitRecoveryProposal(
     if (addr === walletAddress) {
       type = 'mwa';
       label = 'Seeker';
-    } else if (hasExistingCloud && addr === existingCloudKey) {
+    } else if (cloudKeyIsMember && addr === existingCloudKey) {
       type = 'cloud';
       label = 'Cloud Key';
     } else if (allEmails[addr]) {
@@ -184,7 +193,7 @@ export async function buildAndSubmitRecoveryProposal(
   // MWA + cloud key already signed TX1 on-chain, so mark them as signed
   const collectedSignatures: Array<{ address: string; signature: string }> = [];
   collectedSignatures.push({ address: walletAddress, signature: 'on-chain' });
-  if (hasExistingCloud && existingCloudKey) {
+  if (cloudKeyIsMember && existingCloudKey) {
     collectedSignatures.push({ address: existingCloudKey, signature: 'on-chain' });
   }
 
