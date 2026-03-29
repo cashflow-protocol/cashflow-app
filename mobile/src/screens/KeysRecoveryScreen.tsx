@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { ArrowLeft, MoreHorizontal, ScanFace, Cloud, Wallet, Compass, Info, X, KeyRound, ShieldCheck, RotateCcw, Download, TriangleAlert, MessageSquareText, CircleCheck, ChevronRight, Mail, ClipboardPaste, Trash2, CirclePlus } from 'lucide-react-native';
 import BottomSheet from '../components/BottomSheet';
+import { useLoginWithEmail, useEmbeddedSolanaWallet, usePrivy } from '@privy-io/expo';
 import { getMultisigInfo, addMember, removeMember, type MultisigInfo } from '../services/squadsService';
 import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey } from '../services/keypairStorage';
 import { getVault, getRecoveryEmails, saveRecoveryEmail } from '../services/vaultStorage';
@@ -107,6 +108,10 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
   const [sendingCode, setSendingCode] = useState(false);
   const [recoveryMenuMember, setRecoveryMenuMember] = useState<ClassifiedMember | null>(null);
   const [deletingKey, setDeletingKey] = useState(false);
+
+  const { sendCode, loginWithCode } = useLoginWithEmail();
+  const wallet = useEmbeddedSolanaWallet();
+  const { logout: privyLogout } = usePrivy();
 
   useEffect(() => { logScreenView('KeysRecoveryScreen'); }, []);
 
@@ -254,7 +259,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     }
     setSendingCode(true);
     try {
-      await apiService.sendRecoveryCode(trimmed);
+      await sendCode({ email: trimmed });
       setAddRecoveryStep('email-verify');
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to send code');
@@ -271,7 +276,34 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     setAddingKey(true);
     setAddingStep('Verifying...');
     try {
-      const solanaAddress = await apiService.verifyRecoveryCode(recoveryEmail.trim(), emailCode);
+      // Verify OTP through Privy — authenticates user & auto-creates Solana wallet
+      await loginWithCode({ code: emailCode, email: recoveryEmail.trim() });
+
+      // Wait for embedded wallet to be ready
+      setAddingStep('Creating recovery wallet...');
+      let solanaAddress: string | null = null;
+
+      // Poll for wallet readiness (auto-created on login)
+      for (let i = 0; i < 20; i++) {
+        if (wallet.status === 'connected' && wallet.wallets.length > 0) {
+          solanaAddress = wallet.wallets[0].address;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      // If wallet wasn't auto-created, create it explicitly
+      if (!solanaAddress) {
+        await wallet.create?.();
+        if (wallet.status === 'connected' && wallet.wallets.length > 0) {
+          solanaAddress = wallet.wallets[0].address;
+        }
+      }
+
+      if (!solanaAddress) {
+        throw new Error('Failed to create Privy embedded wallet');
+      }
+
       setAddingStep('Adding recovery key...');
 
       const vaultData = await getVault();
@@ -284,6 +316,9 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       setEmailMap(prev => ({ ...prev, [solanaAddress]: recoveryEmail.trim() }));
       logAddRecoveryKeySuccess();
       setAddRecoveryVisible(false);
+
+      // Log out of Privy session — we only needed it for wallet creation
+      await privyLogout();
 
       const info = await getMultisigInfo(vaultData.multisigAddress);
       setMultisigInfo(info);

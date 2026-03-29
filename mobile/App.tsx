@@ -33,6 +33,8 @@ import { migrateKeypairsToBiometric, getCloudPublicKey, isGmsAvailable, cachePin
 import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
 import { applyRemoteConfig, IS_SOLANA_MOBILE } from './src/config/constants';
+import { PrivyProvider } from '@privy-io/expo';
+import { PRIVY_CONFIG } from './src/config/api';
 import { initializePushNotifications, initializeWaitlistPushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
 import { initializeRealtimeNotifications, stopRealtimeNotifications } from './src/services/realtimeNotificationService';
 import Toast from './src/components/Toast';
@@ -416,24 +418,36 @@ function App() {
   }
 
   return (
-    <ThemeProvider>
-      <SafeAreaProvider>
-        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-        <WalletProvider>
-          <View style={styles.root}>
-            {renderScreen()}
-            <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
-            <Toast
-              visible={toastVisible}
-              message={toastMessage}
-              description={toastDescription}
-              type="success"
-              onDismiss={() => setToastVisible(false)}
-            />
-          </View>
-        </WalletProvider>
-      </SafeAreaProvider>
-    </ThemeProvider>
+    <PrivyProvider
+      appId={PRIVY_CONFIG.appId}
+      clientId={PRIVY_CONFIG.clientId}
+      config={{
+        embedded: {
+          solana: {
+            createOnLogin: 'all-users',
+          },
+        },
+      }}
+    >
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+          <WalletProvider>
+            <View style={styles.root}>
+              {renderScreen()}
+              <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
+              <Toast
+                visible={toastVisible}
+                message={toastMessage}
+                description={toastDescription}
+                type="success"
+                onDismiss={() => setToastVisible(false)}
+              />
+            </View>
+          </WalletProvider>
+        </SafeAreaProvider>
+      </ThemeProvider>
+    </PrivyProvider>
   );
 }
 
