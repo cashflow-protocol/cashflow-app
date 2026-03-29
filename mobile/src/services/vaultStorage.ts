@@ -14,6 +14,7 @@ export interface VaultData {
   label: string;
   createdAt: string;
   walletAddress?: string;
+  seekerMode?: boolean;
 }
 
 let cachedVault: VaultData | null | undefined = undefined; // undefined = not yet loaded

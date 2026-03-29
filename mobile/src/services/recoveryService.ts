@@ -9,6 +9,7 @@ import {
   VersionedTransaction,
 } from '@solana/web3.js';
 import { API_CONFIG } from '../config/api';
+import { IS_SOLANA_MOBILE } from '../config/constants';
 import {
   generateAndStoreCloudKeypair,
   generateAndStoreDeviceKeypair,
@@ -63,19 +64,25 @@ export async function buildAndSubmitRecoveryProposal(
 
   let existingCloudKey = await getCloudPublicKey();
   let newCloudKey: string | null = null;
-  const cloudKeyIsMember = existingCloudKey && members.some(m => m.address === existingCloudKey);
+  let cloudKeyIsMember = false;
 
-  if (!existingCloudKey) {
-    // No cloud key at all — generate a new one
-    newCloudKey = await generateAndStoreCloudKeypair();
-    existingCloudKey = newCloudKey;
-    console.log('[CLOUDKEY] Generated new cloud key:', newCloudKey);
-  } else if (!cloudKeyIsMember) {
-    // Cloud key exists but isn't a member of this vault — add it as a new member
-    newCloudKey = existingCloudKey;
-    console.log('[CLOUDKEY] Existing cloud key not a member, adding:', existingCloudKey);
+  if (IS_SOLANA_MOBILE) {
+    // Seeker: no cloud key — only device key + MWA wallet
+    existingCloudKey = null;
+    console.log('[CLOUDKEY] Seeker mode — skipping cloud key');
   } else {
-    console.log('[CLOUDKEY] Existing cloud key is a member:', existingCloudKey);
+    cloudKeyIsMember = !!(existingCloudKey && members.some(m => m.address === existingCloudKey));
+
+    if (!existingCloudKey) {
+      newCloudKey = await generateAndStoreCloudKeypair();
+      existingCloudKey = newCloudKey;
+      console.log('[CLOUDKEY] Generated new cloud key:', newCloudKey);
+    } else if (!cloudKeyIsMember) {
+      newCloudKey = existingCloudKey;
+      console.log('[CLOUDKEY] Existing cloud key not a member, adding:', existingCloudKey);
+    } else {
+      console.log('[CLOUDKEY] Existing cloud key is a member:', existingCloudKey);
+    }
   }
 
   // Step 2: Determine AddMember actions
@@ -94,7 +101,7 @@ export async function buildAndSubmitRecoveryProposal(
     members,
     cloudKey: cloudKeyIsMember ? existingCloudKey! : undefined,
     addMemberActions: actions,
-    newRentCollector: newCloudKey || undefined,
+    newRentCollector: IS_SOLANA_MOBILE ? walletAddress : (newCloudKey || undefined),
   });
 
   const { tx2Base64, transactionIndex, blockhash } = buildResult;

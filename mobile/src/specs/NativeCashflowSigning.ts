@@ -18,6 +18,7 @@ export interface Spec extends TurboModule {
   backupCloudKeyToBlockStore(pin: string): Promise<void>;
   restoreCloudKeyFromBlockStore(pin: string): Promise<string>;
   hasBlockStoreBackup(): Promise<boolean>;
+  isGmsAvailable(): Promise<boolean>;
 }
 
 export default TurboModuleRegistry.get<Spec>('CashflowSigning');

@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import { API_CONFIG } from '../config/api';
 import { APP_VERSION, BUILD_NUMBER } from '../config/version';
-import { getCloudPublicKey, signWithCloud } from './keypairStorage';
+import { getCloudPublicKey, getDevicePublicKey, signWithCloud, signWithDevice } from './keypairStorage';
 import { getVault } from './vaultStorage';
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Re-authenticate 5 min before expiry
@@ -32,9 +32,17 @@ class AuthService {
   }
 
   private async authenticate(): Promise<string> {
-    const publicKey = await getCloudPublicKey();
+    const vault = await getVault();
+    const seekerMode = vault?.seekerMode === true;
+
+    // Seeker: use device key for auth. Standard: use cloud key.
+    const publicKey = seekerMode
+      ? await getDevicePublicKey()
+      : await getCloudPublicKey();
     if (!publicKey) {
-      throw new Error('No cloud key available — cannot authenticate');
+      throw new Error(seekerMode
+        ? 'No device key available — cannot authenticate'
+        : 'No cloud key available — cannot authenticate');
     }
 
     // Step 1: Get challenge from server
@@ -50,12 +58,13 @@ class AuthService {
 
     const { challenge } = await challengeRes.json();
 
-    // Step 2: Sign the challenge with the cloud keypair (native module)
+    // Step 2: Sign the challenge (Seeker: device key, Standard: cloud key)
     const challengeBase64 = Buffer.from(challenge, 'utf-8').toString('base64');
-    const signatureBase64 = await signWithCloud(challengeBase64);
+    const signatureBase64 = seekerMode
+      ? await signWithDevice(challengeBase64)
+      : await signWithCloud(challengeBase64);
 
     // Step 3: Verify signature and get JWT (include device info for auth logging)
-    const vault = await getVault();
     const verifyRes = await fetch(`${API_CONFIG.baseUrl}/auth/v2/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

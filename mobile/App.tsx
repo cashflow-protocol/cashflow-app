@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, StatusBar, StyleSheet, AppState } from 'react-native';
+import { View, StatusBar, StyleSheet, AppState, Platform, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { WalletProvider } from './src/hooks/useWallet';
@@ -29,10 +29,10 @@ import TabBar, { type TabName } from './src/components/TabBar';
 import { getVault } from './src/services/vaultStorage';
 import { checkWaitlistStatus } from './src/services/onboardingService';
 import { hasPin } from './src/services/pinStorage';
-import { migrateKeypairsToBiometric, getCloudPublicKey, cachePin, clearCachedPin, storePinForBiometric } from './src/services/keypairStorage';
+import { migrateKeypairsToBiometric, getCloudPublicKey, isGmsAvailable, cachePin, clearCachedPin, storePinForBiometric } from './src/services/keypairStorage';
 import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
-import { applyRemoteConfig } from './src/config/constants';
+import { applyRemoteConfig, IS_SOLANA_MOBILE } from './src/config/constants';
 import { initializePushNotifications, initializeWaitlistPushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
 import { initializeRealtimeNotifications, stopRealtimeNotifications } from './src/services/realtimeNotificationService';
 import Toast from './src/components/Toast';
@@ -69,9 +69,20 @@ function App() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastDescription, setToastDescription] = useState('');
+  const [gmsBlocked, setGmsBlocked] = useState(false);
 
   useEffect(() => {
     (async () => {
+      // Block Android devices without GMS (unless Seeker)
+      if (Platform.OS === 'android' && !IS_SOLANA_MOBILE) {
+        const gmsOk = await isGmsAvailable();
+        if (!gmsOk) {
+          setGmsBlocked(true);
+          setCheckingVault(false);
+          return;
+        }
+      }
+
       const [vault, config, pinExists, cloudPk] = await Promise.all([
         getVault(),
         apiService.getConfig().catch(() => null),
@@ -251,6 +262,24 @@ function App() {
 
   if (checkingVault) {
     return null;
+  }
+
+  if (gmsBlocked) {
+    return (
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, backgroundColor: '#0f0f23' }}>
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 12 }}>
+              Google Play Services Required
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
+              Cashflow requires Google Play Services to securely back up your keys. Please install or enable Google Play Services and restart the app.
+            </Text>
+          </View>
+        </SafeAreaProvider>
+      </ThemeProvider>
+    );
   }
 
   if (locked) {

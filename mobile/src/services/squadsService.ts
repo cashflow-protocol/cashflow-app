@@ -66,6 +66,113 @@ async function getLuts(conn: Connection): Promise<AddressLookupTableAccount[]> {
 // Web3.js connection for @sqds/multisig SDK calls
 const connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
 
+/** Resolved signing context — shared by all vault operations */
+interface SigningContext {
+  seekerMode: boolean;
+  cloudPubkey: PublicKey | null;
+  devicePubkey: PublicKey;
+  walletPubkey: PublicKey | null;
+  /** Primary key used as creator/executor/payer: MWA wallet on Seeker, cloud key otherwise */
+  primaryKey: PublicKey;
+}
+
+/** Resolve cloud/device/wallet keys and seekerMode from vault storage */
+async function getSigningContext(errorPrefix: string): Promise<SigningContext> {
+  const vaultData = await getVault();
+  const seekerMode = vaultData?.seekerMode === true;
+
+  const devicePubBase58 = await getDevicePublicKey();
+  if (!devicePubBase58) {
+    logError(errorPrefix, 'device_keypair_not_found');
+    throw new Error('Device keypair not found. Please recreate your vault.');
+  }
+  const devicePubkey = new PublicKey(devicePubBase58);
+
+  let cloudPubkey: PublicKey | null = null;
+  if (!seekerMode) {
+    const cloudPubBase58 = await getCloudPublicKey();
+    if (!cloudPubBase58) {
+      logError(errorPrefix, 'cloud_keypair_not_found');
+      throw new Error('Cloud keypair not found. Please recreate your vault.');
+    }
+    cloudPubkey = new PublicKey(cloudPubBase58);
+  }
+
+  let walletPubkey: PublicKey | null = null;
+  if (IS_SOLANA_MOBILE) {
+    if (!vaultData?.walletAddress) {
+      logError(errorPrefix, 'wallet_address_not_found');
+      throw new Error('Wallet address not found. Please recreate your vault.');
+    }
+    walletPubkey = new PublicKey(vaultData.walletAddress);
+  }
+
+  const primaryKey = seekerMode ? walletPubkey! : cloudPubkey!;
+  return { seekerMode, cloudPubkey, devicePubkey, walletPubkey, primaryKey };
+}
+
+/**
+ * Build approval instructions for a proposal.
+ * Seeker: MWA wallet + device. Standard: cloud + device (+ wallet if MWA).
+ */
+function buildApprovalIxs(
+  ctx: SigningContext,
+  multisigPda: PublicKey,
+  transactionIndex: bigint,
+): TransactionInstruction[] {
+  const ixs: TransactionInstruction[] = [];
+  if (ctx.seekerMode) {
+    ixs.push(
+      multisig.instructions.proposalApprove({ multisigPda, transactionIndex, member: ctx.walletPubkey! }),
+      multisig.instructions.proposalApprove({ multisigPda, transactionIndex, member: ctx.devicePubkey }),
+    );
+  } else {
+    ixs.push(
+      multisig.instructions.proposalApprove({ multisigPda, transactionIndex, member: ctx.cloudPubkey! }),
+      multisig.instructions.proposalApprove({ multisigPda, transactionIndex, member: ctx.devicePubkey }),
+    );
+    if (IS_SOLANA_MOBILE && ctx.walletPubkey) {
+      ixs.push(multisig.instructions.proposalApprove({ multisigPda, transactionIndex, member: ctx.walletPubkey }));
+    }
+  }
+  return ixs;
+}
+
+/**
+ * Sign TX1 (create+propose+approve) and TX2 (execute) then send as Jito bundle.
+ * Handles Seeker vs standard signing patterns.
+ */
+async function signAndSendConfigBundle(
+  ctx: SigningContext,
+  tx1: VersionedTransaction,
+  tx2: VersionedTransaction,
+): Promise<string> {
+  if (ctx.seekerMode) {
+    // Device signs TX1 (approval), MWA signs both (payer + approval)
+    await signTransactionNatively(tx1, [
+      { pubkey: ctx.devicePubkey, signFn: signWithDevice },
+    ]);
+    await signTransactionsWithWallet([tx1, tx2], [0, 1], ctx.walletPubkey!);
+  } else {
+    // Cloud signs both, device signs TX1
+    await signTransactionNatively(tx1, [
+      { pubkey: ctx.cloudPubkey!, signFn: signWithCloud },
+      { pubkey: ctx.devicePubkey, signFn: signWithDevice },
+    ]);
+    await signTransactionNatively(tx2, [
+      { pubkey: ctx.cloudPubkey!, signFn: signWithCloud },
+    ]);
+    if (IS_SOLANA_MOBILE && ctx.walletPubkey) {
+      await signTransactionsWithWallet([tx1, tx2], [0], ctx.walletPubkey);
+    }
+  }
+
+  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
+  const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
+  await apiService.sendBundle([tx1Base64, tx2Base64]);
+  return bs58.encode(tx2.signatures[0]);
+}
+
 export interface MultisigInfo {
   address: string;
   vaultAddress: string;
@@ -283,20 +390,23 @@ async function signTransactionsWithWallet(
  */
 export async function createMultisig(
   walletAddress: string,
+  seekerMode = false,
 ): Promise<CreateMultisigResult> {
-  console.log('[createMultisig] start, wallet:', walletAddress);
+  console.log('[createMultisig] start, wallet:', walletAddress, 'seekerMode:', seekerMode);
   const creatorPubkey = new PublicKey(walletAddress);
 
   // Generate keypairs in native code — returns base58 public keys only
-  console.log('[createMultisig] generating cloud keypair...');
-  const cloudPubkeyBase58 = await generateAndStoreCloudKeypair();
-  console.log('[createMultisig] cloud:', cloudPubkeyBase58);
+  let cloudPubkey: PublicKey | null = null;
+  if (!seekerMode) {
+    console.log('[createMultisig] generating cloud keypair...');
+    const cloudPubkeyBase58 = await generateAndStoreCloudKeypair();
+    console.log('[createMultisig] cloud:', cloudPubkeyBase58);
+    cloudPubkey = new PublicKey(cloudPubkeyBase58);
+  }
 
   console.log('[createMultisig] generating device keypair...');
   const devicePubkeyBase58 = await generateAndStoreDeviceKeypair();
   console.log('[createMultisig] device:', devicePubkeyBase58);
-
-  const cloudPubkey = new PublicKey(cloudPubkeyBase58);
   const devicePubkey = new PublicKey(devicePubkeyBase58);
 
   // Generate ephemeral createKey (only used once for PDA derivation, then discarded)
@@ -321,34 +431,64 @@ export async function createMultisig(
   );
   console.log('[createMultisig] program config fetched');
 
-  // --- TX 1: Create multisig + fund cloud key with initial SOL ---
+  // Build members list based on mode
+  let members: Array<{ key: PublicKey; permissions: ReturnType<typeof Permissions.all> }>;
+  let threshold: number;
+  let rentCollectorKey: PublicKey;
+
+  if (seekerMode) {
+    // Seeker: 2-of-2 (MWA wallet + device key), MWA wallet is rent collector
+    members = [
+      { key: creatorPubkey, permissions: Permissions.all() },
+      { key: devicePubkey, permissions: Permissions.all() },
+    ];
+    threshold = 2;
+    rentCollectorKey = creatorPubkey;
+  } else if (IS_SOLANA_MOBILE) {
+    // Android + GMS: 3-of-3 (cloud + device + MWA wallet)
+    members = [
+      { key: cloudPubkey!, permissions: Permissions.all() },
+      { key: devicePubkey, permissions: Permissions.all() },
+      { key: creatorPubkey, permissions: Permissions.all() },
+    ];
+    threshold = 3;
+    rentCollectorKey = cloudPubkey!;
+  } else {
+    // iOS / web: 2-of-2 (cloud + device)
+    members = [
+      { key: cloudPubkey!, permissions: Permissions.all() },
+      { key: devicePubkey, permissions: Permissions.all() },
+    ];
+    threshold = 2;
+    rentCollectorKey = cloudPubkey!;
+  }
+
+  // --- TX 1: Create multisig (+ fund cloud key if not Seeker) ---
   const createMultisigIx = multisig.instructions.multisigCreateV2({
     treasury: programConfig.treasury,
     createKey: createKey.publicKey,
     creator: creatorPubkey,
     multisigPda,
     configAuthority: null,
-    threshold: IS_SOLANA_MOBILE ? 3 : 2,
-    members: [
-      { key: cloudPubkey, permissions: Permissions.all() },
-      { key: devicePubkey, permissions: Permissions.all() },
-      ...(IS_SOLANA_MOBILE
-        ? [{ key: creatorPubkey, permissions: Permissions.all() }]
-        : []),
-    ],
+    threshold,
+    members,
     timeLock: 0,
-    rentCollector: cloudPubkey,
+    rentCollector: rentCollectorKey,
     memo: 'Cashflow',
   });
 
-  const fundCloudIx = SystemProgram.transfer({
-    fromPubkey: creatorPubkey,
-    toPubkey: cloudPubkey,
-    lamports: getTargetCloudBalance(),
-  });
+  const instructions: TransactionInstruction[] = [createMultisigIx];
+
+  // Fund cloud key with initial SOL (not needed on Seeker — MWA pays fees directly)
+  if (!seekerMode && cloudPubkey) {
+    instructions.push(SystemProgram.transfer({
+      fromPubkey: creatorPubkey,
+      toPubkey: cloudPubkey,
+      lamports: getTargetCloudBalance(),
+    }));
+  }
 
   // Build vault creation fee instruction (0.05 SOL → treasury)
-  const instructions: TransactionInstruction[] = [createMultisigIx, fundCloudIx];
   if (getVaultCreationFee() > 0) {
     const config = await apiService.getConfig();
     if (!config.treasuryWallet) {
@@ -393,10 +533,6 @@ export async function createMultisig(
       .catch(err => console.warn('[createMultisig] failed to record vault creation fee:', err));
   }
 
-  // TODO: TX 2 for SpendingLimit setup is disabled for now.
-  // Cloud wallet will be funded manually until spending limits are tested.
-  // See plan file for the full SpendingLimit implementation when ready.
-
   // Persist vault metadata locally
   const vaultData: VaultData = {
     multisigAddress: multisigPda.toBase58(),
@@ -404,6 +540,7 @@ export async function createMultisig(
     label: 'Cashflow',
     createdAt: new Date().toISOString(),
     walletAddress: walletAddress,
+    seekerMode: seekerMode || undefined,
   };
   await saveVault(vaultData);
 
@@ -470,30 +607,8 @@ export async function addMember(
 ): Promise<{ signature: string }> {
   const multisigPda = new PublicKey(multisigAddress);
   const newMemberPubkey = new PublicKey(newMemberAddress);
-
-  // Get public keys from native storage (private keys stay in native code)
-  const cloudPubBase58 = await getCloudPublicKey();
-  const devicePubBase58 = await getDevicePublicKey();
-  if (!cloudPubBase58 || !devicePubBase58) {
-    logError('squads_add_member', 'keypairs_not_found');
-    throw new Error('Signing keypairs not found. Please recreate your vault.');
-  }
-  const cloudPubkey = new PublicKey(cloudPubBase58);
-  const devicePubkey = new PublicKey(devicePubBase58);
-
-  // Get wallet address for MWA signing (if Solana Mobile)
-  let walletPubkey: PublicKey | null = null;
-  if (IS_SOLANA_MOBILE) {
-    const vaultData = await getVault();
-    if (!vaultData?.walletAddress) {
-      logError('squads_add_member', 'wallet_address_not_found');
-      throw new Error('Wallet address not found. Please recreate your vault.');
-    }
-    walletPubkey = new PublicKey(vaultData.walletAddress);
-  }
-
-  // Cloud keypair pays for tx fees and rent
-  const feePayer = cloudPubkey;
+  const ctx = await getSigningContext('squads_add_member');
+  const feePayer = ctx.primaryKey;
 
   // Determine permissions for new member
   let permissions: ReturnType<typeof Permissions.all>;
@@ -510,112 +625,40 @@ export async function addMember(
       break;
   }
 
-  // Fetch current multisig to get next transaction index
-  const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(
-    connection,
-    multisigPda,
-  );
+  const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
   const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
-  // --- Step 1: Create config tx + proposal + approve(cloud) + approve(device) [+ approve(wallet)] ---
-  const configTxIx = multisig.instructions.configTransactionCreate({
-    multisigPda,
-    transactionIndex,
-    creator: cloudPubkey,
-    rentPayer: feePayer,
-    actions: [
-      {
-        __kind: 'AddMember' as const,
-        newMember: { key: newMemberPubkey, permissions },
-      },
-    ],
-  });
+  // TX1: create config tx + proposal + approvals
+  const tx1Instructions: TransactionInstruction[] = [
+    multisig.instructions.configTransactionCreate({
+      multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer,
+      actions: [{ __kind: 'AddMember' as const, newMember: { key: newMemberPubkey, permissions } }],
+    }),
+    multisig.instructions.proposalCreate({ multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer }),
+    ...buildApprovalIxs(ctx, multisigPda, transactionIndex),
+  ];
 
-  const proposalIx = multisig.instructions.proposalCreate({
-    multisigPda,
-    transactionIndex,
-    creator: cloudPubkey,
-    rentPayer: feePayer,
-  });
-
-  const approveCloudIx = multisig.instructions.proposalApprove({
-    multisigPda,
-    transactionIndex,
-    member: cloudPubkey,
-  });
-
-  const approveDeviceIx = multisig.instructions.proposalApprove({
-    multisigPda,
-    transactionIndex,
-    member: devicePubkey,
-  });
-
-  const tx1Instructions = [configTxIx, proposalIx, approveCloudIx, approveDeviceIx];
-  if (IS_SOLANA_MOBILE && walletPubkey) {
-    tx1Instructions.push(multisig.instructions.proposalApprove({
-      multisigPda,
-      transactionIndex,
-      member: walletPubkey,
-    }));
-  }
-
-  // --- Build all transactions with one blockhash (Jito bundle) ---
   const luts = await getLuts(connection);
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
-  // TX1: create + propose + approve×N
-  const msg1 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: tx1Instructions,
-  }).compileToV0Message(luts);
+  const msg1 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx1Instructions }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
-  await signTransactionNatively(tx1, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-    { pubkey: devicePubkey, signFn: signWithDevice },
-  ]);
 
-  // TX2: execute + close + Jito tip (all in one tx for atomicity)
-  const executeIx = multisig.instructions.configTransactionExecute({
-    multisigPda,
-    transactionIndex,
-    member: cloudPubkey,
-    rentPayer: feePayer,
-  });
-
-  const tx2Instructions: TransactionInstruction[] = [executeIx];
+  // TX2: execute + close + Jito tip
+  const tx2Instructions: TransactionInstruction[] = [
+    multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: feePayer, rentPayer: feePayer }),
+  ];
   if (multisigAccount.rentCollector) {
-    tx2Instructions.push(
-      multisig.instructions.configTransactionAccountsClose({
-        multisigPda,
-        transactionIndex,
-        rentCollector: new PublicKey(multisigAccount.rentCollector),
-      }),
-    );
+    tx2Instructions.push(multisig.instructions.configTransactionAccountsClose({
+      multisigPda, transactionIndex, rentCollector: new PublicKey(multisigAccount.rentCollector),
+    }));
   }
   tx2Instructions.push(jitoTipIx(feePayer));
 
-  const msg2 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: tx2Instructions,
-  }).compileToV0Message(luts);
+  const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx2Instructions }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
-  await signTransactionNatively(tx2, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-  ]);
 
-  // MWA wallet signing: wallet approves the proposal in TX1
-  if (IS_SOLANA_MOBILE && walletPubkey) {
-    await signTransactionsWithWallet([tx1, tx2], [0], walletPubkey);
-  }
-
-  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-
-  await apiService.sendBundle([tx1Base64, tx2Base64]);
-
-  const signature = bs58.encode(tx2.signatures[0]);
+  const signature = await signAndSendConfigBundle(ctx, tx1, tx2);
   return { signature };
 }
 
@@ -625,128 +668,43 @@ export async function removeMember(
 ): Promise<{ signature: string }> {
   const multisigPda = new PublicKey(multisigAddress);
   const memberPubkey = new PublicKey(memberAddress);
+  const ctx = await getSigningContext('squads_remove_member');
+  const feePayer = ctx.primaryKey;
 
-  const cloudPubBase58 = await getCloudPublicKey();
-  const devicePubBase58 = await getDevicePublicKey();
-  if (!cloudPubBase58 || !devicePubBase58) {
-    logError('squads_remove_member', 'keypairs_not_found');
-    throw new Error('Signing keypairs not found. Please recreate your vault.');
-  }
-  const cloudPubkey = new PublicKey(cloudPubBase58);
-  const devicePubkey = new PublicKey(devicePubBase58);
-
-  let walletPubkey: PublicKey | null = null;
-  if (IS_SOLANA_MOBILE) {
-    const vaultData = await getVault();
-    if (!vaultData?.walletAddress) {
-      logError('squads_remove_member', 'wallet_address_not_found');
-      throw new Error('Wallet address not found. Please recreate your vault.');
-    }
-    walletPubkey = new PublicKey(vaultData.walletAddress);
-  }
-
-  const feePayer = cloudPubkey;
-
-  const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(
-    connection,
-    multisigPda,
-  );
+  const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
   const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
-  const configTxIx = multisig.instructions.configTransactionCreate({
-    multisigPda,
-    transactionIndex,
-    creator: cloudPubkey,
-    rentPayer: feePayer,
-    actions: [
-      {
-        __kind: 'RemoveMember' as const,
-        oldMember: memberPubkey,
-      },
-    ],
-  });
-
-  const proposalIx = multisig.instructions.proposalCreate({
-    multisigPda,
-    transactionIndex,
-    creator: cloudPubkey,
-    rentPayer: feePayer,
-  });
-
-  const approveCloudIx = multisig.instructions.proposalApprove({
-    multisigPda,
-    transactionIndex,
-    member: cloudPubkey,
-  });
-
-  const approveDeviceIx = multisig.instructions.proposalApprove({
-    multisigPda,
-    transactionIndex,
-    member: devicePubkey,
-  });
-
-  const tx1Instructions = [configTxIx, proposalIx, approveCloudIx, approveDeviceIx];
-  if (IS_SOLANA_MOBILE && walletPubkey) {
-    tx1Instructions.push(multisig.instructions.proposalApprove({
-      multisigPda,
-      transactionIndex,
-      member: walletPubkey,
-    }));
-  }
+  // TX1: create config tx + proposal + approvals
+  const tx1Instructions: TransactionInstruction[] = [
+    multisig.instructions.configTransactionCreate({
+      multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer,
+      actions: [{ __kind: 'RemoveMember' as const, oldMember: memberPubkey }],
+    }),
+    multisig.instructions.proposalCreate({ multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer }),
+    ...buildApprovalIxs(ctx, multisigPda, transactionIndex),
+  ];
 
   const luts = await getLuts(connection);
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
-  const msg1 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: tx1Instructions,
-  }).compileToV0Message(luts);
+  const msg1 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx1Instructions }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
-  await signTransactionNatively(tx1, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-    { pubkey: devicePubkey, signFn: signWithDevice },
-  ]);
 
-  const executeIx = multisig.instructions.configTransactionExecute({
-    multisigPda,
-    transactionIndex,
-    member: cloudPubkey,
-    rentPayer: feePayer,
-  });
-
-  const tx2Instructions: TransactionInstruction[] = [executeIx];
+  // TX2: execute + close + Jito tip
+  const tx2Instructions: TransactionInstruction[] = [
+    multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: feePayer, rentPayer: feePayer }),
+  ];
   if (multisigAccount.rentCollector) {
-    tx2Instructions.push(
-      multisig.instructions.configTransactionAccountsClose({
-        multisigPda,
-        transactionIndex,
-        rentCollector: new PublicKey(multisigAccount.rentCollector),
-      }),
-    );
+    tx2Instructions.push(multisig.instructions.configTransactionAccountsClose({
+      multisigPda, transactionIndex, rentCollector: new PublicKey(multisigAccount.rentCollector),
+    }));
   }
   tx2Instructions.push(jitoTipIx(feePayer));
 
-  const msg2 = new TransactionMessage({
-    payerKey: feePayer,
-    recentBlockhash: blockhash,
-    instructions: tx2Instructions,
-  }).compileToV0Message(luts);
+  const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx2Instructions }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
-  await signTransactionNatively(tx2, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-  ]);
 
-  if (IS_SOLANA_MOBILE && walletPubkey) {
-    await signTransactionsWithWallet([tx1, tx2], [0], walletPubkey);
-  }
-
-  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-
-  await apiService.sendBundle([tx1Base64, tx2Base64]);
-
-  const signature = bs58.encode(tx2.signatures[0]);
+  const signature = await signAndSendConfigBundle(ctx, tx1, tx2);
   return { signature };
 }
 
@@ -762,21 +720,31 @@ export async function executeVaultTransaction(
   extraLookupTables?: string[],
 ): Promise<{ signature: string; bundleSignatures: string[] }> {
   const multisigPda = new PublicKey(multisigAddress);
+  const vaultData = await getVault();
+  const seekerMode = vaultData?.seekerMode === true;
 
-  // Get cloud/device public keys from native storage
-  const cloudPubBase58 = await getCloudPublicKey();
+  // Get device public key (used in all modes)
   const devicePubBase58 = await getDevicePublicKey();
-  if (!cloudPubBase58 || !devicePubBase58) {
-    logError('squads_vault_tx', 'keypairs_not_found');
-    throw new Error('Signing keypairs not found. Please recreate your vault.');
+  if (!devicePubBase58) {
+    logError('squads_vault_tx', 'device_keypair_not_found');
+    throw new Error('Device keypair not found. Please recreate your vault.');
   }
-  const cloudPubkey = new PublicKey(cloudPubBase58);
   const devicePubkey = new PublicKey(devicePubBase58);
 
-  // Get wallet address for MWA signing (if Solana Mobile)
+  // Get cloud public key (not used in Seeker mode)
+  let cloudPubkey: PublicKey | null = null;
+  if (!seekerMode) {
+    const cloudPubBase58 = await getCloudPublicKey();
+    if (!cloudPubBase58) {
+      logError('squads_vault_tx', 'cloud_keypair_not_found');
+      throw new Error('Cloud keypair not found. Please recreate your vault.');
+    }
+    cloudPubkey = new PublicKey(cloudPubBase58);
+  }
+
+  // Get wallet address for MWA signing (Seeker or Solana Mobile)
   let walletPubkey: PublicKey | null = null;
   if (IS_SOLANA_MOBILE) {
-    const vaultData = await getVault();
     if (!vaultData?.walletAddress) {
       logError('squads_vault_tx', 'wallet_address_not_found');
       throw new Error('Wallet address not found. Please recreate your vault.');
@@ -784,18 +752,21 @@ export async function executeVaultTransaction(
     walletPubkey = new PublicKey(vaultData.walletAddress);
   }
 
-  // Cloud keypair pays for tx fees and rent
-  const feePayer = cloudPubkey;
+  // Primary key: MWA wallet on Seeker, cloud key otherwise
+  const primaryKey = seekerMode ? walletPubkey! : cloudPubkey!;
+  const feePayer = primaryKey;
 
   // Derive vault PDA
   const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
 
-  // Check vault has enough SOL for fees
-  const vaultBalance = await connection.getBalance(vaultPda, 'confirmed');
-  if (vaultBalance < getTargetCloudBalance()) {
-    const needed = (getTargetCloudBalance() / 1e9).toFixed(3);
-    const have = (vaultBalance / 1e9).toFixed(4);
-    throw new Error(`Insufficient SOL for transaction fees. Need ${needed} SOL but vault only has ${have} SOL. Please deposit SOL to your vault first.`);
+  // Check vault has enough SOL for fees (Seeker: MWA pays directly, still need vault SOL for inner txs)
+  if (!seekerMode) {
+    const vaultBalance = await connection.getBalance(vaultPda, 'confirmed');
+    if (vaultBalance < getTargetCloudBalance()) {
+      const needed = (getTargetCloudBalance() / 1e9).toFixed(3);
+      const have = (vaultBalance / 1e9).toFixed(4);
+      throw new Error(`Insufficient SOL for transaction fees. Need ${needed} SOL but vault only has ${have} SOL. Please deposit SOL to your vault first.`);
+    }
   }
 
   // Get current transaction index
@@ -825,14 +796,16 @@ export async function executeVaultTransaction(
       }),
   );
 
-  // Always transfer getTargetCloudBalance() from vault to cloud wallet for tx fees + rent
-  txInstructions.unshift(
-    SystemProgram.transfer({
-      fromPubkey: vaultPda,
-      toPubkey: cloudPubkey,
-      lamports: getTargetCloudBalance(),
-    }),
-  );
+  // Transfer SOL from vault to cloud wallet for tx fees (not needed on Seeker — MWA pays directly)
+  if (!seekerMode) {
+    txInstructions.unshift(
+      SystemProgram.transfer({
+        fromPubkey: vaultPda,
+        toPubkey: cloudPubkey!,
+        lamports: getTargetCloudBalance(),
+      }),
+    );
+  }
 
   const baseLuts = await getLuts(connection);
 
@@ -858,11 +831,11 @@ export async function executeVaultTransaction(
     instructions: txInstructions,
   });
 
-  // --- TX 1: Create vault tx + propose + approve(cloud) + approve(device) ---
+  // --- TX 1: Create vault transaction ---
   const createVaultTxIx = multisig.instructions.vaultTransactionCreate({
     multisigPda,
     transactionIndex,
-    creator: cloudPubkey,
+    creator: primaryKey,
     rentPayer: feePayer,
     vaultIndex: 0,
     ephemeralSigners: 0,
@@ -870,48 +843,49 @@ export async function executeVaultTransaction(
     addressLookupTableAccounts: luts.length > 0 ? luts : undefined,
   });
 
+  // --- TX 2: Propose + approve ---
   const proposalIx = multisig.instructions.proposalCreate({
     multisigPda,
     transactionIndex,
-    creator: cloudPubkey,
+    creator: primaryKey,
     rentPayer: feePayer,
   });
 
-  const approveCloudIx = multisig.instructions.proposalApprove({
-    multisigPda,
-    transactionIndex,
-    member: cloudPubkey,
-  });
+  const tx2Instructions: TransactionInstruction[] = [proposalIx];
 
-  const approveDeviceIx = multisig.instructions.proposalApprove({
-    multisigPda,
-    transactionIndex,
-    member: devicePubkey,
-  });
-
-  const tx2Instructions = [proposalIx, approveCloudIx, approveDeviceIx];
-  if (IS_SOLANA_MOBILE && walletPubkey) {
-    tx2Instructions.push(multisig.instructions.proposalApprove({
-      multisigPda,
-      transactionIndex,
-      member: walletPubkey,
-    }));
+  if (seekerMode) {
+    // Seeker: approve with MWA wallet + device
+    tx2Instructions.push(
+      multisig.instructions.proposalApprove({ multisigPda, transactionIndex, member: walletPubkey! }),
+      multisig.instructions.proposalApprove({ multisigPda, transactionIndex, member: devicePubkey }),
+    );
+  } else {
+    // Standard: approve with cloud + device (+ wallet if MWA)
+    tx2Instructions.push(
+      multisig.instructions.proposalApprove({ multisigPda, transactionIndex, member: cloudPubkey! }),
+      multisig.instructions.proposalApprove({ multisigPda, transactionIndex, member: devicePubkey }),
+    );
+    if (IS_SOLANA_MOBILE && walletPubkey) {
+      tx2Instructions.push(
+        multisig.instructions.proposalApprove({ multisigPda, transactionIndex, member: walletPubkey }),
+      );
+    }
   }
 
-  // --- TX 2: Execute ---
+  // --- TX 3: Execute ---
   const executeIx = buildVaultExecuteIx(
     multisigPda,
     transactionIndex,
-    cloudPubkey,
+    primaryKey,
     vaultPda,
     innerMessage,
     luts,
   );
 
-  // --- TX 3: Close (if rentCollector set) + withdraw cloud SOL back to vault + Jito tip ---
-  const tx3Instructions: TransactionInstruction[] = [];
+  // --- TX 4: Close + Jito tip (+ withdraw cloud SOL back to vault if not Seeker) ---
+  const tx4Instructions: TransactionInstruction[] = [];
   if (multisigAccount.rentCollector) {
-    tx3Instructions.push(
+    tx4Instructions.push(
       multisig.instructions.vaultTransactionAccountsClose({
         multisigPda,
         transactionIndex,
@@ -919,14 +893,17 @@ export async function executeVaultTransaction(
       }),
     );
   }
-  tx3Instructions.push(jitoTipIx(feePayer));
-  tx3Instructions.push(
-    kitIxToWeb3(createWithdrawInstruction(
-      kitAddress(cloudPubkey.toBase58()),
-      kitAddress(vaultPda.toBase58()),
-      getTargetCloudBalance(),
-    )),
-  );
+  tx4Instructions.push(jitoTipIx(feePayer));
+  if (!seekerMode) {
+    // Withdraw cloud balance back to vault (not needed on Seeker — MWA pays directly)
+    tx4Instructions.push(
+      kitIxToWeb3(createWithdrawInstruction(
+        kitAddress(cloudPubkey!.toBase58()),
+        kitAddress(vaultPda.toBase58()),
+        getTargetCloudBalance(),
+      )),
+    );
+  }
 
   // --- Build all transactions with one blockhash (Jito bundle) ---
   const debugLines: string[] = [];
@@ -960,9 +937,6 @@ export async function executeVaultTransaction(
     collectTxAccounts('TX1 (create)', msg1);
     const tx1 = new VersionedTransaction(msg1);
     debugLines.push(`TX1 size: ${tx1.serialize().length} bytes`);
-    await signTransactionNatively(tx1, [
-      { pubkey: cloudPubkey, signFn: signWithCloud },
-    ]);
 
     // TX2: propose + approve×N
     const msg2 = new TransactionMessage({
@@ -973,10 +947,6 @@ export async function executeVaultTransaction(
     collectTxAccounts('TX2 (propose+approve)', msg2);
     const tx2 = new VersionedTransaction(msg2);
     debugLines.push(`TX2 size: ${tx2.serialize().length} bytes`);
-    await signTransactionNatively(tx2, [
-      { pubkey: cloudPubkey, signFn: signWithCloud },
-      { pubkey: devicePubkey, signFn: signWithDevice },
-    ]);
 
     // TX3: execute (needs extra CU for complex CPI chains like Kamino)
     const msg3 = new TransactionMessage({
@@ -990,28 +960,47 @@ export async function executeVaultTransaction(
     collectTxAccounts('TX3 (execute)', msg3);
     const tx3 = new VersionedTransaction(msg3);
     debugLines.push(`TX3 size: ${tx3.serialize().length} bytes`);
-    await signTransactionNatively(tx3, [
-      { pubkey: cloudPubkey, signFn: signWithCloud },
-    ]);
 
-    // TX4: close + tip + withdraw cloud SOL back to vault
+    // TX4: close + tip (+ withdraw if not Seeker)
     const msg4 = new TransactionMessage({
       payerKey: feePayer,
       recentBlockhash: blockhash,
-      instructions: tx3Instructions,
+      instructions: tx4Instructions,
     }).compileToV0Message(luts);
-    collectTxAccounts('TX4 (close+tip+withdraw)', msg4);
+    collectTxAccounts('TX4 (close+tip)', msg4);
     const tx4 = new VersionedTransaction(msg4);
     debugLines.push(`TX4 size: ${tx4.serialize().length} bytes`);
-    await signTransactionNatively(tx4, [
-      { pubkey: cloudPubkey, signFn: signWithCloud },
-    ]);
 
-    // MWA wallet signing: wallet approves the proposal in TX2
-    if (IS_SOLANA_MOBILE && walletPubkey) {
-      console.log('[VaultTx] MWA signing TX2...');
-      await signTransactionsWithWallet([tx1, tx2, tx3, tx4], [1], walletPubkey);
+    // --- Signing ---
+    if (seekerMode) {
+      // Seeker: device signs TX2 (approval), MWA signs ALL TXs (payer + approval)
+      await signTransactionNatively(tx2, [
+        { pubkey: devicePubkey, signFn: signWithDevice },
+      ]);
+      console.log('[VaultTx] MWA signing all TXs...');
+      await signTransactionsWithWallet([tx1, tx2, tx3, tx4], [0, 1, 2, 3], walletPubkey!);
       console.log('[VaultTx] MWA signing done');
+    } else {
+      // Standard: cloud signs TX1/TX2/TX3/TX4, device signs TX2
+      await signTransactionNatively(tx1, [
+        { pubkey: cloudPubkey!, signFn: signWithCloud },
+      ]);
+      await signTransactionNatively(tx2, [
+        { pubkey: cloudPubkey!, signFn: signWithCloud },
+        { pubkey: devicePubkey, signFn: signWithDevice },
+      ]);
+      await signTransactionNatively(tx3, [
+        { pubkey: cloudPubkey!, signFn: signWithCloud },
+      ]);
+      await signTransactionNatively(tx4, [
+        { pubkey: cloudPubkey!, signFn: signWithCloud },
+      ]);
+      // MWA wallet signing: wallet approves the proposal in TX2
+      if (IS_SOLANA_MOBILE && walletPubkey) {
+        console.log('[VaultTx] MWA signing TX2...');
+        await signTransactionsWithWallet([tx1, tx2, tx3, tx4], [1], walletPubkey);
+        console.log('[VaultTx] MWA signing done');
+      }
     }
 
     // Send debug info to backend console
@@ -1054,96 +1043,34 @@ export async function executeVaultTransaction(
  */
 async function setRentCollector(
   multisigPda: PublicKey,
-  cloudPubkey: PublicKey,
-  devicePubkey: PublicKey,
+  ctx: SigningContext,
   currentTransactionIndex: bigint,
-  walletPubkey: PublicKey | null,
 ): Promise<void> {
   const transactionIndex = currentTransactionIndex + 1n;
+  const feePayer = ctx.primaryKey;
+  // Seeker: rent goes to MWA wallet. Standard: rent goes to cloud key.
+  const newRentCollector = feePayer;
 
-  const configTxIx = multisig.instructions.configTransactionCreate({
-    multisigPda,
-    transactionIndex,
-    creator: cloudPubkey,
-    rentPayer: cloudPubkey,
-    actions: [
-      {
-        __kind: 'SetRentCollector' as const,
-        newRentCollector: cloudPubkey,
-      },
-    ],
-  });
-
-  const proposalIx = multisig.instructions.proposalCreate({
-    multisigPda,
-    transactionIndex,
-    creator: cloudPubkey,
-    rentPayer: cloudPubkey,
-  });
-
-  const approveCloudIx = multisig.instructions.proposalApprove({
-    multisigPda,
-    transactionIndex,
-    member: cloudPubkey,
-  });
-
-  const approveDeviceIx = multisig.instructions.proposalApprove({
-    multisigPda,
-    transactionIndex,
-    member: devicePubkey,
-  });
-
-  const tx1Instructions = [configTxIx, proposalIx, approveCloudIx, approveDeviceIx];
-  if (IS_SOLANA_MOBILE && walletPubkey) {
-    tx1Instructions.push(multisig.instructions.proposalApprove({
-      multisigPda,
-      transactionIndex,
-      member: walletPubkey,
-    }));
-  }
-
-  const executeIx = multisig.instructions.configTransactionExecute({
-    multisigPda,
-    transactionIndex,
-    member: cloudPubkey,
-    rentPayer: cloudPubkey,
-  });
+  const tx1Instructions: TransactionInstruction[] = [
+    multisig.instructions.configTransactionCreate({
+      multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer,
+      actions: [{ __kind: 'SetRentCollector' as const, newRentCollector }],
+    }),
+    multisig.instructions.proposalCreate({ multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer }),
+    ...buildApprovalIxs(ctx, multisigPda, transactionIndex),
+  ];
 
   const luts = await getLuts(connection);
   const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
-  // TX 1: create + propose + approve×N
-  const msg1 = new TransactionMessage({
-    payerKey: cloudPubkey,
-    recentBlockhash: blockhash,
-    instructions: tx1Instructions,
-  }).compileToV0Message(luts);
+  const msg1 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx1Instructions }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
-  await signTransactionNatively(tx1, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-    { pubkey: devicePubkey, signFn: signWithDevice },
-  ]);
 
-  // TX 2: execute + Jito tip
-  const msg2 = new TransactionMessage({
-    payerKey: cloudPubkey,
-    recentBlockhash: blockhash,
-    instructions: [executeIx, jitoTipIx(cloudPubkey)],
-  }).compileToV0Message(luts);
+  const executeIx = multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: feePayer, rentPayer: feePayer });
+  const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: [executeIx, jitoTipIx(feePayer)] }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
-  await signTransactionNatively(tx2, [
-    { pubkey: cloudPubkey, signFn: signWithCloud },
-  ]);
 
-  // MWA wallet signing: wallet approves the proposal in TX1
-  if (IS_SOLANA_MOBILE && walletPubkey) {
-    await signTransactionsWithWallet([tx1, tx2], [0], walletPubkey);
-  }
-
-  const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');
-  const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
-
-  await apiService.sendBundle([tx1Base64, tx2Base64]);
+  await signAndSendConfigBundle(ctx, tx1, tx2);
 }
 
 /**
@@ -1159,38 +1086,15 @@ export async function reclaimRent(
   onProgress?: (msg: string) => void,
 ): Promise<{ closed: number; skipped: number; failed: number; cancelled: number }> {
   const multisigPda = new PublicKey(multisigAddress);
-
-  const cloudPubBase58 = await getCloudPublicKey();
-  const devicePubBase58 = await getDevicePublicKey();
-  if (!cloudPubBase58 || !devicePubBase58) {
-    logError('squads_reclaim_rent', 'keypairs_not_found');
-    throw new Error('Signing keypairs not found.');
-  }
-  const cloudPubkey = new PublicKey(cloudPubBase58);
-  const devicePubkey = new PublicKey(devicePubBase58);
-
-  // Get wallet address for MWA signing (if Solana Mobile)
-  let walletPubkey: PublicKey | null = null;
-  if (IS_SOLANA_MOBILE) {
-    const vaultData = await getVault();
-    if (vaultData?.walletAddress) {
-      walletPubkey = new PublicKey(vaultData.walletAddress);
-    }
-  }
+  const ctx = await getSigningContext('squads_reclaim_rent');
+  const feePayer = ctx.primaryKey;
 
   let acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
 
   // Step 1: Ensure rentCollector is set
   if (!acct.rentCollector) {
     onProgress?.('Setting rent collector...');
-    await setRentCollector(
-      multisigPda,
-      cloudPubkey,
-      devicePubkey,
-      BigInt(acct.transactionIndex.toString()),
-      walletPubkey,
-    );
-    // Re-fetch after setting
+    await setRentCollector(multisigPda, ctx, BigInt(acct.transactionIndex.toString()));
     acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
     if (!acct.rentCollector) {
       logError('squads_reclaim_rent', 'set_rent_collector_failed');
@@ -1201,7 +1105,6 @@ export async function reclaimRent(
   const rentCollector = new PublicKey(acct.rentCollector!);
   const updatedTotal = Number(acct.transactionIndex.toString());
 
-  // Account discriminators (first 8 bytes) to detect transaction type
   const VAULT_TX_DISC = [168, 250, 162, 100, 81, 14, 162, 207];
   const CONFIG_TX_DISC = [94, 8, 4, 35, 113, 139, 139, 112];
 
@@ -1210,14 +1113,10 @@ export async function reclaimRent(
   let failed = 0;
   let cancelled = 0;
 
-  // Step 2: Cancel any Active/Approved proposals so they become closeable
   const CLOSEABLE_STATUSES = ['Executed', 'Rejected', 'Cancelled'];
   const CANCELLABLE_STATUSES = ['Active', 'Approved'];
 
-  interface CloseableAccount {
-    txIndex: bigint;
-    isVaultTx: boolean;
-  }
+  interface CloseableAccount { txIndex: bigint; isVaultTx: boolean; }
   const closeable: CloseableAccount[] = [];
   const luts = await getLuts(connection);
 
@@ -1226,63 +1125,53 @@ export async function reclaimRent(
     const [transactionPda] = multisig.getTransactionPda({ multisigPda, index: txIndex });
 
     const txAccountInfo = await connection.getAccountInfo(transactionPda);
-    if (!txAccountInfo) {
-      skipped++;
-      continue;
-    }
+    if (!txAccountInfo) { skipped++; continue; }
 
-    // Check proposal status
     const [proposalPda] = multisig.getProposalPda({ multisigPda, transactionIndex: txIndex });
     let status: string;
     try {
       const proposal = await multisig.accounts.Proposal.fromAccountAddress(connection, proposalPda);
       status = proposal.status.__kind;
-    } catch {
-      skipped++;
-      continue;
-    }
+    } catch { skipped++; continue; }
 
     // Cancel Active/Approved proposals first
     if (CANCELLABLE_STATUSES.includes(status)) {
       onProgress?.(`Cancelling proposal ${i}/${updatedTotal} (status: ${status})...`);
       try {
-        const cancelIxs: TransactionInstruction[] = [
-          multisig.instructions.proposalCancel({
-            multisigPda,
-            transactionIndex: txIndex,
-            member: cloudPubkey,
-          }),
-          multisig.instructions.proposalCancel({
-            multisigPda,
-            transactionIndex: txIndex,
-            member: devicePubkey,
-          }),
-        ];
-        if (IS_SOLANA_MOBILE && walletPubkey) {
+        const cancelIxs: TransactionInstruction[] = [];
+        if (ctx.seekerMode) {
           cancelIxs.push(
-            multisig.instructions.proposalCancel({
-              multisigPda,
-              transactionIndex: txIndex,
-              member: walletPubkey,
-            }),
+            multisig.instructions.proposalCancel({ multisigPda, transactionIndex: txIndex, member: ctx.walletPubkey! }),
+            multisig.instructions.proposalCancel({ multisigPda, transactionIndex: txIndex, member: ctx.devicePubkey }),
           );
+        } else {
+          cancelIxs.push(
+            multisig.instructions.proposalCancel({ multisigPda, transactionIndex: txIndex, member: ctx.cloudPubkey! }),
+            multisig.instructions.proposalCancel({ multisigPda, transactionIndex: txIndex, member: ctx.devicePubkey }),
+          );
+          if (IS_SOLANA_MOBILE && ctx.walletPubkey) {
+            cancelIxs.push(multisig.instructions.proposalCancel({ multisigPda, transactionIndex: txIndex, member: ctx.walletPubkey }));
+          }
         }
-        cancelIxs.push(jitoTipIx(cloudPubkey));
+        cancelIxs.push(jitoTipIx(feePayer));
 
         const { blockhash } = await connection.getLatestBlockhash('confirmed');
-        const msg = new TransactionMessage({
-          payerKey: cloudPubkey,
-          recentBlockhash: blockhash,
-          instructions: cancelIxs,
-        }).compileToV0Message(luts);
+        const msg = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: cancelIxs }).compileToV0Message(luts);
         const tx = new VersionedTransaction(msg);
-        await signTransactionNatively(tx, [
-          { pubkey: cloudPubkey, signFn: signWithCloud },
-          { pubkey: devicePubkey, signFn: signWithDevice },
-        ]);
-        if (IS_SOLANA_MOBILE && walletPubkey) {
-          await signTransactionsWithWallet([tx], [0], walletPubkey);
+
+        if (ctx.seekerMode) {
+          await signTransactionNatively(tx, [{ pubkey: ctx.devicePubkey, signFn: signWithDevice }]);
+          await signTransactionsWithWallet([tx], [0], ctx.walletPubkey!);
+        } else {
+          await signTransactionNatively(tx, [
+            { pubkey: ctx.cloudPubkey!, signFn: signWithCloud },
+            { pubkey: ctx.devicePubkey, signFn: signWithDevice },
+          ]);
+          if (IS_SOLANA_MOBILE && ctx.walletPubkey) {
+            await signTransactionsWithWallet([tx], [0], ctx.walletPubkey);
+          }
         }
+
         await apiService.sendBundle([Buffer.from(tx.serialize()).toString('base64')]);
         cancelled++;
         status = 'Cancelled';
@@ -1300,21 +1189,18 @@ export async function reclaimRent(
       continue;
     }
 
-    // Detect account type from discriminator
     const disc = Array.from(txAccountInfo.data.slice(0, 8));
     const isVaultTx = disc.every((b, idx) => b === VAULT_TX_DISC[idx]);
     const isConfigTx = disc.every((b, idx) => b === CONFIG_TX_DISC[idx]);
-
     if (!isVaultTx && !isConfigTx) {
       onProgress?.(`Skipping ${i}/${updatedTotal} (unknown type)`);
       skipped++;
       continue;
     }
-
     closeable.push({ txIndex, isVaultTx });
   }
 
-  // Step 3: Batch close in groups of up to 5 via Jito bundles
+  // Step 3: Batch close via Jito bundles
   const BATCH_SIZE = 1;
   for (let b = 0; b < closeable.length; b += BATCH_SIZE) {
     const batch = closeable.slice(b, b + BATCH_SIZE);
@@ -1327,32 +1213,19 @@ export async function reclaimRent(
       for (let t = 0; t < batch.length; t++) {
         const { txIndex, isVaultTx } = batch[t];
         const closeIx = isVaultTx
-          ? multisig.instructions.vaultTransactionAccountsClose({
-              multisigPda,
-              transactionIndex: txIndex,
-              rentCollector,
-            })
-          : multisig.instructions.configTransactionAccountsClose({
-              multisigPda,
-              transactionIndex: txIndex,
-              rentCollector,
-            });
+          ? multisig.instructions.vaultTransactionAccountsClose({ multisigPda, transactionIndex: txIndex, rentCollector })
+          : multisig.instructions.configTransactionAccountsClose({ multisigPda, transactionIndex: txIndex, rentCollector });
 
-        // Add Jito tip to last tx in batch
-        const ixs = t === batch.length - 1
-          ? [closeIx, jitoTipIx(cloudPubkey)]
-          : [closeIx];
+        const ixs = t === batch.length - 1 ? [closeIx, jitoTipIx(feePayer)] : [closeIx];
 
-        const msg = new TransactionMessage({
-          payerKey: cloudPubkey,
-          recentBlockhash: blockhash,
-          instructions: ixs,
-        }).compileToV0Message(luts);
+        const msg = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message(luts);
         const tx = new VersionedTransaction(msg);
 
-        await signTransactionNatively(tx, [
-          { pubkey: cloudPubkey, signFn: signWithCloud },
-        ]);
+        if (ctx.seekerMode) {
+          await signTransactionsWithWallet([tx], [0], ctx.walletPubkey!);
+        } else {
+          await signTransactionNatively(tx, [{ pubkey: ctx.cloudPubkey!, signFn: signWithCloud }]);
+        }
 
         serializedTxs.push(Buffer.from(tx.serialize()).toString('base64'));
       }

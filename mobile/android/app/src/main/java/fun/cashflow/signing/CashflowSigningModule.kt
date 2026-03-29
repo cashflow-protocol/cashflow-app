@@ -62,6 +62,11 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
   override fun getName(): String = NAME
 
+  @ReactMethod
+  override fun isGmsAvailable(promise: Promise) {
+    promise.resolve(isGmsAvailable())
+  }
+
   // --- PIN cache for cloud key encryption/decryption ---
   private var cachedPin: String? = null
 

@@ -27,6 +27,7 @@ import {
 import { saveVault, VaultData } from '../services/vaultStorage';
 import { buildAndSubmitRecoveryProposal, executeRecoveryProposal } from '../services/recoveryService';
 import { backupCloudKeyToBlockStore } from '../services/keypairStorage';
+import { IS_SOLANA_MOBILE } from '../config/constants';
 import apiService from '../services/apiService';
 import Toast from '../components/Toast';
 
@@ -216,8 +217,8 @@ export default function VaultRecoveryExecutionScreen({
       };
       await saveVault(vaultData);
 
-      // Back up cloud key to Google Block Store (Android only, fire-and-forget)
-      if (pin) {
+      // Back up cloud key to Google Block Store (Android only, not on Seeker)
+      if (pin && !IS_SOLANA_MOBILE) {
         backupCloudKeyToBlockStore(pin).catch(err => {
           console.warn('[Recovery] Block Store backup failed:', err);
         });

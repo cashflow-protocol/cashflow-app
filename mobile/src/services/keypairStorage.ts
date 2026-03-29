@@ -195,3 +195,12 @@ export async function hasBlockStoreBackup(): Promise<boolean> {
   if (!NativeCashflowSigning) return false;
   return NativeCashflowSigning.hasBlockStoreBackup();
 }
+
+/**
+ * Check if Google Play Services is available on this device.
+ * Always returns false on iOS.
+ */
+export async function isGmsAvailable(): Promise<boolean> {
+  if (!NativeCashflowSigning) return false;
+  return NativeCashflowSigning.isGmsAvailable();
+}

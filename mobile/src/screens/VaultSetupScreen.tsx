@@ -20,7 +20,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import authService from '../services/authService';
 import { deleteAllKeypairs, backupCloudKeyToBlockStore } from '../services/keypairStorage';
 import Toast from '../components/Toast';
-import { getMinLamportsForVault } from '../config/constants';
+import { getMinLamportsForVault, IS_SOLANA_MOBILE } from '../config/constants';
 import { logScreenView, logVaultSetupStart, logVaultSetupWalletConnected, logVaultSetupSuccess, logVaultSetupError, logVaultSetupInsufficientBalance } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -109,10 +109,10 @@ export default function VaultSetupScreen({ inviteCode, pin, onComplete, onBack, 
       authService.setInviteCode(inviteCode);
 
       setStatusText('Creating vault...');
-      await createMultisig(account.publicKey as string);
+      await createMultisig(account.publicKey as string, IS_SOLANA_MOBILE);
 
-      // Back up cloud key to Google Block Store (Android only, fire-and-forget)
-      if (pin) {
+      // Back up cloud key to Google Block Store (Android only, not on Seeker)
+      if (pin && !IS_SOLANA_MOBILE) {
         backupCloudKeyToBlockStore(pin).catch(err => {
           console.warn('[VaultSetup] Block Store backup failed:', err);
         });
