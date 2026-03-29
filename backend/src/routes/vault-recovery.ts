@@ -550,6 +550,18 @@ router.post('/build-approve-tx', async (req: Request, res: Response) => {
     const memberPubkey = new PublicKey(memberAddress);
     const transactionIndex = BigInt(txIdx);
 
+    // Verify proposal exists on-chain before building approve TX
+    const [proposalPda] = multisigLib.getProposalPda({ multisigPda, transactionIndex });
+    try {
+      await multisigLib.accounts.Proposal.fromAccountAddress(conn, proposalPda);
+    } catch {
+      res.status(400).json({
+        success: false,
+        error: 'Proposal not found on-chain. TX1 may not have landed — the recovery proposal needs to be recreated.',
+      });
+      return;
+    }
+
     const approveIx = multisigLib.instructions.proposalApprove({
       multisigPda,
       transactionIndex,
@@ -614,6 +626,18 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
     const multisigPda = new PublicKey(proposal.multisigAddress);
     const memberPubkey = new PublicKey(memberAddress);
     const transactionIndex = BigInt(proposal.transactionIndex);
+
+    // Verify proposal exists on-chain before building approve TX
+    const [proposalPda] = multisigLib.getProposalPda({ multisigPda, transactionIndex });
+    try {
+      await multisigLib.accounts.Proposal.fromAccountAddress(conn, proposalPda);
+    } catch {
+      res.status(400).json({
+        success: false,
+        error: 'Proposal not found on-chain. TX1 may not have landed — the recovery proposal needs to be recreated.',
+      });
+      return;
+    }
 
     // Build proposalApprove instruction with priority fees
     const approveIx = multisigLib.instructions.proposalApprove({

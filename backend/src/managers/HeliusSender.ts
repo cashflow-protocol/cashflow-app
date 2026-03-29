@@ -84,6 +84,17 @@ export class HeliusSender {
         { signature, blockhash, lastValidBlockHeight },
         'confirmed',
       );
+
+      // Verify the transaction actually succeeded (not just included)
+      const txResult = await conn.getTransaction(signature, {
+        commitment: 'confirmed',
+        maxSupportedTransactionVersion: 0,
+      });
+      if (txResult?.meta?.err) {
+        console.error(`[HeliusSender] TX landed with error: ${signature}`, txResult.meta.err);
+        throw new Error(`Transaction failed on-chain: ${JSON.stringify(txResult.meta.err)}`);
+      }
+
       console.log(`[HeliusSender] TX confirmed: ${signature}`);
       return signature;
     } finally {
