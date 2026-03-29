@@ -98,7 +98,7 @@ export class DriftManager {
   }
 
   /**
-   * Initialize the DriftClient by subscribing to on-chain accounts.
+   * Initialize the DriftClient by subscribing to onchain accounts.
    * Must be called once before getEarnTokens().
    */
   async initialize(): Promise<void> {

@@ -226,7 +226,7 @@ export class JupiterManager {
     console.log(`[JupiterManager.getDepositInstructions] Jupiter returned ${response.data.instructions.length} ixs, after replacement: ${jupiterIxs.length}`);
 
     // For SOL deposits: create + fund the wSOL ATA before calling Jupiter's deposit.
-    // Jupiter's on-chain program expects a pre-funded depositorTokenAccount (wSOL ATA).
+    // Jupiter's onchain program expects a pre-funded depositorTokenAccount (wSOL ATA).
     // These instructions are built directly with the real owner — no replacement needed.
     if (mint === SOL_MINT) {
       const signer = this.createNoopSigner(ownerAddress);
@@ -507,7 +507,7 @@ export class JupiterManager {
       }
     }
 
-    // Diagnostic: check the deposit mint's on-chain owner to detect Token2022
+    // Diagnostic: check the deposit mint's onchain owner to detect Token2022
     try {
       const mintInfo = await this.rpc.getAccountInfo(address(depositMint), { encoding: 'base64' }).send();
       const mintOwner = mintInfo.value?.owner;

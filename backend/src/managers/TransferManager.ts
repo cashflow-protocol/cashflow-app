@@ -22,7 +22,7 @@ const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
 
 export class TransferManager {
   /**
-   * Determine the token program for a given mint by checking the on-chain account owner.
+   * Determine the token program for a given mint by checking the onchain account owner.
    */
   private async getTokenProgram(mint: string): Promise<Address> {
     const accountInfo = await rpc.getAccountInfo(address(mint), { encoding: 'base64' }).send();

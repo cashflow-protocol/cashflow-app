@@ -91,7 +91,7 @@ export interface CreateMultisigResult {
  * Build vaultTransactionExecute instruction WITHOUT an RPC read.
  *
  * Uses the SDK's own serialisation to produce the exact same inner-message
- * byte layout that vaultTransactionCreate stores on-chain (which allows
+ * byte layout that vaultTransactionCreate stores onchain (which allows
  * program IDs to live in LUTs via `compileToWrappedMessageV0`).
  * Standard web3.js `compileToV0Message` keeps program IDs in static keys,
  * so using it here would produce a mismatched account list.
@@ -108,7 +108,7 @@ function buildVaultExecuteIx(
   const [transactionPda] = multisig.getTransactionPda({ multisigPda, index: transactionIndex });
 
   // Serialize with SDK's custom compilation (program IDs can go into LUTs),
-  // then deserialize to get the exact account layout stored on-chain.
+  // then deserialize to get the exact account layout stored onchain.
   const messageBytes = multisig.utils.transactionMessageToMultisigTransactionMessageBytes({
     message: innerMessage,
     addressLookupTableAccounts: luts.length > 0 ? luts : undefined,
@@ -120,7 +120,7 @@ function buildVaultExecuteIx(
 
   const accountMetas: { pubkey: PublicKey; isWritable: boolean; isSigner: boolean }[] = [];
 
-  // 1. LUT account keys — needed for on-chain validation
+  // 1. LUT account keys — needed for onchain validation
   for (const lookup of msg.addressTableLookups) {
     accountMetas.push({
       pubkey: lookup.accountKey,
@@ -415,7 +415,7 @@ export async function createMultisig(
 }
 
 /**
- * Fetch on-chain multisig account data.
+ * Fetch onchain multisig account data.
  */
 export async function getMultisigInfo(multisigAddress: string): Promise<MultisigInfo> {
   const multisigPda = new PublicKey(multisigAddress);

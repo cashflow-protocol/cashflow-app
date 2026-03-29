@@ -189,7 +189,7 @@ export default function RecoveryPage() {
       await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: privySignerAddress, signature: 'on-chain' }),
+        body: JSON.stringify({ address: privySignerAddress, signature: 'onchain' }),
       }).catch(() => {});
 
       setPrivyModalVisible(false);
@@ -268,11 +268,11 @@ export default function RecoveryPage() {
         throw new Error(err.error || 'Failed to send transaction');
       }
 
-      // 3. Notify backend that this signer approved on-chain
+      // 3. Notify backend that this signer approved onchain
       await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: addr, signature: 'on-chain' }),
+        body: JSON.stringify({ address: addr, signature: 'onchain' }),
       }).catch(() => {});
 
       setSigned(true);

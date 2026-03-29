@@ -284,7 +284,7 @@
         btn.textContent = 'Waiting for wallet...';
         const signedTx = await provider.signTransaction(tx);
 
-        // Send signed TX on-chain via backend
+        // Send signed TX onchain via backend
         btn.textContent = 'Sending transaction...';
         const signedBase64 = btoa(String.fromCharCode(...signedTx.serialize()));
         const sendRes = await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/send-approve-tx`, {
@@ -295,7 +295,7 @@
 
         if (!sendRes.ok) {
           const err = await sendRes.json();
-          throw new Error(err.error || 'Transaction failed to land on-chain');
+          throw new Error(err.error || 'Transaction failed to land onchain');
         }
 
         // Show success

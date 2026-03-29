@@ -102,7 +102,7 @@ router.post('/find-vault-by-address', async (req: Request, res: Response) => {
     let multisigData: any;
     let vaultAddress: string;
 
-    // Try as multisig PDA first (on-chain lookup)
+    // Try as multisig PDA first (onchain lookup)
     try {
       multisigPda = new PublicKey(address);
       multisigData = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
@@ -235,7 +235,20 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
     const walletPubkey = new PublicKey(walletAddress);
     const { Permissions } = multisigLib.types;
 
-    // Get current transaction index from on-chain
+    // Check wallet has enough SOL for tx fees + rent + tip
+    const ESTIMATED_PROPOSAL_FEE = 15_000_000; // ~0.015 SOL for rent + priority + tip
+    const walletBalance = await conn.getBalance(walletPubkey);
+    if (walletBalance < ESTIMATED_PROPOSAL_FEE) {
+      const required = (ESTIMATED_PROPOSAL_FEE / 1e9).toFixed(4);
+      const available = (walletBalance / 1e9).toFixed(4);
+      res.status(400).json({
+        success: false,
+        error: `Insufficient balance to create recovery proposal. Need at least ${required} SOL but only have ${available} SOL. Please fund ${walletAddress} and try again.`,
+      });
+      return;
+    }
+
+    // Get current transaction index from onchain
     const multisigAccount = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
     const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
@@ -395,7 +408,7 @@ router.post('/send-recovery-tx', async (req: Request, res: Response) => {
 
 /**
  * POST /create-proposal
- * Store a recovery proposal after TX1 has been confirmed on-chain.
+ * Store a recovery proposal after TX1 has been confirmed onchain.
  */
 router.post('/create-proposal', async (req: Request, res: Response) => {
   try {
@@ -461,7 +474,7 @@ router.post('/create-proposal', async (req: Request, res: Response) => {
 /**
  * GET /proposal/:proposalId
  * Get proposal status, required signers, and collected signatures.
- * Verifies approval status on-chain from the Squads proposal account.
+ * Verifies approval status onchain from the Squads proposal account.
  */
 router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
   try {
@@ -471,7 +484,7 @@ router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
       return;
     }
 
-    // Fetch on-chain approval status from the Squads proposal account
+    // Fetch onchain approval status from the Squads proposal account
     let onChainApprovals = new Set<string>();
     try {
       const { Connection, PublicKey } = await import('@solana/web3.js');
@@ -488,15 +501,15 @@ router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
         (proposalAccount.approved || []).map((pk: InstanceType<typeof PublicKey>) => pk.toBase58()),
       );
     } catch (err) {
-      // If on-chain fetch fails (e.g. proposal not yet created), fall back to DB
-      console.warn('[Recovery] Failed to fetch on-chain proposal status, falling back to DB:', (err as Error).message);
+      // If onchain fetch fails (e.g. proposal not yet created), fall back to DB
+      console.warn('[Recovery] Failed to fetch onchain proposal status, falling back to DB:', (err as Error).message);
       onChainApprovals = new Set(proposal.collectedSignatures.map(s => s.address));
     }
 
     const signaturesCollected = onChainApprovals.size;
     const isReady = signaturesCollected >= proposal.threshold;
 
-    // Update DB status if on-chain shows ready but DB doesn't
+    // Update DB status if onchain shows ready but DB doesn't
     if (isReady && proposal.status === RecoveryProposalStatus.PENDING) {
       proposal.status = RecoveryProposalStatus.READY;
       await proposal.save();
@@ -550,14 +563,14 @@ router.post('/build-approve-tx', async (req: Request, res: Response) => {
     const memberPubkey = new PublicKey(memberAddress);
     const transactionIndex = BigInt(txIdx);
 
-    // Verify proposal exists on-chain before building approve TX
+    // Verify proposal exists onchain before building approve TX
     const [proposalPda] = multisigLib.getProposalPda({ multisigPda, transactionIndex });
     try {
       await multisigLib.accounts.Proposal.fromAccountAddress(conn, proposalPda);
     } catch {
       res.status(400).json({
         success: false,
-        error: 'Proposal not found on-chain. TX1 may not have landed — the recovery proposal needs to be recreated.',
+        error: 'Proposal not found onchain. TX1 may not have landed — the recovery proposal needs to be recreated.',
       });
       return;
     }
@@ -627,14 +640,14 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
     const memberPubkey = new PublicKey(memberAddress);
     const transactionIndex = BigInt(proposal.transactionIndex);
 
-    // Verify proposal exists on-chain before building approve TX
+    // Verify proposal exists onchain before building approve TX
     const [proposalPda] = multisigLib.getProposalPda({ multisigPda, transactionIndex });
     try {
       await multisigLib.accounts.Proposal.fromAccountAddress(conn, proposalPda);
     } catch {
       res.status(400).json({
         success: false,
-        error: 'Proposal not found on-chain. TX1 may not have landed — the recovery proposal needs to be recreated.',
+        error: 'Proposal not found onchain. TX1 may not have landed — the recovery proposal needs to be recreated.',
       });
       return;
     }
@@ -678,7 +691,7 @@ router.post('/proposal/:proposalId/build-approve-tx', async (req: Request, res: 
 
 /**
  * POST /proposal/:proposalId/send-approve-tx
- * Send a signed proposalApprove transaction on-chain.
+ * Send a signed proposalApprove transaction onchain.
  * Body: { signedTransaction: string (base64) }
  */
 router.post('/proposal/:proposalId/send-approve-tx', async (req: Request, res: Response) => {
@@ -696,7 +709,7 @@ router.post('/proposal/:proposalId/send-approve-tx', async (req: Request, res: R
     const signature = await HeliusSender.sendAndConfirm(signedTransaction);
     console.log(`Approve TX confirmed: ${signature}`);
 
-    // Update proposal signer status from on-chain
+    // Update proposal signer status from onchain
     try {
       const proposal = await RecoveryProposalModel.findById(req.params.proposalId);
       if (proposal) {
@@ -859,7 +872,7 @@ router.post('/proposal/:proposalId/sign-privy', async (req: Request, res: Respon
     // Sign with Privy server-owned wallet
     const { signedTransaction } = await signTransactionWithPrivy(address, unsignedBase64);
 
-    // Send on-chain via HeliusSender
+    // Send onchain via HeliusSender
     const signature = await HeliusSender.sendAndConfirm(signedTransaction);
 
     // Mark as signed in proposal
@@ -931,7 +944,7 @@ router.get('/proposal/:proposalId/assembled-tx', async (req: Request, res: Respo
 
 /**
  * POST /proposal/:proposalId/mark-executed
- * Mark proposal as executed after on-chain confirmation.
+ * Mark proposal as executed after onchain confirmation.
  */
 router.post('/proposal/:proposalId/mark-executed', async (req: Request, res: Response) => {
   try {
@@ -943,7 +956,7 @@ router.post('/proposal/:proposalId/mark-executed', async (req: Request, res: Res
       return;
     }
 
-    // Verify on-chain that the new members were actually added
+    // Verify onchain that the new members were actually added
     try {
       const { Connection, PublicKey } = await import('@solana/web3.js');
       const multisigLib = await import('@sqds/multisig');
@@ -960,7 +973,7 @@ router.post('/proposal/:proposalId/mark-executed', async (req: Request, res: Res
         .filter(a => !onChainMembers.has(a.memberAddress));
 
       if (missingMembers.length > 0) {
-        console.error('[Recovery] Execute TX confirmed but members not added on-chain:', {
+        console.error('[Recovery] Execute TX confirmed but members not added onchain:', {
           signature,
           multisig: proposal.multisigAddress,
           missing: missingMembers.map(m => m.memberAddress),
@@ -968,18 +981,18 @@ router.post('/proposal/:proposalId/mark-executed', async (req: Request, res: Res
         });
         res.status(400).json({
           success: false,
-          error: 'Execute transaction confirmed but new members were not added on-chain. The transaction may have failed silently.',
+          error: 'Execute transaction confirmed but new members were not added onchain. The transaction may have failed silently.',
         });
         return;
       }
 
-      console.log('[Recovery] Verified: new members added on-chain', {
+      console.log('[Recovery] Verified: new members added onchain', {
         signature,
         multisig: proposal.multisigAddress,
         addedMembers: proposal.actions.map(a => a.memberAddress),
       });
     } catch (verifyErr) {
-      console.warn('[Recovery] Could not verify on-chain members, marking as executed anyway:', (verifyErr as Error).message);
+      console.warn('[Recovery] Could not verify onchain members, marking as executed anyway:', (verifyErr as Error).message);
     }
 
     proposal.status = RecoveryProposalStatus.EXECUTED;
@@ -1044,7 +1057,7 @@ router.post('/proposal/:proposalId/send-bundle', async (req: Request, res: Respo
 /**
  * GET /proposal/:proposalId/build-execute-tx
  * Build a fresh execute transaction with a current blockhash.
- * TX1 (create + propose + approvals) is already on-chain.
+ * TX1 (create + propose + approvals) is already onchain.
  * This returns an unsigned TX2 for the mobile app to sign and send.
  */
 router.get('/proposal/:proposalId/build-execute-tx', async (req: Request, res: Response) => {
@@ -1081,6 +1094,22 @@ router.get('/proposal/:proposalId/build-execute-tx', async (req: Request, res: R
 
     // Check for rent collector
     const multisigAccount = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
+
+    // Check MWA wallet has enough balance for fees + cloud key funding
+    const ESTIMATED_FEE = 10_000_000; // ~0.01 SOL for tx fees + priority + tip
+    const cloudFundAmount = proposal.newCloudKey ? TARGET_CLOUD_BALANCE : 0;
+    const requiredBalance = cloudFundAmount + ESTIMATED_FEE;
+
+    const walletBalance = await conn.getBalance(memberPubkey);
+    if (walletBalance < requiredBalance) {
+      const required = (requiredBalance / 1e9).toFixed(4);
+      const available = (walletBalance / 1e9).toFixed(4);
+      res.status(400).json({
+        success: false,
+        error: `Insufficient balance on your wallet. Need at least ${required} SOL but only have ${available} SOL. Please fund ${memberPubkey.toBase58()} and try again.`,
+      });
+      return;
+    }
 
     const instructions = [
       ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),

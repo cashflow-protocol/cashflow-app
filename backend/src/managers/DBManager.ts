@@ -103,7 +103,7 @@ export class DBManager {
   }
 
   /**
-   * Update a transaction record with its on-chain signature after sending
+   * Update a transaction record with its onchain signature after sending
    */
   async submitTransaction(transactionId: string, signature: string) {
     return TransactionModel.findByIdAndUpdate(transactionId, {

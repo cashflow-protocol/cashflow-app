@@ -128,7 +128,7 @@ export async function buildAndSubmitRecoveryProposal(
   }
 
   // Send signed TX1 via backend (Helius SWQoS for reliable landing)
-  onProgress?.('Sending proposal on-chain...');
+  onProgress?.('Sending proposal onchain...');
   const signedTx1Base64 = Buffer.from(signedBytes[0]).toString('base64');
   const sendRes = await fetch(`${API_CONFIG.baseUrl}/vault-recovery/v1/send-recovery-tx`, {
     method: 'POST',
@@ -140,7 +140,7 @@ export async function buildAndSubmitRecoveryProposal(
     throw new Error(err.error || 'Failed to send recovery transaction');
   }
 
-  onProgress?.('Proposal confirmed on-chain...');
+  onProgress?.('Proposal confirmed onchain...');
 
   // Step 5: Determine required signers
   // Try local recovery emails first, then ask backend for Privy lookups
@@ -190,11 +190,11 @@ export async function buildAndSubmitRecoveryProposal(
     requiredSigners.push({ address: addr, type, label, email });
   }
 
-  // MWA + cloud key already signed TX1 on-chain, so mark them as signed
+  // MWA + cloud key already signed TX1 onchain, so mark them as signed
   const collectedSignatures: Array<{ address: string; signature: string }> = [];
-  collectedSignatures.push({ address: walletAddress, signature: 'on-chain' });
+  collectedSignatures.push({ address: walletAddress, signature: 'onchain' });
   if (cloudKeyIsMember && existingCloudKey) {
-    collectedSignatures.push({ address: existingCloudKey, signature: 'on-chain' });
+    collectedSignatures.push({ address: existingCloudKey, signature: 'onchain' });
   }
 
   // Step 6: Store proposal on backend
@@ -233,7 +233,7 @@ export async function buildAndSubmitRecoveryProposal(
 /**
  * Execute the recovery proposal after threshold is met.
  *
- * TX1 (create + propose + approvals) is already confirmed on-chain.
+ * TX1 (create + propose + approvals) is already confirmed onchain.
  * This only needs to send a fresh execute transaction (TX2) signed by the
  * initiating wallet.
  */
@@ -282,7 +282,7 @@ export async function executeRecoveryProposal(
   const result = await sendRes.json();
   const txSignature = result.data?.signature || 'confirmed';
 
-  // Mark proposal as executed (verifies on-chain that members were added)
+  // Mark proposal as executed (verifies onchain that members were added)
   const markRes = await fetch(
     `${API_CONFIG.baseUrl}/vault-recovery/v1/proposal/${proposalId}/mark-executed`,
     {
@@ -293,7 +293,7 @@ export async function executeRecoveryProposal(
   );
   if (!markRes.ok) {
     const markErr = await markRes.json().catch(() => ({ error: 'Failed' }));
-    throw new Error(markErr.error || 'Recovery transaction may have failed on-chain');
+    throw new Error(markErr.error || 'Recovery transaction may have failed onchain');
   }
 
   onProgress?.('Confirming...');

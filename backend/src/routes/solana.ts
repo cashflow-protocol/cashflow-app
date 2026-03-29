@@ -60,7 +60,7 @@ router.post('/submit-bundle-signatures', async (req: Request, res: Response) => 
   }
 });
 
-// POST /solana/v1/send - Send a signed transaction on-chain
+// POST /solana/v1/send - Send a signed transaction onchain
 router.post('/send', async (req: Request, res: Response) => {
   try {
     const { transaction, transactionId } = req.body;
@@ -106,7 +106,7 @@ router.post('/send', async (req: Request, res: Response) => {
       })
       .send();
 
-    // Update transaction record with on-chain signature
+    // Update transaction record with onchain signature
     if (transactionId) {
       await dbManager.submitTransaction(transactionId, signature);
     }

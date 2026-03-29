@@ -66,13 +66,18 @@ export class HeliusSender {
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
     const conn = new Connection(rpcUrl, 'confirmed');
 
+    // Extract blockhash from the actual transaction for accurate confirmation
+    const txBytes = Buffer.from(base64Tx, 'base64');
+    const tx = VersionedTransaction.deserialize(txBytes);
+    const txBlockhash = tx.message.recentBlockhash;
+
     // Send initial
     console.log(`[HeliusSender] Sending to: ${HELIUS_SENDER_FAST}`);
     const signature = await this.sendTransaction(base64Tx);
-    console.log(`[HeliusSender] TX sent: ${signature}`);
+    console.log(`[HeliusSender] TX sent: ${signature}, blockhash: ${txBlockhash}`);
 
-    // Get blockhash for confirmation
-    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+    // Get lastValidBlockHeight for the TX's blockhash
+    const { lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
 
     // Resend aggressively while waiting for confirmation
     const resendInterval = setInterval(() => {
@@ -80,26 +85,53 @@ export class HeliusSender {
     }, 2000);
 
     try {
-      await conn.confirmTransaction(
-        { signature, blockhash, lastValidBlockHeight },
+      const confirmResult = await conn.confirmTransaction(
+        { signature, blockhash: txBlockhash, lastValidBlockHeight },
         'confirmed',
       );
 
-      // Verify the transaction actually succeeded (not just included)
+      // confirmTransaction resolves (not throws) even on TX errors
+      if (confirmResult.value.err) {
+        console.error(`[HeliusSender] TX confirmed with error: ${signature}`, confirmResult.value.err);
+        // Fetch detailed logs
+        const txResult = await conn.getTransaction(signature, {
+          commitment: 'confirmed',
+          maxSupportedTransactionVersion: 0,
+        }).catch(() => null);
+        const logs = txResult?.meta?.logMessages?.filter(l => l.includes('Error') || l.includes('failed')) || [];
+        const detail = logs.length > 0 ? ` (${logs.join('; ')})` : '';
+        throw new Error(`Transaction failed onchain: ${JSON.stringify(confirmResult.value.err)}${detail}`);
+      }
+    } catch (err: any) {
+      clearInterval(resendInterval);
+
+      // If confirmTransaction threw (e.g. blockhash expired), check if TX landed anyway
+      if (err.message?.includes('failed onchain')) throw err; // Already our error, re-throw
+
+      console.warn(`[HeliusSender] confirmTransaction error: ${err.message}, checking if TX landed...`);
       const txResult = await conn.getTransaction(signature, {
         commitment: 'confirmed',
         maxSupportedTransactionVersion: 0,
-      });
-      if (txResult?.meta?.err) {
-        console.error(`[HeliusSender] TX landed with error: ${signature}`, txResult.meta.err);
-        throw new Error(`Transaction failed on-chain: ${JSON.stringify(txResult.meta.err)}`);
+      }).catch(() => null);
+
+      if (!txResult) {
+        throw new Error('Transaction did not land onchain. It may have expired. Please try again.');
+      }
+      if (txResult.meta?.err) {
+        const logs = txResult.meta.logMessages?.filter(l => l.includes('Error') || l.includes('failed')) || [];
+        const detail = logs.length > 0 ? ` (${logs.join('; ')})` : '';
+        throw new Error(`Transaction failed onchain: ${JSON.stringify(txResult.meta.err)}${detail}`);
       }
 
-      console.log(`[HeliusSender] TX confirmed: ${signature}`);
+      // TX actually succeeded despite confirmTransaction throwing
+      console.log(`[HeliusSender] TX confirmed (recovered): ${signature}`);
       return signature;
     } finally {
       clearInterval(resendInterval);
     }
+
+    console.log(`[HeliusSender] TX confirmed: ${signature}`);
+    return signature;
   }
 
   /**

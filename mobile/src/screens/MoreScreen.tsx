@@ -195,7 +195,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
     logRemoveVaultPress();
     Alert.alert(
       'Remove Vault',
-      'This will delete the local vault data and signing keypairs. The on-chain multisig will still exist but you will lose signing access from this device.\n\nAre you sure?',
+      'This will delete the local vault data and signing keypairs. The onchain multisig will still exist but you will lose signing access from this device.\n\nAre you sure?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
