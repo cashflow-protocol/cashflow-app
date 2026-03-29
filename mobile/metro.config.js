@@ -6,7 +6,33 @@ const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
  *
  * @type {import('@react-native/metro-config').MetroConfig}
  */
-const path = require('path');
+const resolveRequestWithPackageExports = (context, moduleName, platform) => {
+  // Package exports in `isows` (a `viem` dependency) are incompatible
+  if (moduleName === 'isows') {
+    const ctx = { ...context, unstable_enablePackageExports: false };
+    return ctx.resolveRequest(ctx, moduleName, platform);
+  }
+
+  // Package exports in `zustand@4` are incompatible
+  if (moduleName.startsWith('zustand')) {
+    const ctx = { ...context, unstable_enablePackageExports: false };
+    return ctx.resolveRequest(ctx, moduleName, platform);
+  }
+
+  // Package exports in `jose` are incompatible — use browser version
+  if (moduleName === 'jose') {
+    const ctx = { ...context, unstable_conditionNames: ['browser'] };
+    return ctx.resolveRequest(ctx, moduleName, platform);
+  }
+
+  // Enable package exports for @privy-io/* (needed for RN < 0.79)
+  if (moduleName.startsWith('@privy-io/')) {
+    const ctx = { ...context, unstable_enablePackageExports: true };
+    return ctx.resolveRequest(ctx, moduleName, platform);
+  }
+
+  return context.resolveRequest(context, moduleName, platform);
+};
 
 const config = {
   resolver: {
@@ -15,20 +41,7 @@ const config = {
       stream: require.resolve('readable-stream'),
       buffer: require.resolve('buffer'),
     },
-    resolveRequest: (context, moduleName, platform) => {
-      // jose ships Node and browser builds — force the browser build in RN
-      if (moduleName === 'jose' || moduleName.startsWith('jose/')) {
-        const joseDir = path.dirname(require.resolve('jose/package.json'));
-        const browserEntry = path.join(joseDir, 'dist', 'browser', 'index.js');
-        return { filePath: browserEntry, type: 'sourceFile' };
-      }
-      // @privy-io/expo uses package exports — resolve to CJS entry without enablePackageExports
-      if (moduleName === '@privy-io/expo') {
-        const pkgDir = path.join(__dirname, 'node_modules', '@privy-io', 'expo');
-        return { filePath: path.join(pkgDir, 'dist', 'index.js'), type: 'sourceFile' };
-      }
-      return context.resolveRequest(context, moduleName, platform);
-    },
+    resolveRequest: resolveRequestWithPackageExports,
   },
 };
 
