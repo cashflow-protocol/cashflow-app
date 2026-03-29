@@ -148,11 +148,23 @@ async function signAndSendConfigBundle(
   tx2: VersionedTransaction,
 ): Promise<string> {
   if (ctx.seekerMode) {
-    // Device signs TX1 (approval), MWA signs both (payer + approval)
-    await signTransactionNatively(tx1, [
+    // Seeker: MWA signs first, then device co-signs TX1.
+    // We serialize from the MWA-returned transactions to ensure message + signatures match.
+    const serialized = [tx1, tx2].map(tx => new Uint8Array(tx.serialize()));
+    const signedBytes = await walletService.signTransactions(serialized);
+
+    const signedTx1 = VersionedTransaction.deserialize(signedBytes[0]);
+    const signedTx2 = VersionedTransaction.deserialize(signedBytes[1]);
+
+    // TX1 also needs device key signature (on MWA's message)
+    await signTransactionNatively(signedTx1, [
       { pubkey: ctx.devicePubkey, signFn: signWithDevice },
     ]);
-    await signTransactionsWithWallet([tx1, tx2], [0, 1], ctx.walletPubkey!);
+
+    const tx1Base64 = Buffer.from(signedTx1.serialize()).toString('base64');
+    const tx2Base64 = Buffer.from(signedTx2.serialize()).toString('base64');
+    await apiService.sendBundle([tx1Base64, tx2Base64]);
+    return bs58.encode(signedTx2.signatures[0]);
   } else {
     // Cloud signs both, device signs TX1
     await signTransactionNatively(tx1, [
@@ -165,6 +177,20 @@ async function signAndSendConfigBundle(
     if (IS_SOLANA_MOBILE && ctx.walletPubkey) {
       await signTransactionsWithWallet([tx1, tx2], [0], ctx.walletPubkey);
     }
+  }
+
+  // Simulate TX1 before sending to catch program errors early
+  try {
+    const sim1 = await connection.simulateTransaction(tx1, { sigVerify: false });
+    if (sim1.value.err) {
+      console.error('[ConfigBundle] TX1 simulation failed:', JSON.stringify(sim1.value.err));
+      console.error('[ConfigBundle] TX1 logs:', sim1.value.logs);
+      throw new Error(`TX1 simulation failed: ${JSON.stringify(sim1.value.err)}`);
+    }
+    console.log('[ConfigBundle] TX1 simulation OK');
+  } catch (simErr: any) {
+    if (simErr.message?.includes('simulation failed')) throw simErr;
+    console.warn('[ConfigBundle] TX1 simulation error (non-fatal):', simErr.message);
   }
 
   const tx1Base64 = Buffer.from(tx1.serialize()).toString('base64');

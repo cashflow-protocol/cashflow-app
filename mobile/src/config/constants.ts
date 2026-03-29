@@ -25,4 +25,8 @@ export function getTargetCloudBalance(): number { return _targetCloudBalance; }
 export function getVaultCreationFee(): number { return _vaultCreationFee; }
 
 /** Minimum lamports required to create a new vault */
-export function getMinLamportsForVault(): number { return _targetCloudBalance + _vaultCreationFee + 5_000_000; }
+export function getMinLamportsForVault(): number {
+  // Seeker: no cloud key funding needed — just creation fee + gas
+  if (IS_SOLANA_MOBILE) return _vaultCreationFee + 5_000_000;
+  return _targetCloudBalance + _vaultCreationFee + 5_000_000;
+}

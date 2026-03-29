@@ -306,36 +306,40 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
               {/* Keypairs */}
               {keysLoaded && (
                 <View style={[styles.keypairSection, { borderTopColor: colors.border }]}>
-                  <TouchableOpacity
-                    style={styles.keypairRow}
-                    onPress={() => cloudPubkey && copyAddress(cloudPubkey, 'cloud')}
-                    activeOpacity={cloudPubkey ? 0.6 : 1}
-                  >
-                    <Text style={[styles.keypairLabel, { color: colors.textSecondary }]}>Cloud Key</Text>
-                    {cloudPubkey ? (
-                      <View style={styles.keypairRight}>
-                        <Text style={[styles.keypairValue, { color: colors.textPrimary }]}>
-                          {truncateAddress(cloudPubkey)}
-                          {copiedField === 'cloud' ? '  Copied!' : ''}
-                        </Text>
-                        {cloudBalance !== null && (
-                          <Text style={[styles.keypairBalance, { color: colors.textSecondary }]}>{formatSol(cloudBalance)}</Text>
+                  {!vault?.seekerMode && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.keypairRow}
+                        onPress={() => cloudPubkey && copyAddress(cloudPubkey, 'cloud')}
+                        activeOpacity={cloudPubkey ? 0.6 : 1}
+                      >
+                        <Text style={[styles.keypairLabel, { color: colors.textSecondary }]}>Cloud Key</Text>
+                        {cloudPubkey ? (
+                          <View style={styles.keypairRight}>
+                            <Text style={[styles.keypairValue, { color: colors.textPrimary }]}>
+                              {truncateAddress(cloudPubkey)}
+                              {copiedField === 'cloud' ? '  Copied!' : ''}
+                            </Text>
+                            {cloudBalance !== null && (
+                              <Text style={[styles.keypairBalance, { color: colors.textSecondary }]}>{formatSol(cloudBalance)}</Text>
+                            )}
+                          </View>
+                        ) : (
+                          <Text style={styles.keypairMissing}>Not found</Text>
                         )}
-                      </View>
-                    ) : (
-                      <Text style={styles.keypairMissing}>Not found</Text>
-                    )}
-                  </TouchableOpacity>
-                  {cloudPubkey && (
-                    <TouchableOpacity
-                      onPress={() => copyPrivateKey('cloud')}
-                      activeOpacity={0.6}
-                      hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
-                    >
-                      <Text style={styles.exportKeyText}>
-                        {copiedField === 'cloud-private' ? 'Copied!' : 'Copy Private Key'}
-                      </Text>
-                    </TouchableOpacity>
+                      </TouchableOpacity>
+                      {cloudPubkey && (
+                        <TouchableOpacity
+                          onPress={() => copyPrivateKey('cloud')}
+                          activeOpacity={0.6}
+                          hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
+                        >
+                          <Text style={styles.exportKeyText}>
+                            {copiedField === 'cloud-private' ? 'Copied!' : 'Copy Private Key'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
                   )}
                   <TouchableOpacity
                     style={styles.keypairRow}

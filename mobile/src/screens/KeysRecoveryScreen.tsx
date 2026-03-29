@@ -544,15 +544,15 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
               )}
 
               {recoveryMembers.length < 2 && (
-                <TouchableOpacity style={styles.recoverySuggestion} activeOpacity={0.7} onPress={openAddRecovery}>
-                  <View style={styles.recoverySuggestionIcon}>
+                <TouchableOpacity style={[styles.recoverySuggestion, { backgroundColor: colors.cardSecondary }]} activeOpacity={0.7} onPress={openAddRecovery}>
+                  <View style={[styles.recoverySuggestionIcon, { backgroundColor: colors.border }]}>
                     <ShieldCheck size={18} color="#F59E0B" />
                   </View>
                   <View style={styles.recoverySuggestionText}>
                     <Text style={[styles.recoverySuggestionTitle, { color: colors.textPrimary }]}>
                       {recoveryMembers.length === 0 ? 'Add a Recovery Key' : 'Add one more Recovery Key'}
                     </Text>
-                    <Text style={[styles.recoverySuggestionDesc, { color: colors.textTertiary }]}>
+                    <Text style={[styles.recoverySuggestionDesc, { color: colors.textSecondary }]}>
                       {recoveryMembers.length === 0
                         ? 'Protect your wallet by adding at least 2 recovery keys in case you lose access to your device.'
                         : 'We recommend at least 2 recovery keys for better security.'}
@@ -1025,7 +1025,6 @@ const styles = StyleSheet.create({
   },
   recoverySuggestion: {
     flexDirection: 'row',
-    backgroundColor: '#FFF8EB',
     borderRadius: 14,
     padding: 14,
     gap: 12,
@@ -1036,7 +1035,6 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#FEF3C7',
     alignItems: 'center',
     justifyContent: 'center',
   },
