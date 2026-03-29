@@ -25,8 +25,8 @@ const resolveRequestWithPackageExports = (context, moduleName, platform) => {
     return ctx.resolveRequest(ctx, moduleName, platform);
   }
 
-  // Enable package exports for @privy-io/*
-  if (moduleName.startsWith('@privy-io/')) {
+  // Enable package exports for @privy-io/* and @solana-mobile/*
+  if (moduleName.startsWith('@privy-io/') || moduleName.startsWith('@solana-mobile/')) {
     const ctx = { ...context, unstable_enablePackageExports: true };
     return ctx.resolveRequest(ctx, moduleName, platform);
   }
