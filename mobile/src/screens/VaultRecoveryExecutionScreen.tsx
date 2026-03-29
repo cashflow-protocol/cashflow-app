@@ -49,7 +49,7 @@ interface VaultRecoveryExecutionScreenProps {
   onBack: () => void;
 }
 
-type ExecutionStep = 'building' | 'error' | 'signing' | 'ready' | 'executing' | 'done';
+type ExecutionStep = 'building' | 'error' | 'signing' | 'ready' | 'executing';
 
 function truncateAddress(addr: string): string {
   if (!addr) return '';
@@ -223,7 +223,7 @@ export default function VaultRecoveryExecutionScreen({
         });
       }
 
-      setStep('done');
+      onComplete();
     } catch (err: any) {
       console.error('Recovery execution error:', err);
       showToast(err.message || 'Failed to execute recovery');
@@ -302,13 +302,11 @@ export default function VaultRecoveryExecutionScreen({
         >
           {/* Header */}
           <Text style={[styles.title, { color: colors.onboardingText }]}>
-            {step === 'done' ? 'Recovery Complete' : 'Vault Recovery'}
+            Vault Recovery
           </Text>
           <Text style={[styles.subtitle, { color: colors.onboardingTextMuted }]}>
             {step === 'building' || step === 'executing'
               ? statusText
-              : step === 'done'
-              ? 'Your vault has been recovered successfully.'
               : `${signaturesCollected} of ${threshold} signatures collected`}
           </Text>
 
@@ -375,12 +373,6 @@ export default function VaultRecoveryExecutionScreen({
             </View>
           )}
 
-          {/* Done state */}
-          {step === 'done' && (
-            <View style={styles.doneContainer}>
-              <CheckCircle2 size={64} color="#4ade80" />
-            </View>
-          )}
         </ScrollView>
 
         {/* Bottom button */}
@@ -395,16 +387,6 @@ export default function VaultRecoveryExecutionScreen({
               <Text style={[styles.primaryButtonText, { color: colors.onboardingButtonText, marginLeft: 8 }]}>
                 Send Recovery Transaction
               </Text>
-            </TouchableOpacity>
-          )}
-
-          {step === 'done' && (
-            <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: colors.onboardingButton }]}
-              onPress={onComplete}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.primaryButtonText, { color: colors.onboardingButtonText }]}>Continue</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -551,10 +533,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     paddingVertical: 10,
     borderRadius: 12,
-  },
-  doneContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
   },
   bottomSection: {
     paddingHorizontal: 32,

@@ -24,6 +24,8 @@ import javax.crypto.spec.SecretKeySpec
 import com.google.android.gms.auth.blockstore.Blockstore
 import com.google.android.gms.auth.blockstore.StoreBytesData
 import com.google.android.gms.auth.blockstore.RetrieveBytesRequest
+import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.common.ConnectionResult
 import org.json.JSONObject
 import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
@@ -51,6 +53,11 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     private val BLOCKSTORE_SALT = "cashflow:blockstore:v1:a3e8f1c4".toByteArray(Charsets.UTF_8)
     private val BLOCKSTORE_HKDF_INFO = "blockstore-aes-gcm".toByteArray(Charsets.UTF_8)
     private const val BLOCKSTORE_KEY = "cf_cloud_backup"
+  }
+
+  private fun isGmsAvailable(): Boolean {
+    return GoogleApiAvailability.getInstance()
+      .isGooglePlayServicesAvailable(reactApplicationContext) == ConnectionResult.SUCCESS
   }
 
   override fun getName(): String = NAME
@@ -702,6 +709,10 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
   /** Internal helper: backup seed to Block Store (used by both backup and re-encrypt). */
   private fun backupToBlockStoreInternal(seed: ByteArray, pubBytes: ByteArray, pin: String, promise: Promise) {
+    if (!isGmsAvailable()) {
+      promise.resolve(null)
+      return
+    }
     val pubBase58 = base58Encode(pubBytes)
     val ikm = pubBytes + pin.toByteArray(Charsets.UTF_8)
     val derivedKey = hkdfDeriveBlockStore(ikm, 32)
@@ -736,6 +747,10 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   override fun backupCloudKeyToBlockStore(pin: String, promise: Promise) {
+    if (!isGmsAvailable()) {
+      promise.reject("ERR_NO_GMS", "Google Play Services not available — Block Store backup skipped")
+      return
+    }
     try {
       val prefs = getPrefs()
       val encryptedBase64 = prefs.getString("cloud_seed", null)
@@ -760,6 +775,10 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   override fun restoreCloudKeyFromBlockStore(pin: String, promise: Promise) {
+    if (!isGmsAvailable()) {
+      promise.reject("ERR_NO_GMS", "Google Play Services not available")
+      return
+    }
     try {
       val request = RetrieveBytesRequest.Builder()
         .setKeys(listOf(BLOCKSTORE_KEY))
@@ -829,6 +848,10 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   override fun hasBlockStoreBackup(promise: Promise) {
+    if (!isGmsAvailable()) {
+      promise.resolve(false)
+      return
+    }
     try {
       val request = RetrieveBytesRequest.Builder()
         .setKeys(listOf(BLOCKSTORE_KEY))
