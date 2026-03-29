@@ -335,6 +335,7 @@ function App() {
       case 'vault-recovery':
         onboardingContent = (
           <VaultRecoveryScreen
+            pin={pendingPin ?? undefined}
             onComplete={handleVaultComplete}
             onBack={() => setOnboardingStep('waitlist')}
           />

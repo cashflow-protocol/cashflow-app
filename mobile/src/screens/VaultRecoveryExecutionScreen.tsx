@@ -26,6 +26,7 @@ import {
 } from 'lucide-react-native';
 import { saveVault, VaultData } from '../services/vaultStorage';
 import { buildAndSubmitRecoveryProposal, executeRecoveryProposal } from '../services/recoveryService';
+import { backupCloudKeyToBlockStore } from '../services/keypairStorage';
 import apiService from '../services/apiService';
 import Toast from '../components/Toast';
 
@@ -43,6 +44,7 @@ interface MultisigResult {
 interface VaultRecoveryExecutionScreenProps {
   vault: MultisigResult;
   walletAddress: string;
+  pin?: string;
   onComplete: () => void;
   onBack: () => void;
 }
@@ -63,6 +65,7 @@ function maskEmail(email: string): string {
 export default function VaultRecoveryExecutionScreen({
   vault,
   walletAddress,
+  pin,
   onComplete,
   onBack,
 }: VaultRecoveryExecutionScreenProps) {
@@ -212,6 +215,13 @@ export default function VaultRecoveryExecutionScreen({
         walletAddress,
       };
       await saveVault(vaultData);
+
+      // Back up cloud key to Google Block Store (Android only, fire-and-forget)
+      if (pin) {
+        backupCloudKeyToBlockStore(pin).catch(err => {
+          console.warn('[Recovery] Block Store backup failed:', err);
+        });
+      }
 
       setStep('done');
     } catch (err: any) {
