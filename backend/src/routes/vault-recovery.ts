@@ -1093,11 +1093,14 @@ router.get('/proposal/:proposalId/build-execute-tx', async (req: Request, res: R
       }),
     ];
 
-    if (multisigAccount.rentCollector) {
+    // After configTransactionExecute, the rent collector may have changed
+    // (if the proposal set a new rent collector via newCloudKey). Use the new value.
+    const rentCollectorAddr = proposal.newCloudKey || (multisigAccount.rentCollector ? new PublicKey(multisigAccount.rentCollector).toBase58() : null);
+    if (rentCollectorAddr) {
       instructions.push(multisigLib.instructions.configTransactionAccountsClose({
         multisigPda,
         transactionIndex,
-        rentCollector: new PublicKey(multisigAccount.rentCollector),
+        rentCollector: new PublicKey(rentCollectorAddr),
       }));
     }
 
