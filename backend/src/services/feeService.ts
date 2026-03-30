@@ -110,7 +110,7 @@ export async function createVaultCreationFeeRecord(params: {
 }
 
 /**
- * Update cost basis when a transaction is confirmed on-chain.
+ * Update cost basis when a transaction is confirmed onchain.
  * Uses atomic $inc to avoid race conditions.
  */
 export async function updateCostBasisOnConfirm(transactionId: string): Promise<void> {

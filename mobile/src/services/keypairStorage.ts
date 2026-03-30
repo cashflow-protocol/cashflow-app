@@ -109,6 +109,13 @@ export async function deleteAllKeypairs(): Promise<void> {
 }
 
 /**
+ * Delete only the device keypair from native storage.
+ */
+export async function deleteDeviceKeypair(): Promise<void> {
+  return getModule().deleteKeypair('device');
+}
+
+/**
  * Prompt the user for biometric authentication (Face ID / Touch ID / passcode).
  * Returns true if authenticated, false if cancelled or failed.
  */
@@ -138,6 +145,22 @@ export async function cachePin(pin: string): Promise<void> {
  */
 export async function clearCachedPin(): Promise<void> {
   return getModule().clearCachedPin();
+}
+
+/**
+ * Store the PIN encrypted with biometric-protected Keystore key.
+ * Call after PIN entry so future biometric unlocks can retrieve it.
+ */
+export async function storePinForBiometric(pin: string): Promise<void> {
+  return getModule().storePinForBiometric(pin);
+}
+
+/**
+ * Retrieve and cache the PIN using biometric authentication.
+ * Returns the PIN on success, or null if no stored PIN or auth failed.
+ */
+export async function retrievePinWithBiometric(): Promise<string | null> {
+  return getModule().retrievePinWithBiometric();
 }
 
 /**
@@ -171,4 +194,13 @@ export async function restoreCloudKeyFromBlockStore(pin: string): Promise<string
 export async function hasBlockStoreBackup(): Promise<boolean> {
   if (!NativeCashflowSigning) return false;
   return NativeCashflowSigning.hasBlockStoreBackup();
+}
+
+/**
+ * Check if Google Play Services is available on this device.
+ * Always returns false on iOS.
+ */
+export async function isGmsAvailable(): Promise<boolean> {
+  if (!NativeCashflowSigning) return false;
+  return NativeCashflowSigning.isGmsAvailable();
 }

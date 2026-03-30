@@ -94,7 +94,7 @@ async function confirmTransactions() {
       const status = statuses.value[i];
 
       if (!status) {
-        // If not found on-chain after 5 minutes, mark as failed
+        // If not found onchain after 5 minutes, mark as failed
         const updatedAt = new Date((tx as any).updatedAt).getTime();
         if (Date.now() - updatedAt > 5 * 60 * 1000) {
           await dbManager.confirmTransaction(String(tx._id), TransactionStatus.FAILED);

@@ -9,6 +9,7 @@ import {
   VersionedTransaction,
 } from '@solana/web3.js';
 import { API_CONFIG } from '../config/api';
+import { IS_SOLANA_MOBILE } from '../config/constants';
 import {
   generateAndStoreCloudKeypair,
   generateAndStoreDeviceKeypair,
@@ -63,11 +64,25 @@ export async function buildAndSubmitRecoveryProposal(
 
   let existingCloudKey = await getCloudPublicKey();
   let newCloudKey: string | null = null;
-  const hasExistingCloud = existingCloudKey && members.some(m => m.address === existingCloudKey);
+  let cloudKeyIsMember = false;
 
-  if (!hasExistingCloud) {
-    newCloudKey = await generateAndStoreCloudKeypair();
-    existingCloudKey = newCloudKey;
+  if (IS_SOLANA_MOBILE) {
+    // Seeker: no cloud key — only device key + MWA wallet
+    existingCloudKey = null;
+    console.log('[CLOUDKEY] Seeker mode — skipping cloud key');
+  } else {
+    cloudKeyIsMember = !!(existingCloudKey && members.some(m => m.address === existingCloudKey));
+
+    if (!existingCloudKey) {
+      newCloudKey = await generateAndStoreCloudKeypair();
+      existingCloudKey = newCloudKey;
+      console.log('[CLOUDKEY] Generated new cloud key:', newCloudKey);
+    } else if (!cloudKeyIsMember) {
+      newCloudKey = existingCloudKey;
+      console.log('[CLOUDKEY] Existing cloud key not a member, adding:', existingCloudKey);
+    } else {
+      console.log('[CLOUDKEY] Existing cloud key is a member:', existingCloudKey);
+    }
   }
 
   // Step 2: Determine AddMember actions
@@ -84,9 +99,9 @@ export async function buildAndSubmitRecoveryProposal(
     multisigAddress,
     walletAddress,
     members,
-    cloudKey: hasExistingCloud ? existingCloudKey! : undefined,
+    cloudKey: cloudKeyIsMember ? existingCloudKey! : undefined,
     addMemberActions: actions,
-    newRentCollector: newCloudKey || undefined,
+    newRentCollector: IS_SOLANA_MOBILE ? walletAddress : (newCloudKey || undefined),
   });
 
   const { tx2Base64, transactionIndex, blockhash } = buildResult;
@@ -97,7 +112,8 @@ export async function buildAndSubmitRecoveryProposal(
   const tx1 = VersionedTransaction.deserialize(Buffer.from(buildResult.tx1Base64, 'base64'));
 
   // Sign with cloud key first (if it's an existing member)
-  if (hasExistingCloud && existingCloudKey) {
+  if (cloudKeyIsMember && existingCloudKey) {
+    console.log('[CLOUDKEY] Signing recovery TX with cloud key:', existingCloudKey);
     const cloudPubkey = new PublicKey(existingCloudKey);
     const msgBytes = tx1.message.serialize();
     const msgBase64 = Buffer.from(msgBytes).toString('base64');
@@ -119,7 +135,7 @@ export async function buildAndSubmitRecoveryProposal(
   }
 
   // Send signed TX1 via backend (Helius SWQoS for reliable landing)
-  onProgress?.('Sending proposal on-chain...');
+  onProgress?.('Sending proposal onchain...');
   const signedTx1Base64 = Buffer.from(signedBytes[0]).toString('base64');
   const sendRes = await fetch(`${API_CONFIG.baseUrl}/vault-recovery/v1/send-recovery-tx`, {
     method: 'POST',
@@ -131,7 +147,7 @@ export async function buildAndSubmitRecoveryProposal(
     throw new Error(err.error || 'Failed to send recovery transaction');
   }
 
-  onProgress?.('Proposal confirmed on-chain...');
+  onProgress?.('Proposal confirmed onchain...');
 
   // Step 5: Determine required signers
   // Try local recovery emails first, then ask backend for Privy lookups
@@ -166,7 +182,7 @@ export async function buildAndSubmitRecoveryProposal(
     if (addr === walletAddress) {
       type = 'mwa';
       label = 'Seeker';
-    } else if (hasExistingCloud && addr === existingCloudKey) {
+    } else if (cloudKeyIsMember && addr === existingCloudKey) {
       type = 'cloud';
       label = 'Cloud Key';
     } else if (allEmails[addr]) {
@@ -181,11 +197,11 @@ export async function buildAndSubmitRecoveryProposal(
     requiredSigners.push({ address: addr, type, label, email });
   }
 
-  // MWA + cloud key already signed TX1 on-chain, so mark them as signed
+  // MWA + cloud key already signed TX1 onchain, so mark them as signed
   const collectedSignatures: Array<{ address: string; signature: string }> = [];
-  collectedSignatures.push({ address: walletAddress, signature: 'on-chain' });
-  if (hasExistingCloud && existingCloudKey) {
-    collectedSignatures.push({ address: existingCloudKey, signature: 'on-chain' });
+  collectedSignatures.push({ address: walletAddress, signature: 'onchain' });
+  if (cloudKeyIsMember && existingCloudKey) {
+    collectedSignatures.push({ address: existingCloudKey, signature: 'onchain' });
   }
 
   // Step 6: Store proposal on backend
@@ -224,7 +240,7 @@ export async function buildAndSubmitRecoveryProposal(
 /**
  * Execute the recovery proposal after threshold is met.
  *
- * TX1 (create + propose + approvals) is already confirmed on-chain.
+ * TX1 (create + propose + approvals) is already confirmed onchain.
  * This only needs to send a fresh execute transaction (TX2) signed by the
  * initiating wallet.
  */
@@ -273,8 +289,8 @@ export async function executeRecoveryProposal(
   const result = await sendRes.json();
   const txSignature = result.data?.signature || 'confirmed';
 
-  // Mark proposal as executed
-  await fetch(
+  // Mark proposal as executed (verifies onchain that members were added)
+  const markRes = await fetch(
     `${API_CONFIG.baseUrl}/vault-recovery/v1/proposal/${proposalId}/mark-executed`,
     {
       method: 'POST',
@@ -282,6 +298,10 @@ export async function executeRecoveryProposal(
       body: JSON.stringify({ signature: txSignature }),
     },
   );
+  if (!markRes.ok) {
+    const markErr = await markRes.json().catch(() => ({ error: 'Failed' }));
+    throw new Error(markErr.error || 'Recovery transaction may have failed onchain');
+  }
 
   onProgress?.('Confirming...');
   return txSignature;

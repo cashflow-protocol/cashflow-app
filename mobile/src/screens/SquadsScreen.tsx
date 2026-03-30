@@ -64,8 +64,8 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
           setMultisigInfo(info);
           setBalance(bal);
         } catch (onChainErr) {
-          // On-chain data may not be available yet (tx still confirming)
-          console.warn('On-chain fetch pending, will retry on next load:', onChainErr);
+          // onchain data may not be available yet (tx still confirming)
+          console.warn('onchain fetch pending, will retry on next load:', onChainErr);
         }
       }
     } catch (err) {
@@ -107,7 +107,7 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
       const stored = await getVault();
       setVaultData(stored);
 
-      // Poll until on-chain data is available
+      // Poll until onchain data is available
       await waitForOnChainData(result.multisigAddress);
     } catch (err: any) {
       logSquadsCreateVaultError(err?.message || 'unknown');

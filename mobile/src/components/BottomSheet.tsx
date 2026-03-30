@@ -102,7 +102,7 @@ export default function BottomSheet({
   const sheetContent = (
     <ScrollView
       scrollEnabled={false}
-      keyboardShouldPersistTaps="handled"
+      keyboardShouldPersistTaps="always"
     >
       <View style={[styles.sheetContent, { backgroundColor: colors.sheetBackground }]}>
         <View style={styles.handleContainer}>

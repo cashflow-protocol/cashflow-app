@@ -57,6 +57,7 @@ export default function RecoveryPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [signing, setSigning] = useState(false);
+  const [signingStatus, setSigningStatus] = useState('');
   const [signed, setSigned] = useState(false);
   const [error, setError] = useState('');
   const [showWalletPicker, setShowWalletPicker] = useState(false);
@@ -188,7 +189,7 @@ export default function RecoveryPage() {
       await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: privySignerAddress, signature: 'on-chain' }),
+        body: JSON.stringify({ address: privySignerAddress, signature: 'onchain' }),
       }).catch(() => {});
 
       setPrivyModalVisible(false);
@@ -225,6 +226,7 @@ export default function RecoveryPage() {
       const { data: { transaction: txBase64 } } = await buildRes.json();
 
       // 2. Get the wallet standard wallet for signing
+      setSigningStatus('Waiting for wallet...');
       const state = connectorClient.getSnapshot();
       if (state.wallet.status !== 'connected') throw new Error('Wallet not connected');
 
@@ -252,7 +254,8 @@ export default function RecoveryPage() {
         chain: 'solana:mainnet',
       });
 
-      // Send via backend's Helius SWQoS endpoint
+      // Send via backend's Helius SWQoS endpoint and wait for confirmation
+      setSigningStatus('Sending transaction...');
       const sendRes = await fetch(`${API_BASE}/vault-recovery/v1/send-recovery-tx`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -265,11 +268,11 @@ export default function RecoveryPage() {
         throw new Error(err.error || 'Failed to send transaction');
       }
 
-      // 3. Notify backend that this signer approved on-chain
+      // 3. Notify backend that this signer approved onchain
       await fetch(`${API_BASE}/vault-recovery/v1/proposal/${proposalId}/submit-signature`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: addr, signature: 'on-chain' }),
+        body: JSON.stringify({ address: addr, signature: 'onchain' }),
       }).catch(() => {});
 
       setSigned(true);
@@ -278,6 +281,7 @@ export default function RecoveryPage() {
       setError('Signing failed: ' + (err.message || err));
     } finally {
       setSigning(false);
+      setSigningStatus('');
     }
   };
 
@@ -397,7 +401,7 @@ export default function RecoveryPage() {
 
         {canSign && (
           <button className="btn btn-primary" onClick={handleSign} disabled={signing}>
-            {signing ? 'Signing...' : 'Sign Recovery Proposal'}
+            {signing ? (signingStatus || 'Building transaction...') : 'Sign Recovery Proposal'}
           </button>
         )}
 

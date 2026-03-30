@@ -45,7 +45,7 @@ export class FeeTransaction {
   @prop({ required: true })
   public feeAmount!: string;
 
-  /** On-chain signature (vault creation fees) */
+  /** onchain signature (vault creation fees) */
   @prop()
   public signature?: string;
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { ArrowLeft, MoreHorizontal, ScanFace, Cloud, Wallet, Compass, Info, X, KeyRound, ShieldCheck, RotateCcw, Download, TriangleAlert, MessageSquareText, CircleCheck, ChevronRight, Mail, ClipboardPaste, Trash2, CirclePlus } from 'lucide-react-native';
 import BottomSheet from '../components/BottomSheet';
+import { useLoginWithEmail, useEmbeddedSolanaWallet, usePrivy } from '@privy-io/expo';
 import { getMultisigInfo, addMember, removeMember, type MultisigInfo } from '../services/squadsService';
 import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey } from '../services/keypairStorage';
 import { getVault, getRecoveryEmails, saveRecoveryEmail } from '../services/vaultStorage';
@@ -82,6 +83,52 @@ function getKeyIcon(label: MemberLabel, color?: string) {
   }
 }
 
+function OtpInput({ value, onChange, disabled, colors }: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+  colors: any;
+}) {
+  const inputRef = useRef<TextInput>(null);
+  const digits = value.split('');
+
+  return (
+    <View style={styles.otpContainer}>
+      <TextInput
+        ref={inputRef}
+        style={styles.otpHiddenInput}
+        value={value}
+        onChangeText={(t) => onChange(t.replace(/[^0-9]/g, '').slice(0, 6))}
+        keyboardType="number-pad"
+        maxLength={6}
+        editable={!disabled}
+        autoFocus
+        caretHidden
+      />
+      <View style={styles.otpCells}>
+        {Array.from({ length: 6 }).map((_, i) => {
+          const isFocused = value.length === i;
+          return (
+            <TouchableOpacity
+              key={i}
+              style={[
+                styles.otpCell,
+                { backgroundColor: colors.cardSecondary, borderColor: isFocused ? colors.accentGreen : 'transparent' },
+              ]}
+              activeOpacity={1}
+              onPress={() => inputRef.current?.focus()}
+            >
+              <Text style={[styles.otpDigit, { color: colors.textPrimary }]}>
+                {digits[i] || ''}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryScreenProps) {
   const { colors } = useTheme();
   const [loading, setLoading] = useState(true);
@@ -107,6 +154,10 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
   const [sendingCode, setSendingCode] = useState(false);
   const [recoveryMenuMember, setRecoveryMenuMember] = useState<ClassifiedMember | null>(null);
   const [deletingKey, setDeletingKey] = useState(false);
+
+  const { sendCode, loginWithCode } = useLoginWithEmail();
+  const wallet = useEmbeddedSolanaWallet();
+  const { logout: privyLogout } = usePrivy();
 
   useEffect(() => { logScreenView('KeysRecoveryScreen'); }, []);
 
@@ -254,7 +305,9 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     }
     setSendingCode(true);
     try {
-      await apiService.sendRecoveryCode(trimmed);
+      // Log out of any existing Privy session so loginWithCode won't conflict
+      await privyLogout().catch(() => {});
+      await sendCode({ email: trimmed });
       setAddRecoveryStep('email-verify');
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to send code');
@@ -271,7 +324,41 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     setAddingKey(true);
     setAddingStep('Verifying...');
     try {
-      const solanaAddress = await apiService.verifyRecoveryCode(recoveryEmail.trim(), emailCode);
+      // Verify OTP through Privy — authenticates user & auto-creates Solana wallet
+      await loginWithCode({ code: emailCode, email: recoveryEmail.trim() });
+
+      // Wait for embedded wallet to be ready
+      setAddingStep('Creating recovery wallet...');
+      let solanaAddress: string | null = null;
+
+      for (let i = 0; i < 20; i++) {
+        if (wallet.status === 'connected' && wallet.wallets.length > 0) {
+          solanaAddress = wallet.wallets[0].address;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      // If wallet wasn't ready yet, try creating (may already exist) then poll again
+      if (!solanaAddress) {
+        try {
+          await wallet.create?.();
+        } catch {
+          // Wallet likely already exists — just need to wait for it to connect
+        }
+        for (let i = 0; i < 20; i++) {
+          if (wallet.status === 'connected' && wallet.wallets.length > 0) {
+            solanaAddress = wallet.wallets[0].address;
+            break;
+          }
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+
+      if (!solanaAddress) {
+        throw new Error('Failed to connect to Privy embedded wallet');
+      }
+
       setAddingStep('Adding recovery key...');
 
       const vaultData = await getVault();
@@ -284,6 +371,9 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       setEmailMap(prev => ({ ...prev, [solanaAddress]: recoveryEmail.trim() }));
       logAddRecoveryKeySuccess();
       setAddRecoveryVisible(false);
+
+      // Log out of Privy session — we only needed it for wallet creation
+      await privyLogout();
 
       const info = await getMultisigInfo(vaultData.multisigAddress);
       setMultisigInfo(info);
@@ -544,15 +634,15 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
               )}
 
               {recoveryMembers.length < 2 && (
-                <TouchableOpacity style={styles.recoverySuggestion} activeOpacity={0.7} onPress={openAddRecovery}>
-                  <View style={styles.recoverySuggestionIcon}>
+                <TouchableOpacity style={[styles.recoverySuggestion, { backgroundColor: colors.cardSecondary }]} activeOpacity={0.7} onPress={openAddRecovery}>
+                  <View style={[styles.recoverySuggestionIcon, { backgroundColor: colors.border }]}>
                     <ShieldCheck size={18} color="#F59E0B" />
                   </View>
                   <View style={styles.recoverySuggestionText}>
                     <Text style={[styles.recoverySuggestionTitle, { color: colors.textPrimary }]}>
                       {recoveryMembers.length === 0 ? 'Add a Recovery Key' : 'Add one more Recovery Key'}
                     </Text>
-                    <Text style={[styles.recoverySuggestionDesc, { color: colors.textTertiary }]}>
+                    <Text style={[styles.recoverySuggestionDesc, { color: colors.textSecondary }]}>
                       {recoveryMembers.length === 0
                         ? 'Protect your wallet by adding at least 2 recovery keys in case you lose access to your device.'
                         : 'We recommend at least 2 recovery keys for better security.'}
@@ -875,18 +965,12 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
               Enter the 6-digit code sent to{'\n'}{recoveryEmail.trim()}
             </Text>
 
-            <View style={[styles.cryptoInputRow, { backgroundColor: colors.cardSecondary }]}>
-              <TextInput
-                style={[styles.cryptoInput, { color: colors.textPrimary }]}
-                value={emailCode}
-                onChangeText={setEmailCode}
-                placeholder="000000"
-                placeholderTextColor={colors.placeholderColor}
-                editable={!addingKey}
-                keyboardType="number-pad"
-                maxLength={6}
-              />
-            </View>
+            <OtpInput
+              value={emailCode}
+              onChange={setEmailCode}
+              disabled={addingKey}
+              colors={colors}
+            />
 
             <TouchableOpacity
               style={[styles.cryptoNextButton, { backgroundColor: colors.primaryButton }, (emailCode.length !== 6 || addingKey) && styles.cryptoNextButtonDisabled]}
@@ -1025,7 +1109,6 @@ const styles = StyleSheet.create({
   },
   recoverySuggestion: {
     flexDirection: 'row',
-    backgroundColor: '#FFF8EB',
     borderRadius: 14,
     padding: 14,
     gap: 12,
@@ -1036,7 +1119,6 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#FEF3C7',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1353,5 +1435,32 @@ const styles = StyleSheet.create({
   cryptoNextText: {
     fontWeight: '700',
     fontSize: 16,
+  },
+  otpContainer: {
+    marginTop: 12,
+  },
+  otpHiddenInput: {
+    position: 'absolute',
+    opacity: 0,
+    height: 0,
+    width: 0,
+  },
+  otpCells: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  otpCell: {
+    flex: 1,
+    aspectRatio: 1,
+    maxWidth: 52,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  otpDigit: {
+    fontSize: 24,
+    fontWeight: '700',
   },
 });

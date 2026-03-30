@@ -4,10 +4,8 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, StatusBar, StyleSheet, AppState } from 'react-native';
+import { View, StatusBar, StyleSheet, AppState, Platform, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { PrivyProvider } from '@privy-io/expo';
-import { PRIVY_CONFIG } from './src/config/privy';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { WalletProvider } from './src/hooks/useWallet';
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -31,10 +29,12 @@ import TabBar, { type TabName } from './src/components/TabBar';
 import { getVault } from './src/services/vaultStorage';
 import { checkWaitlistStatus } from './src/services/onboardingService';
 import { hasPin } from './src/services/pinStorage';
-import { migrateKeypairsToBiometric, getCloudPublicKey, cachePin, clearCachedPin } from './src/services/keypairStorage';
+import { migrateKeypairsToBiometric, getCloudPublicKey, isGmsAvailable, cachePin, clearCachedPin, storePinForBiometric } from './src/services/keypairStorage';
 import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
-import { applyRemoteConfig } from './src/config/constants';
+import { applyRemoteConfig, IS_SOLANA_MOBILE } from './src/config/constants';
+import { PrivyProvider } from '@privy-io/expo';
+import { PRIVY_CONFIG } from './src/config/api';
 import { initializePushNotifications, initializeWaitlistPushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
 import { initializeRealtimeNotifications, stopRealtimeNotifications } from './src/services/realtimeNotificationService';
 import Toast from './src/components/Toast';
@@ -71,9 +71,20 @@ function App() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastDescription, setToastDescription] = useState('');
+  const [gmsBlocked, setGmsBlocked] = useState(false);
 
   useEffect(() => {
     (async () => {
+      // Block Android devices without GMS (unless Seeker)
+      if (Platform.OS === 'android' && !IS_SOLANA_MOBILE) {
+        const gmsOk = await isGmsAvailable();
+        if (!gmsOk) {
+          setGmsBlocked(true);
+          setCheckingVault(false);
+          return;
+        }
+      }
+
       const [vault, config, pinExists, cloudPk] = await Promise.all([
         getVault(),
         apiService.getConfig().catch(() => null),
@@ -122,11 +133,6 @@ function App() {
         migrateKeypairsToBiometric().catch((err) => {
           console.error('Migration failed:', err);
         });
-
-        // Initialize push notifications for authenticated users
-        initializePushNotifications().catch((err) => {
-          console.error('Push notification init failed:', err);
-        });
       }
     })();
   }, []);
@@ -161,7 +167,7 @@ function App() {
     return unsubscribe;
   }, [checkingVault, handleIncomingNotification]);
 
-  // Set up Firebase RTDB realtime notification listener
+  // Set up Firebase RTDB realtime notification listener (requires cached PIN for API auth)
   useEffect(() => {
     if (!onboardingDone || locked) return;
     initializeRealtimeNotifications((title, body, data) => {
@@ -260,6 +266,24 @@ function App() {
     return null;
   }
 
+  if (gmsBlocked) {
+    return (
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, backgroundColor: '#0f0f23' }}>
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 12 }}>
+              Google Play Services Required
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
+              Cashflow requires Google Play Services to securely back up your keys. Please install or enable Google Play Services and restart the app.
+            </Text>
+          </View>
+        </SafeAreaProvider>
+      </ThemeProvider>
+    );
+  }
+
   if (locked) {
     return (
       <ThemeProvider>
@@ -267,7 +291,13 @@ function App() {
           <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
           <BiometricLockScreen
             onUnlock={() => setLocked(false)}
-            onPinUnlock={(pin) => cachePin(pin)}
+            onPinUnlock={async (pin) => {
+              await cachePin(pin);
+              storePinForBiometric(pin).catch(() => {});
+              initializePushNotifications().catch((err) => {
+                console.error('Push notification init failed:', err);
+              });
+            }}
           />
         </SafeAreaProvider>
       </ThemeProvider>
@@ -306,7 +336,7 @@ function App() {
       case 'pin-setup':
         onboardingContent = (
           <PinSetupScreen
-            onPinConfirmed={(pin) => { setPendingPin(pin); cachePin(pin); }}
+            onPinConfirmed={(pin) => { setPendingPin(pin); cachePin(pin); storePinForBiometric(pin).catch(() => {}); }}
             onComplete={() => setOnboardingStep('vault-setup')}
           />
         );
@@ -336,6 +366,7 @@ function App() {
       case 'vault-recovery':
         onboardingContent = (
           <VaultRecoveryScreen
+            pin={pendingPin ?? undefined}
             onComplete={handleVaultComplete}
             onBack={() => setOnboardingStep('waitlist')}
           />
@@ -387,24 +418,29 @@ function App() {
   }
 
   return (
-    <ThemeProvider>
-      <SafeAreaProvider>
-        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-        <WalletProvider>
-          <View style={styles.root}>
-            {renderScreen()}
-            <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
-            <Toast
-              visible={toastVisible}
-              message={toastMessage}
-              description={toastDescription}
-              type="success"
-              onDismiss={() => setToastVisible(false)}
-            />
-          </View>
-        </WalletProvider>
-      </SafeAreaProvider>
-    </ThemeProvider>
+    <PrivyProvider
+      appId={PRIVY_CONFIG.appId}
+      clientId={PRIVY_CONFIG.clientId}
+    >
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+          <WalletProvider>
+            <View style={styles.root}>
+              {renderScreen()}
+              <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
+              <Toast
+                visible={toastVisible}
+                message={toastMessage}
+                description={toastDescription}
+                type="success"
+                onDismiss={() => setToastVisible(false)}
+              />
+            </View>
+          </WalletProvider>
+        </SafeAreaProvider>
+      </ThemeProvider>
+    </PrivyProvider>
   );
 }
 
@@ -414,12 +450,4 @@ const styles = StyleSheet.create({
   },
 });
 
-function AppWithPrivy() {
-  return (
-    <PrivyProvider appId={PRIVY_CONFIG.appId} clientId={PRIVY_CONFIG.clientId}>
-      <App />
-    </PrivyProvider>
-  );
-}
-
-export default AppWithPrivy;
+export default App;

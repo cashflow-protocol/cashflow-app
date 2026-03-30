@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { LifetimeEarnedIcon, Last7DIcon } from '../assets/stat-icons';
 import { getVault, clearVault, type VaultData } from '../services/vaultStorage';
-import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey, getDevicePrivateKey, deleteAllKeypairs } from '../services/keypairStorage';
+import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey, getDevicePrivateKey, deleteAllKeypairs, deleteDeviceKeypair } from '../services/keypairStorage';
 import { reclaimRent } from '../services/squadsService';
 import apiService from '../services/apiService';
 import { APP_VERSION, BUILD_NUMBER } from '../config/version';
@@ -145,7 +145,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
         setReclaimStatus(msg);
       });
       logReclaimRentSuccess(result.closed, result.skipped, result.failed);
-      setReclaimStatus(`Done! Closed: ${result.closed}, Skipped: ${result.skipped}, Failed: ${result.failed}`);
+      setReclaimStatus(`Done! Cancelled: ${result.cancelled}, Closed: ${result.closed}, Skipped: ${result.skipped}, Failed: ${result.failed}`);
       setTimeout(() => setReclaimStatus(null), 5000);
     } catch (err: any) {
       logReclaimRentError(err.message);
@@ -154,11 +154,48 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
     }
   }, [vault]);
 
+  const handleRemoveDeviceKey = useCallback(() => {
+    Alert.alert(
+      'Remove Device Key',
+      'This will delete the device signing key from this device. The cloud key and vault will not be affected.\n\nYou can generate a new device key later, but you will need to re-add it to your multisig.\n\nAre you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteDeviceKeypair();
+            setDevicePubkey(null);
+            setDeviceBalance(null);
+          },
+        },
+      ],
+    );
+  }, []);
+
+  const handleRemoveVaultData = useCallback(() => {
+    Alert.alert(
+      'Remove Vault Data',
+      'This will delete the local vault data only. Your signing keys will not be removed.\n\nThe app will return to onboarding. You can re-link your vault or create a new one.\n\nAre you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await clearVault();
+            onNavigate?.('onboarding');
+          },
+        },
+      ],
+    );
+  }, []);
+
   const handleRemoveVault = useCallback(() => {
     logRemoveVaultPress();
     Alert.alert(
       'Remove Vault',
-      'This will delete the local vault data and signing keypairs. The on-chain multisig will still exist but you will lose signing access from this device.\n\nAre you sure?',
+      'This will delete the local vault data and signing keypairs. The onchain multisig will still exist but you will lose signing access from this device.\n\nAre you sure?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -269,36 +306,40 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
               {/* Keypairs */}
               {keysLoaded && (
                 <View style={[styles.keypairSection, { borderTopColor: colors.border }]}>
-                  <TouchableOpacity
-                    style={styles.keypairRow}
-                    onPress={() => cloudPubkey && copyAddress(cloudPubkey, 'cloud')}
-                    activeOpacity={cloudPubkey ? 0.6 : 1}
-                  >
-                    <Text style={[styles.keypairLabel, { color: colors.textSecondary }]}>Cloud Key</Text>
-                    {cloudPubkey ? (
-                      <View style={styles.keypairRight}>
-                        <Text style={[styles.keypairValue, { color: colors.textPrimary }]}>
-                          {truncateAddress(cloudPubkey)}
-                          {copiedField === 'cloud' ? '  Copied!' : ''}
-                        </Text>
-                        {cloudBalance !== null && (
-                          <Text style={[styles.keypairBalance, { color: colors.textSecondary }]}>{formatSol(cloudBalance)}</Text>
+                  {!vault?.seekerMode && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.keypairRow}
+                        onPress={() => cloudPubkey && copyAddress(cloudPubkey, 'cloud')}
+                        activeOpacity={cloudPubkey ? 0.6 : 1}
+                      >
+                        <Text style={[styles.keypairLabel, { color: colors.textSecondary }]}>Cloud Key</Text>
+                        {cloudPubkey ? (
+                          <View style={styles.keypairRight}>
+                            <Text style={[styles.keypairValue, { color: colors.textPrimary }]}>
+                              {truncateAddress(cloudPubkey)}
+                              {copiedField === 'cloud' ? '  Copied!' : ''}
+                            </Text>
+                            {cloudBalance !== null && (
+                              <Text style={[styles.keypairBalance, { color: colors.textSecondary }]}>{formatSol(cloudBalance)}</Text>
+                            )}
+                          </View>
+                        ) : (
+                          <Text style={styles.keypairMissing}>Not found</Text>
                         )}
-                      </View>
-                    ) : (
-                      <Text style={styles.keypairMissing}>Not found</Text>
-                    )}
-                  </TouchableOpacity>
-                  {cloudPubkey && (
-                    <TouchableOpacity
-                      onPress={() => copyPrivateKey('cloud')}
-                      activeOpacity={0.6}
-                      hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
-                    >
-                      <Text style={styles.exportKeyText}>
-                        {copiedField === 'cloud-private' ? 'Copied!' : 'Copy Private Key'}
-                      </Text>
-                    </TouchableOpacity>
+                      </TouchableOpacity>
+                      {cloudPubkey && (
+                        <TouchableOpacity
+                          onPress={() => copyPrivateKey('cloud')}
+                          activeOpacity={0.6}
+                          hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
+                        >
+                          <Text style={styles.exportKeyText}>
+                            {copiedField === 'cloud-private' ? 'Copied!' : 'Copy Private Key'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
                   )}
                   <TouchableOpacity
                     style={styles.keypairRow}
@@ -360,6 +401,24 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
               activeOpacity={0.7}
             >
               <Text style={[styles.changePinButtonText, { color: colors.textSecondary }]}>Change PIN</Text>
+            </TouchableOpacity>
+
+            {devicePubkey && (
+              <TouchableOpacity
+                style={[styles.removeButton, { backgroundColor: colors.card, borderColor: '#F5A623' }]}
+                onPress={handleRemoveDeviceKey}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.removeButtonText, { color: '#F5A623' }]}>Remove Device Key</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.removeButton, { backgroundColor: colors.card, borderColor: '#F5A623' }]}
+              onPress={handleRemoveVaultData}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.removeButtonText, { color: '#F5A623' }]}>Remove Vault Data</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

@@ -24,6 +24,8 @@ import javax.crypto.spec.SecretKeySpec
 import com.google.android.gms.auth.blockstore.Blockstore
 import com.google.android.gms.auth.blockstore.StoreBytesData
 import com.google.android.gms.auth.blockstore.RetrieveBytesRequest
+import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.common.ConnectionResult
 import org.json.JSONObject
 import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
@@ -53,7 +55,17 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     private const val BLOCKSTORE_KEY = "cf_cloud_backup"
   }
 
+  private fun isGmsAvailable(): Boolean {
+    return GoogleApiAvailability.getInstance()
+      .isGooglePlayServicesAvailable(reactApplicationContext) == ConnectionResult.SUCCESS
+  }
+
   override fun getName(): String = NAME
+
+  @ReactMethod
+  override fun isGmsAvailable(promise: Promise) {
+    promise.resolve(isGmsAvailable())
+  }
 
   // --- PIN cache for cloud key encryption/decryption ---
   private var cachedPin: String? = null
@@ -68,6 +80,69 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
   override fun clearCachedPin(promise: Promise) {
     cachedPin = null
     promise.resolve(null)
+  }
+
+  @ReactMethod
+  override fun storePinForBiometric(pin: String, promise: Promise) {
+    try {
+      if (!isBiometricAvailable()) {
+        promise.resolve(null)
+        return
+      }
+      getOrCreateAesKey(biometric = true)
+      val pinBytes = pin.toByteArray(Charsets.UTF_8)
+      try {
+        val encrypted = encryptWithKeystore(pinBytes, biometric = true)
+        getPrefs().edit()
+          .putString("bio_pin", Base64.encodeToString(encrypted, Base64.NO_WRAP))
+          .apply()
+        promise.resolve(null)
+      } catch (e: UserNotAuthenticatedException) {
+        // Biometric key needs recent auth — prompt then encrypt
+        promptBiometricUnlock("Enable biometric unlock") { success, authError ->
+          if (!success) {
+            promise.resolve(null)
+            return@promptBiometricUnlock
+          }
+          try {
+            val encrypted = encryptWithKeystore(pinBytes, biometric = true)
+            getPrefs().edit()
+              .putString("bio_pin", Base64.encodeToString(encrypted, Base64.NO_WRAP))
+              .apply()
+            promise.resolve(null)
+          } catch (e2: Exception) {
+            promise.resolve(null)
+          }
+        }
+      }
+    } catch (e: Exception) {
+      promise.reject("ERR_STORE_PIN", "Failed to store PIN for biometric: ${e.message}", e)
+    }
+  }
+
+  @ReactMethod
+  override fun retrievePinWithBiometric(promise: Promise) {
+    try {
+      val prefs = getPrefs()
+      val encryptedBase64 = prefs.getString("bio_pin", null)
+      if (encryptedBase64 == null) {
+        promise.resolve(null)
+        return
+      }
+      val encrypted = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+      decryptWithBiometric(encrypted, "Unlock Cashflow") { pinBytes, error ->
+        if (error != null || pinBytes == null) {
+          promise.resolve(null)
+          return@decryptWithBiometric
+        }
+        val pin = String(pinBytes, Charsets.UTF_8)
+        cachedPin = pin
+        pinBytes.fill(0)
+        promise.resolve(pin)
+      }
+    } catch (e: Exception) {
+      promise.resolve(null)
+    }
   }
 
   @ReactMethod
@@ -639,6 +714,10 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
   /** Internal helper: backup seed to Block Store (used by both backup and re-encrypt). */
   private fun backupToBlockStoreInternal(seed: ByteArray, pubBytes: ByteArray, pin: String, promise: Promise) {
+    if (!isGmsAvailable()) {
+      promise.resolve(null)
+      return
+    }
     val pubBase58 = base58Encode(pubBytes)
     val ikm = pubBytes + pin.toByteArray(Charsets.UTF_8)
     val derivedKey = hkdfDeriveBlockStore(ikm, 32)
@@ -673,6 +752,10 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   override fun backupCloudKeyToBlockStore(pin: String, promise: Promise) {
+    if (!isGmsAvailable()) {
+      promise.reject("ERR_NO_GMS", "Google Play Services not available — Block Store backup skipped")
+      return
+    }
     try {
       val prefs = getPrefs()
       val encryptedBase64 = prefs.getString("cloud_seed", null)
@@ -697,6 +780,10 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   override fun restoreCloudKeyFromBlockStore(pin: String, promise: Promise) {
+    if (!isGmsAvailable()) {
+      promise.reject("ERR_NO_GMS", "Google Play Services not available")
+      return
+    }
     try {
       val request = RetrieveBytesRequest.Builder()
         .setKeys(listOf(BLOCKSTORE_KEY))
@@ -766,6 +853,10 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   override fun hasBlockStoreBackup(promise: Promise) {
+    if (!isGmsAvailable()) {
+      promise.resolve(false)
+      return
+    }
     try {
       val request = RetrieveBytesRequest.Builder()
         .setKeys(listOf(BLOCKSTORE_KEY))

@@ -12,7 +12,7 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { logScreenView, logOnboardingNext, logOnboardingHaveInviteCode, logOnboardingJoinWaitlist, logOnboardingPageView } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
-import { getCloudPublicKey, getDevicePublicKey } from '../services/keypairStorage';
+
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -122,15 +122,7 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
   const { colors } = useTheme();
   const flatListRef = useRef<FlatList>(null);
   const [currentPage, setCurrentPage] = useState(0);
-  const [cloudKey, setCloudKey] = useState<string | null>(null);
-  const [deviceKey, setDeviceKey] = useState<string | null>(null);
-
   useEffect(() => { logScreenView('OnboardingScreen'); }, []);
-
-  useEffect(() => {
-    getCloudPublicKey().then(setCloudKey);
-    getDevicePublicKey().then(setDeviceKey);
-  }, []);
 
   const isLastPage = currentPage === PAGES.length - 1;
 
@@ -171,12 +163,6 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
       />
 
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {(cloudKey || deviceKey) && (
-          <View style={styles.debugKeys}>
-            {cloudKey && <Text style={styles.debugKeyText}>Cloud: {cloudKey}</Text>}
-            {deviceKey && <Text style={styles.debugKeyText}>Device: {deviceKey}</Text>}
-          </View>
-        )}
         <FlatList
           ref={flatListRef}
           data={PAGES}
@@ -297,18 +283,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     opacity: 0.6,
-  },
-  debugKeys: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 8,
-    marginHorizontal: 16,
-  },
-  debugKeyText: {
-    fontSize: 10,
-    fontFamily: 'monospace',
-    color: 'rgba(255,255,255,0.6)',
   },
 });
 

@@ -23,6 +23,7 @@ import BottomSheet from '../components/BottomSheet';
 import VaultRecoveryExecutionScreen from './VaultRecoveryExecutionScreen';
 
 interface VaultRecoveryScreenProps {
+  pin?: string;
   onComplete: () => void;
   onBack: () => void;
 }
@@ -44,7 +45,7 @@ function truncateAddress(addr: string): string {
   return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
 }
 
-export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecoveryScreenProps) {
+export default function VaultRecoveryScreen({ pin, onComplete, onBack }: VaultRecoveryScreenProps) {
   const { colors } = useTheme();
   const { connect: connectWallet } = useWallet();
   const [step, setStep] = useState<RecoveryStep>('connect');
@@ -462,6 +463,7 @@ export default function VaultRecoveryScreen({ onComplete, onBack }: VaultRecover
       <VaultRecoveryExecutionScreen
         vault={selectedVault}
         walletAddress={walletAddress}
+        pin={pin}
         onComplete={onComplete}
         onBack={() => setStep('confirm')}
       />

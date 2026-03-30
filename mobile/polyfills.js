@@ -1,4 +1,4 @@
-// Import polyfills required for Solana libraries and Privy in React Native
+// Import required polyfills first (Privy + Solana)
 import 'fast-text-encoding';
 import 'react-native-get-random-values';
 import '@ethersproject/shims';
@@ -7,13 +7,6 @@ import { Buffer } from 'buffer';
 
 // Make Buffer globally available
 global.Buffer = Buffer;
-
-// TextEncoder/TextDecoder polyfill
-if (typeof global.TextEncoder === 'undefined') {
-  const { TextEncoder, TextDecoder } = require('text-encoding');
-  global.TextEncoder = TextEncoder;
-  global.TextDecoder = TextDecoder;
-}
 
 // Polyfill crypto.subtle for @noble/ed25519 and @solana/kit
 const quickCrypto = require('react-native-quick-crypto');
