@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -81,6 +81,52 @@ function getKeyIcon(label: MemberLabel, color?: string) {
     case 'Cloud': return <Cloud size={28} color={color ?? '#4A6CF7'} />;
     default: return <Wallet size={28} color={color ?? '#6B7B8D'} />;
   }
+}
+
+function OtpInput({ value, onChange, disabled, colors }: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+  colors: any;
+}) {
+  const inputRef = useRef<TextInput>(null);
+  const digits = value.split('');
+
+  return (
+    <View style={styles.otpContainer}>
+      <TextInput
+        ref={inputRef}
+        style={styles.otpHiddenInput}
+        value={value}
+        onChangeText={(t) => onChange(t.replace(/[^0-9]/g, '').slice(0, 6))}
+        keyboardType="number-pad"
+        maxLength={6}
+        editable={!disabled}
+        autoFocus
+        caretHidden
+      />
+      <View style={styles.otpCells}>
+        {Array.from({ length: 6 }).map((_, i) => {
+          const isFocused = value.length === i;
+          return (
+            <TouchableOpacity
+              key={i}
+              style={[
+                styles.otpCell,
+                { backgroundColor: colors.cardSecondary, borderColor: isFocused ? colors.accentGreen : 'transparent' },
+              ]}
+              activeOpacity={1}
+              onPress={() => inputRef.current?.focus()}
+            >
+              <Text style={[styles.otpDigit, { color: colors.textPrimary }]}>
+                {digits[i] || ''}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
 }
 
 export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryScreenProps) {
@@ -259,6 +305,8 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     }
     setSendingCode(true);
     try {
+      // Log out of any existing Privy session so loginWithCode won't conflict
+      await privyLogout().catch(() => {});
       await sendCode({ email: trimmed });
       setAddRecoveryStep('email-verify');
     } catch (err: any) {
@@ -291,16 +339,24 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
         await new Promise(r => setTimeout(r, 500));
       }
 
-      // If wallet wasn't auto-created, create it explicitly
+      // If wallet wasn't ready yet, try creating (may already exist) then poll again
       if (!solanaAddress) {
-        await wallet.create?.();
-        if (wallet.status === 'connected' && wallet.wallets.length > 0) {
-          solanaAddress = wallet.wallets[0].address;
+        try {
+          await wallet.create?.();
+        } catch {
+          // Wallet likely already exists — just need to wait for it to connect
+        }
+        for (let i = 0; i < 20; i++) {
+          if (wallet.status === 'connected' && wallet.wallets.length > 0) {
+            solanaAddress = wallet.wallets[0].address;
+            break;
+          }
+          await new Promise(r => setTimeout(r, 500));
         }
       }
 
       if (!solanaAddress) {
-        throw new Error('Failed to create Privy embedded wallet');
+        throw new Error('Failed to connect to Privy embedded wallet');
       }
 
       setAddingStep('Adding recovery key...');
@@ -909,18 +965,12 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
               Enter the 6-digit code sent to{'\n'}{recoveryEmail.trim()}
             </Text>
 
-            <View style={[styles.cryptoInputRow, { backgroundColor: colors.cardSecondary }]}>
-              <TextInput
-                style={[styles.cryptoInput, { color: colors.textPrimary }]}
-                value={emailCode}
-                onChangeText={setEmailCode}
-                placeholder="000000"
-                placeholderTextColor={colors.placeholderColor}
-                editable={!addingKey}
-                keyboardType="number-pad"
-                maxLength={6}
-              />
-            </View>
+            <OtpInput
+              value={emailCode}
+              onChange={setEmailCode}
+              disabled={addingKey}
+              colors={colors}
+            />
 
             <TouchableOpacity
               style={[styles.cryptoNextButton, { backgroundColor: colors.primaryButton }, (emailCode.length !== 6 || addingKey) && styles.cryptoNextButtonDisabled]}
@@ -1385,5 +1435,32 @@ const styles = StyleSheet.create({
   cryptoNextText: {
     fontWeight: '700',
     fontSize: 16,
+  },
+  otpContainer: {
+    marginTop: 12,
+  },
+  otpHiddenInput: {
+    position: 'absolute',
+    opacity: 0,
+    height: 0,
+    width: 0,
+  },
+  otpCells: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  otpCell: {
+    flex: 1,
+    aspectRatio: 1,
+    maxWidth: 52,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  otpDigit: {
+    fontSize: 24,
+    fontWeight: '700',
   },
 });
