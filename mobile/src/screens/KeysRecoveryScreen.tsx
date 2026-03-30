@@ -735,12 +735,12 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
               </TouchableOpacity>
               <View style={[
                 styles.infoIconWrapper,
-                { backgroundColor: colors.textPrimary },
+                { backgroundColor: colors.cardSecondary },
                 infoMember.label === 'Recovery' && { backgroundColor: colors.accentGreen },
               ]}>
                 {infoMember.label === 'Recovery'
-                  ? <Wallet size={28} color="#fff" />
-                  : getKeyIcon(infoMember.label, '#fff')}
+                  ? getRecoveryIcon(infoMember.address)
+                  : getKeyIcon(infoMember.label)}
               </View>
               <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>{content.title}</Text>
               <View style={styles.infoItems}>
