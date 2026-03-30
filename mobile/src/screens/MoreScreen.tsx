@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { LifetimeEarnedIcon, Last7DIcon } from '../assets/stat-icons';
 import { getVault, clearVault, type VaultData } from '../services/vaultStorage';
+import { IS_SOLANA_MOBILE } from '../config/constants';
 import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey, getDevicePrivateKey, deleteAllKeypairs, deleteDeviceKeypair } from '../services/keypairStorage';
 import { reclaimRent } from '../services/squadsService';
 import apiService from '../services/apiService';
@@ -306,7 +307,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
               {/* Keypairs */}
               {keysLoaded && (
                 <View style={[styles.keypairSection, { borderTopColor: colors.border }]}>
-                  {!vault?.seekerMode && (
+                  {!IS_SOLANA_MOBILE && (
                     <>
                       <TouchableOpacity
                         style={styles.keypairRow}

@@ -157,6 +157,8 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
   const { sendCode, loginWithCode } = useLoginWithEmail();
   const wallet = useEmbeddedSolanaWallet();
+  const walletRef = useRef(wallet);
+  walletRef.current = wallet;
   const { logout: privyLogout } = usePrivy();
 
   useEffect(() => { logScreenView('KeysRecoveryScreen'); }, []);
@@ -332,8 +334,9 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       let solanaAddress: string | null = null;
 
       for (let i = 0; i < 20; i++) {
-        if (wallet.status === 'connected' && wallet.wallets.length > 0) {
-          solanaAddress = wallet.wallets[0].address;
+        const w = walletRef.current;
+        if (w.status === 'connected' && w.wallets.length > 0) {
+          solanaAddress = w.wallets[0].address;
           break;
         }
         await new Promise(r => setTimeout(r, 500));
@@ -342,13 +345,14 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       // If wallet wasn't ready yet, try creating (may already exist) then poll again
       if (!solanaAddress) {
         try {
-          await wallet.create?.();
+          await walletRef.current.create?.();
         } catch {
           // Wallet likely already exists — just need to wait for it to connect
         }
         for (let i = 0; i < 20; i++) {
-          if (wallet.status === 'connected' && wallet.wallets.length > 0) {
-            solanaAddress = wallet.wallets[0].address;
+          const w = walletRef.current;
+          if (w.status === 'connected' && w.wallets.length > 0) {
+            solanaAddress = w.wallets[0].address;
             break;
           }
           await new Promise(r => setTimeout(r, 500));

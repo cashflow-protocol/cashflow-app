@@ -4,6 +4,7 @@ import { API_CONFIG } from '../config/api';
 import { APP_VERSION, BUILD_NUMBER } from '../config/version';
 import { getCloudPublicKey, getDevicePublicKey, signWithCloud, signWithDevice } from './keypairStorage';
 import { getVault } from './vaultStorage';
+import { IS_SOLANA_MOBILE } from '../config/constants';
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Re-authenticate 5 min before expiry
 
@@ -33,7 +34,7 @@ class AuthService {
 
   private async authenticate(): Promise<string> {
     const vault = await getVault();
-    const seekerMode = vault?.seekerMode === true;
+    const seekerMode = IS_SOLANA_MOBILE;
 
     // Seeker: use device key for auth. Standard: use cloud key.
     const publicKey = seekerMode

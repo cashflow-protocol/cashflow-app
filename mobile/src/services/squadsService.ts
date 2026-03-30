@@ -79,7 +79,7 @@ interface SigningContext {
 /** Resolve cloud/device/wallet keys and seekerMode from vault storage */
 async function getSigningContext(errorPrefix: string): Promise<SigningContext> {
   const vaultData = await getVault();
-  const seekerMode = vaultData?.seekerMode === true;
+  const seekerMode = IS_SOLANA_MOBILE;
 
   const devicePubBase58 = await getDevicePublicKey();
   if (!devicePubBase58) {
@@ -654,6 +654,14 @@ export async function addMember(
   const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
   const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
+  console.log('[addMember] seekerMode:', ctx.seekerMode);
+  console.log('[addMember] primaryKey (creator):', feePayer.toBase58());
+  console.log('[addMember] devicePubkey:', ctx.devicePubkey.toBase58());
+  console.log('[addMember] walletPubkey:', ctx.walletPubkey?.toBase58());
+  console.log('[addMember] cloudPubkey:', ctx.cloudPubkey?.toBase58());
+  console.log('[addMember] on-chain members:', multisigAccount.members.map((m: any) => m.key.toBase58()));
+  console.log('[addMember] newMember:', newMemberAddress);
+
   // TX1: create config tx + proposal + approvals
   const tx1Instructions: TransactionInstruction[] = [
     multisig.instructions.configTransactionCreate({
@@ -747,7 +755,7 @@ export async function executeVaultTransaction(
 ): Promise<{ signature: string; bundleSignatures: string[] }> {
   const multisigPda = new PublicKey(multisigAddress);
   const vaultData = await getVault();
-  const seekerMode = vaultData?.seekerMode === true;
+  const seekerMode = IS_SOLANA_MOBILE;
 
   // Get device public key (used in all modes)
   const devicePubBase58 = await getDevicePublicKey();
