@@ -21,11 +21,11 @@ export interface FeeCalculation {
  * Only charges fee on the marginal profit of this specific withdrawal.
  */
 export async function calculateFee(
-  walletAddress: string,
+  vaultAddress: string,
   mint: string,
   withdrawAmount: string,
 ): Promise<FeeCalculation> {
-  const costBasis = await UserCostBasisModel.findOne({ walletAddress, mint }).lean();
+  const costBasis = await UserCostBasisModel.findOne({ vaultAddress, mint }).lean();
 
   const totalDeposited = BigInt(costBasis?.totalDeposited ?? '0');
   const totalWithdrawn = BigInt(costBasis?.totalWithdrawn ?? '0');
@@ -77,7 +77,7 @@ export async function buildFeeTransferInstructions(
  * Create a FeeTransaction audit record.
  */
 export async function createFeeRecord(params: {
-  walletAddress: string;
+  vaultAddress: string;
   mint: string;
   withdrawTransactionId: string;
   withdrawAmount: string;
@@ -95,12 +95,12 @@ export async function createFeeRecord(params: {
  * Record a vault creation fee payment.
  */
 export async function createVaultCreationFeeRecord(params: {
-  walletAddress: string;
+  vaultAddress: string;
   feeAmount: string;
   signature: string;
 }): Promise<void> {
   await FeeTransactionModel.create({
-    walletAddress: params.walletAddress,
+    vaultAddress: params.vaultAddress,
     mint: 'So11111111111111111111111111111111111111112', // native SOL
     feeType: FeeType.VAULT_CREATION,
     feeAmount: params.feeAmount,
@@ -117,11 +117,13 @@ export async function updateCostBasisOnConfirm(transactionId: string): Promise<v
   const tx = await TransactionModel.findById(transactionId).lean();
   if (!tx) return;
 
-  const { walletAddress, mint, amount, action, feeAmount } = tx;
+  const { vaultAddress, mint, amount, action, feeAmount } = tx;
+
+  if (!vaultAddress) return;
 
   if (action === TransactionAction.DEPOSIT) {
     await UserCostBasisModel.findOneAndUpdate(
-      { walletAddress, mint },
+      { vaultAddress, mint },
       { $inc: { totalDeposited: amount } },
       { upsert: true },
     );
@@ -131,7 +133,7 @@ export async function updateCostBasisOnConfirm(transactionId: string): Promise<v
       incFields.totalFeesCollected = feeAmount;
     }
     await UserCostBasisModel.findOneAndUpdate(
-      { walletAddress, mint },
+      { vaultAddress, mint },
       { $inc: incFields },
       { upsert: true },
     );

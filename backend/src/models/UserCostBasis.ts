@@ -6,10 +6,10 @@ import { prop, getModelForClass, index, modelOptions } from '@typegoose/typegoos
     collection: 'user_cost_basis',
   },
 })
-@index({ walletAddress: 1, mint: 1 }, { unique: true })
+@index({ vaultAddress: 1, mint: 1 }, { unique: true })
 export class UserCostBasis {
   @prop({ required: true })
-  public walletAddress!: string;
+  public vaultAddress!: string;
 
   @prop({ required: true })
   public mint!: string;

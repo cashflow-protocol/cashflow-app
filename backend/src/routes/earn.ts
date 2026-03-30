@@ -162,7 +162,7 @@ router.get('/earnings', async (req: Request, res: Response) => {
 
     // Fetch cost basis records and current positions in parallel
     const [costBasisRecords, positionsRes] = await Promise.all([
-      UserCostBasisModel.find({ walletAddress }).lean(),
+      UserCostBasisModel.find({ vaultAddress: walletAddress }).lean(),
       // Re-use the positions logic: fetch from all protocols
       (async () => {
         const positionPromises: [string, Promise<any[]>][] = [
@@ -292,13 +292,13 @@ router.get('/earnings', async (req: Request, res: Response) => {
 // GET /earn/v1/fee-preview - Preview the profit fee for a withdrawal
 router.get('/fee-preview', async (req: Request, res: Response) => {
   try {
-    const { walletAddress, mint, amount } = req.query;
-    if (!walletAddress || !mint || !amount || typeof walletAddress !== 'string' || typeof mint !== 'string' || typeof amount !== 'string') {
-      res.status(400).json({ success: false, error: 'walletAddress, mint, and amount query params are required' });
+    const { vaultAddress, mint, amount } = req.query;
+    if (!vaultAddress || !mint || !amount || typeof vaultAddress !== 'string' || typeof mint !== 'string' || typeof amount !== 'string') {
+      res.status(400).json({ success: false, error: 'vaultAddress, mint, and amount query params are required' });
       return;
     }
 
-    const { feeAmount, profitAmount } = await calculateFee(walletAddress, mint, amount);
+    const { feeAmount, profitAmount } = await calculateFee(vaultAddress, mint, amount);
     const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
     const decimals = tokenInfo?.decimals ?? 6;
 
@@ -511,7 +511,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
       }
 
       // Calculate and append profit fee instructions
-      const { feeAmount, profitAmount } = await calculateFee(walletAddress, mint, amount);
+      const { feeAmount, profitAmount } = await calculateFee(vaultAddress, mint, amount);
       let feeAmountStr: string | undefined;
       if (feeAmount > 0n) {
         const feeInstructions = await buildFeeTransferInstructions(mint, feeAmount.toString(), authority);
@@ -531,7 +531,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
 
       if (feeAmount > 0n) {
         await createFeeRecord({
-          walletAddress,
+          vaultAddress,
           mint,
           withdrawTransactionId: String(record._id),
           withdrawAmount: amount,

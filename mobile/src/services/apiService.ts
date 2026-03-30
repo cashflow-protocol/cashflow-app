@@ -51,12 +51,12 @@ class ApiService {
     return res.data;
   }
 
-  async recordVaultCreationFee(walletAddress: string, feeAmount: string, signature: string): Promise<void> {
+  async recordVaultCreationFee(vaultAddress: string, feeAmount: string, signature: string): Promise<void> {
     // Bypass auth — vault creation happens before login
     const r = await fetch(`${this.baseUrl}/config/v1/vault-creation-fee`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ walletAddress, feeAmount, signature }),
+      body: JSON.stringify({ vaultAddress, feeAmount, signature }),
     });
     if (!r.ok) console.warn('Failed to record vault creation fee:', r.status);
   }
@@ -108,7 +108,7 @@ class ApiService {
     return res.data;
   }
 
-  async getFeePreview(walletAddress: string, mint: string, amount: string): Promise<{
+  async getFeePreview(vaultAddress: string, mint: string, amount: string): Promise<{
     feeAmount: string;
     profitAmount: string;
     feeUiAmount: number;
@@ -117,7 +117,7 @@ class ApiService {
     const res = await this.get<{
       success: boolean;
       data: { feeAmount: string; profitAmount: string; feeUiAmount: number; profitUiAmount: number };
-    }>('/earn/v2/fee-preview', { walletAddress, mint, amount });
+    }>('/earn/v2/fee-preview', { vaultAddress, mint, amount });
     return res.data;
   }
 

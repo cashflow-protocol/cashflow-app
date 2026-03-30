@@ -17,11 +17,11 @@ export enum FeeType {
     collection: 'fee_transactions',
   },
 })
-@index({ walletAddress: 1, mint: 1 })
+@index({ vaultAddress: 1, mint: 1 })
 @index({ withdrawTransactionId: 1 })
 export class FeeTransaction {
   @prop({ required: true })
-  public walletAddress!: string;
+  public vaultAddress!: string;
 
   @prop({ required: true })
   public mint!: string;
