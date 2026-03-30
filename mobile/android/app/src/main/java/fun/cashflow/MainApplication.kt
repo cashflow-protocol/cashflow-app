@@ -12,6 +12,7 @@ import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
 import `fun`.cashflow.signing.CashflowSigningPackage
 import expo.modules.ApplicationLifecycleDispatcher
+import expo.modules.ExpoModulesPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -20,6 +21,7 @@ class MainApplication : Application(), ReactApplication {
       override fun getPackages(): List<ReactPackage> =
         PackageList(this@MainApplication).packages.apply {
           add(CashflowSigningPackage())
+          add(ExpoModulesPackage())
         }
 
       override fun getJSMainModuleName(): String = "index"
