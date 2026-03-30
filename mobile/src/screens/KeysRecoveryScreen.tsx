@@ -256,6 +256,8 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
   const openAddRecovery = () => {
     setAddRecoveryStep('choose');
     setNewWalletAddress('');
+    setRecoveryEmail('');
+    setEmailCode('');
     setAddingKey(false);
     setAddingStep('');
     setAddRecoveryVisible(true);
@@ -268,6 +270,10 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     }
     if (newWalletAddress.trim().length < 32 || newWalletAddress.trim().length > 44) {
       Alert.alert('Error', 'Invalid Solana wallet address');
+      return;
+    }
+    if (multisigInfo?.members.some(m => m.address === newWalletAddress.trim())) {
+      Alert.alert('Already Added', 'This wallet is already a member of your vault.');
       return;
     }
 
@@ -303,6 +309,11 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     const trimmed = recoveryEmail.trim();
     if (!trimmed || !trimmed.includes('@')) {
       Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+    const existingEmail = Object.values(emailMap).find(e => e.toLowerCase() === trimmed.toLowerCase());
+    if (existingEmail) {
+      Alert.alert('Already Added', 'This email is already a recovery key for your vault.');
       return;
     }
     setSendingCode(true);
@@ -361,6 +372,10 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
       if (!solanaAddress) {
         throw new Error('Failed to connect to Privy embedded wallet');
+      }
+
+      if (multisigInfo?.members.some(m => m.address === solanaAddress)) {
+        throw new Error('This email\'s wallet is already a member of your vault.');
       }
 
       setAddingStep('Adding recovery key...');
@@ -425,6 +440,12 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
                 const vaultData = await getVault();
                 if (!vaultData) throw new Error('No vault found.');
                 await removeMember(vaultData.multisigAddress, member.address);
+
+                setEmailMap(prev => {
+                  const next = { ...prev };
+                  delete next[member.address];
+                  return next;
+                });
 
                 const info = await getMultisigInfo(vaultData.multisigAddress);
                 setMultisigInfo(info);
