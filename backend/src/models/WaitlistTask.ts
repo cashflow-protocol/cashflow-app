@@ -6,7 +6,7 @@ import { prop, getModelForClass, modelOptions, index } from '@typegoose/typegoos
     collection: 'waitlist_tasks',
   },
 })
-@index({ sortOrder: 1 })
+@index({ active: 1, sortOrder: 1 })
 @index({ category: 1, 'metadata.provider': 1 })
 export class WaitlistTask {
   @prop({ required: true })
