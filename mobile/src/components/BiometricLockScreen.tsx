@@ -33,17 +33,23 @@ export default function BiometricLockScreen({ onUnlock, onPinUnlock }: Biometric
 
   const handlePinComplete = useCallback(
     async (pin: string) => {
-      const valid = await verifyPin(pin);
-      if (valid) {
+      const result = await verifyPin(pin);
+      if (result.success) {
         logPinUnlockSuccess();
         onPinUnlock?.(pin);
         onUnlock();
       } else {
         logPinUnlockFailed();
-        setError('Wrong PIN. Try again.');
+        if (result.attemptsRemaining === 0) {
+          setError('Too many attempts. Try again in 5 minutes.');
+        } else if (result.attemptsRemaining != null) {
+          setError(`Wrong PIN. ${result.attemptsRemaining} attempts remaining.`);
+        } else {
+          setError('Wrong PIN. Try again.');
+        }
       }
     },
-    [onUnlock],
+    [onUnlock, onPinUnlock],
   );
 
   return (

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Router, Request, Response } from 'express';
 import { RecoveryProposalModel, RecoveryProposalStatus } from '../models/RecoveryProposal';
 import { UserModel } from '../models';
@@ -141,7 +142,9 @@ router.post('/find-vault-by-address', async (req: Request, res: Response) => {
             return;
           }
         }
-      } catch {}
+      } catch (err) {
+        console.warn('[vault-recovery] Squads API lookup failed:', (err as Error).message);
+      }
 
       // Try as vault address — look up in our User DB to find a member,
       // then use Squads API with that member to get the multisig
@@ -180,7 +183,9 @@ router.post('/find-vault-by-address', async (req: Request, res: Response) => {
             }
           }
         }
-      } catch {}
+      } catch (err) {
+        console.warn('[vault-recovery] Vault address lookup failed:', (err as Error).message);
+      }
 
       res.json({ success: true, data: { multisig: null } });
       return;
@@ -343,11 +348,20 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
     }).compileToV0Message();
     const tx2 = new VersionedTransaction(msg2);
 
+    const tx1Base64 = Buffer.from(tx.serialize()).toString('base64');
+    const tx2Base64 = Buffer.from(tx2.serialize()).toString('base64');
+
+    // Include SHA-256 hashes so clients can verify transaction integrity
+    const tx1Hash = crypto.createHash('sha256').update(tx1Base64).digest('hex');
+    const tx2Hash = crypto.createHash('sha256').update(tx2Base64).digest('hex');
+
     res.json({
       success: true,
       data: {
-        tx1Base64: Buffer.from(tx.serialize()).toString('base64'),
-        tx2Base64: Buffer.from(tx2.serialize()).toString('base64'),
+        tx1Base64,
+        tx2Base64,
+        tx1Hash,
+        tx2Hash,
         transactionIndex: Number(transactionIndex),
         blockhash,
         lastValidBlockHeight,
@@ -369,7 +383,7 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
  */
 router.post('/lookup-privy-emails', async (req: Request, res: Response) => {
   try {
-    const { addresses } = req.body;
+    const { addresses, proposalId } = req.body;
     if (!Array.isArray(addresses)) {
       res.status(400).json({ success: false, error: 'addresses array is required' });
       return;
@@ -377,6 +391,20 @@ router.post('/lookup-privy-emails', async (req: Request, res: Response) => {
 
     const { lookupPrivyEmails } = await import('../services/privyService');
     const emails = await lookupPrivyEmails(addresses);
+
+    // If a proposalId is provided, only return emails for addresses that are
+    // required signers on that proposal (prevents fishing for email addresses)
+    if (proposalId) {
+      const proposal = await RecoveryProposalModel.findById(proposalId).lean();
+      if (proposal) {
+        const requiredAddresses = new Set(proposal.requiredSigners.map(s => s.address));
+        for (const addr of Object.keys(emails)) {
+          if (!requiredAddresses.has(addr)) {
+            delete emails[addr];
+          }
+        }
+      }
+    }
 
     res.json({ success: true, data: { emails } });
   } catch (error: any) {
@@ -599,7 +627,8 @@ router.post('/build-approve-tx', async (req: Request, res: Response) => {
     const tx = new VersionedTransaction(msg);
     const txBase64 = Buffer.from(tx.serialize()).toString('base64');
 
-    res.json({ success: true, data: { transaction: txBase64, blockhash, lastValidBlockHeight } });
+    const txHash = crypto.createHash('sha256').update(txBase64).digest('hex');
+    res.json({ success: true, data: { transaction: txBase64, txHash, blockhash, lastValidBlockHeight } });
   } catch (error: any) {
     console.error('Error building approve tx:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to build approve transaction' });

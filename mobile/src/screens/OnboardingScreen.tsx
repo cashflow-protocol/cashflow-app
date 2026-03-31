@@ -201,7 +201,7 @@ export default function OnboardingScreen({ onHaveInviteCode, onJoinWaitlist }: O
               >
                 <Text style={[styles.nextButtonText, { color: colors.onboardingButtonText }]}>I have an invite code</Text>
               </TouchableOpacity>
-              <Text style={[styles.hackathonHint, { color: colors.onboardingText }]}>For hackathon - enter SEEKER</Text>
+              {__DEV__ && <Text style={[styles.hackathonHint, { color: colors.onboardingText }]}>For hackathon - enter SEEKER</Text>}
               <TouchableOpacity
                 style={[styles.secondaryButton, { borderColor: colors.onboardingText + '66' }]}
                 onPress={() => { logOnboardingJoinWaitlist(); onJoinWaitlist(); }}

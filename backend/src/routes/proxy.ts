@@ -2,12 +2,15 @@ import { Router, Request, Response } from 'express';
 
 const router = Router();
 
+// Valid IPFS CID pattern: base58btc (CIDv0) or base32/base36 (CIDv1)
+const VALID_CID = /^[a-zA-Z0-9]+$/;
+
 // IPFS proxy — rewrites ipfs.io URLs so mobile clients load images reliably
 router.get('/:cid', async (req: Request, res: Response) => {
   try {
-    const ipfsPath = req.params.cid;
-    if (!ipfsPath) {
-      res.status(400).send('Missing IPFS path');
+    const ipfsPath = Array.isArray(req.params.cid) ? req.params.cid[0] : req.params.cid;
+    if (!ipfsPath || !VALID_CID.test(ipfsPath)) {
+      res.status(400).send('Invalid IPFS CID');
       return;
     }
     const ipfsUrl = `https://ipfs.io/ipfs/${ipfsPath}`;

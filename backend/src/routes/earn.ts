@@ -3,10 +3,33 @@ import { DBManager, JupiterManager, KaminoManager, DriftManager, PriceManager } 
 import { LookupManager } from '../managers/LookupManager';
 import { EarnTokenModel } from '../models/EarnToken';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
-import { TransactionAction, UserCostBasisModel } from '../models';
+import { TransactionAction, UserCostBasisModel, UserModel } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
 import { notifyAdmin } from '../services/telegramManager';
 import { calculateFee, buildFeeTransferInstructions, createFeeRecord } from '../services/feeService';
+import type { AuthenticatedRequest } from '../middleware/auth';
+import { isValidSolanaAddress } from '../utils/validation';
+
+/**
+ * Verify that the given walletAddress belongs to the authenticated user.
+ * Returns true if no auth is present (v1 routes) or if the address matches.
+ */
+async function verifyWalletOwnership(req: Request, walletAddress: string): Promise<boolean> {
+  const authReq = req as AuthenticatedRequest;
+  // If no auth context (v1 routes), skip ownership check
+  if (!authReq.user) return true;
+  // Check if the wallet matches the user's vault address from JWT
+  if (authReq.user.vaultAddress === walletAddress) return true;
+  // Also check against the user's record in the database (they may have multiple addresses)
+  const user = await UserModel.findOne({
+    $or: [
+      { vaultAddress: walletAddress },
+      { publicKey: walletAddress },
+    ],
+  }).lean();
+  if (!user) return false;
+  return user.vaultAddress === authReq.user.vaultAddress;
+}
 
 const router = Router();
 const dbManager = new DBManager();
@@ -51,8 +74,14 @@ try {
 router.get('/positions', async (req: Request, res: Response) => {
   try {
     const { walletAddress } = req.query;
-    if (!walletAddress || typeof walletAddress !== 'string') {
-      res.status(400).json({ success: false, error: 'walletAddress query param is required' });
+    if (!walletAddress || typeof walletAddress !== 'string' || !isValidSolanaAddress(walletAddress)) {
+      res.status(400).json({ success: false, error: 'Valid walletAddress query param is required' });
+      return;
+    }
+
+    // IDOR protection: verify the wallet belongs to the authenticated user
+    if (!(await verifyWalletOwnership(req, walletAddress))) {
+      res.status(403).json({ success: false, error: 'Forbidden' });
       return;
     }
     const positionPromises: [string, Promise<any[]>][] = [
@@ -155,8 +184,14 @@ router.get('/positions', async (req: Request, res: Response) => {
 router.get('/earnings', async (req: Request, res: Response) => {
   try {
     const { walletAddress } = req.query;
-    if (!walletAddress || typeof walletAddress !== 'string') {
-      res.status(400).json({ success: false, error: 'walletAddress query param is required' });
+    if (!walletAddress || typeof walletAddress !== 'string' || !isValidSolanaAddress(walletAddress)) {
+      res.status(400).json({ success: false, error: 'Valid walletAddress query param is required' });
+      return;
+    }
+
+    // IDOR protection: verify the wallet belongs to the authenticated user
+    if (!(await verifyWalletOwnership(req, walletAddress))) {
+      res.status(403).json({ success: false, error: 'Forbidden' });
       return;
     }
 
@@ -295,6 +330,12 @@ router.get('/fee-preview', async (req: Request, res: Response) => {
     const { vaultAddress, mint, amount } = req.query;
     if (!vaultAddress || !mint || !amount || typeof vaultAddress !== 'string' || typeof mint !== 'string' || typeof amount !== 'string') {
       res.status(400).json({ success: false, error: 'vaultAddress, mint, and amount query params are required' });
+      return;
+    }
+
+    // IDOR protection: verify the vault belongs to the authenticated user
+    if (!(await verifyWalletOwnership(req, vaultAddress))) {
+      res.status(403).json({ success: false, error: 'Forbidden' });
       return;
     }
 
