@@ -408,9 +408,22 @@ export default function VaultRecoveryExecutionScreen({
   const handleExecute = useCallback(async () => {
     if (!proposalId) return;
     setStep('executing');
-    setStatusText('Submitting recovery transaction...');
+    setStatusText('Verifying signatures...');
 
     try {
+      // Re-check proposal status before executing — signatures may have landed since last poll
+      const freshStatus = await apiService.getRecoveryProposalStatus(proposalId);
+      setSigners(freshStatus.requiredSigners);
+      setSignaturesCollected(freshStatus.signaturesCollected);
+
+      if (freshStatus.status !== 'ready' && freshStatus.signaturesCollected < threshold) {
+        showToast('Not enough signatures yet. Waiting for more approvals.');
+        setStep('signing');
+        startPolling(proposalId);
+        return;
+      }
+
+      setStatusText('Submitting recovery transaction...');
       await executeRecoveryProposal(
         proposalId,
         (msg) => setStatusText(msg),
