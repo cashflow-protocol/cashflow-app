@@ -19,6 +19,7 @@ import { EarnTokenType } from '../types';
 @index({ status: 1, type: 1 })
 @index({ status: 1, rewardsRate: -1 })
 @index({ type: 1, vaultAddress: 1 })
+@index({ vaultAddress: 1 })
 @index({ type: 1, symbol: 1 })
 @index({ symbol: 1 })
 export class EarnToken {
