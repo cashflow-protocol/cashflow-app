@@ -28,6 +28,7 @@ import { buildAndSubmitRecoveryProposal, executeRecoveryProposal } from '../serv
 import { backupCloudKeyToBlockStore } from '../services/keypairStorage';
 import { IS_SOLANA_MOBILE } from '../config/constants';
 import apiService from '../services/apiService';
+import walletService from '../services/walletService';
 import Toast from '../components/Toast';
 import BottomSheet from '../components/BottomSheet';
 import { useLoginWithEmail, useEmbeddedSolanaWallet, usePrivy } from '@privy-io/expo';
@@ -265,8 +266,8 @@ export default function VaultRecoveryExecutionScreen({
 
   const handlePrivyVerifyAndSign = useCallback(async () => {
     if (privyOtp.length !== 6) return;
-    if (!proposalId || transactionIndex == null) {
-      setPrivyError('Proposal data not available. Try refreshing.');
+    if (!proposalId) {
+      setPrivyError('Proposal not available. Try refreshing.');
       return;
     }
 
@@ -275,6 +276,16 @@ export default function VaultRecoveryExecutionScreen({
     setPrivyStep('signing');
 
     try {
+      // Fetch transactionIndex if we don't have it yet
+      let txIndex = transactionIndex;
+      if (txIndex == null) {
+        const status = await apiService.getRecoveryProposalStatus(proposalId);
+        txIndex = status.transactionIndex;
+        if (txIndex != null) setTransactionIndex(txIndex);
+      }
+      if (txIndex == null) {
+        throw new Error('Could not get transaction index from proposal');
+      }
       // Step 1: Verify OTP — authenticates user with Privy
       await loginWithCode({ code: privyOtp, email: privyEmail.trim() });
 
@@ -300,24 +311,30 @@ export default function VaultRecoveryExecutionScreen({
       }
       const provider = await wallets[0].getProvider();
 
-      // Step 4: Build unsigned approve TX from backend
+      // Step 4: Build unsigned approve TX from backend (MWA wallet pays fees)
       const { transaction: txBase64 } = await apiService.buildApproveTx(
         privySignerAddress,
         vault.multisigAddress,
-        transactionIndex,
+        txIndex,
+        walletAddress, // fee payer = MWA wallet
       );
 
-      // Step 5: Deserialize and sign the transaction
+      // Step 5: Deserialize and sign with Privy wallet (approve instruction signer)
       const txBytes = Buffer.from(txBase64, 'base64');
       const tx = VersionedTransaction.deserialize(txBytes);
 
-      const { signedTransaction } = await provider.request({
+      const { signedTransaction: privySignedTx } = await provider.request({
         method: 'signTransaction',
         params: { transaction: tx },
       });
 
-      // Step 6: Serialize signed TX and send via backend
-      const signedBase64 = Buffer.from(signedTransaction.serialize()).toString('base64');
+      // Step 6: Sign with MWA wallet (fee payer)
+      const partialSerialized = privySignedTx.serialize();
+      const mwaSignedBytes = await walletService.signTransactions([partialSerialized]);
+      const finalTx = VersionedTransaction.deserialize(mwaSignedBytes[0]);
+
+      // Step 7: Send fully signed TX via backend
+      const signedBase64 = Buffer.from(finalTx.serialize()).toString('base64');
       await apiService.sendApproveTx(proposalId, signedBase64);
 
       // Step 7: Cleanup and refresh

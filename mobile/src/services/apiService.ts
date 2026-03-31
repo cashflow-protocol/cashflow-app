@@ -509,7 +509,7 @@ class ApiService {
     return res.data;
   }
 
-  async buildApproveTx(memberAddress: string, multisigAddress: string, transactionIndex: number): Promise<{
+  async buildApproveTx(memberAddress: string, multisigAddress: string, transactionIndex: number, feePayerAddress?: string): Promise<{
     transaction: string;
     blockhash: string;
     lastValidBlockHeight: number;
@@ -517,7 +517,7 @@ class ApiService {
     const r = await fetch(`${this.baseUrl}/vault-recovery/v1/build-approve-tx`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ memberAddress, multisigAddress, transactionIndex }),
+      body: JSON.stringify({ memberAddress, multisigAddress, transactionIndex, feePayerAddress }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({ error: 'Failed' }));

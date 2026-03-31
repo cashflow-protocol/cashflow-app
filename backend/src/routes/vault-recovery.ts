@@ -545,11 +545,11 @@ router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
 /**
  * POST /build-approve-tx
  * Build a proposalApprove transaction for a given member.
- * Body: { memberAddress: string, multisigAddress: string, transactionIndex: number }
+ * Body: { memberAddress: string, multisigAddress: string, transactionIndex: number, feePayerAddress?: string }
  */
 router.post('/build-approve-tx', async (req: Request, res: Response) => {
   try {
-    const { memberAddress, multisigAddress, transactionIndex: txIdx } = req.body;
+    const { memberAddress, multisigAddress, transactionIndex: txIdx, feePayerAddress } = req.body;
     if (!memberAddress || !multisigAddress || txIdx == null) {
       res.status(400).json({ success: false, error: 'memberAddress, multisigAddress, transactionIndex are required' });
       return;
@@ -562,6 +562,7 @@ router.post('/build-approve-tx', async (req: Request, res: Response) => {
 
     const multisigPda = new PublicKey(multisigAddress);
     const memberPubkey = new PublicKey(memberAddress);
+    const payerPubkey = feePayerAddress ? new PublicKey(feePayerAddress) : memberPubkey;
     const transactionIndex = BigInt(txIdx);
 
     // Verify proposal exists onchain before building approve TX
@@ -585,13 +586,13 @@ router.post('/build-approve-tx', async (req: Request, res: Response) => {
     const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
 
     const msg = new TransactionMessage({
-      payerKey: memberPubkey,
+      payerKey: payerPubkey,
       recentBlockhash: blockhash,
       instructions: [
         ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
         ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
         approveIx,
-        HeliusSender.createTipIx(memberPubkey),
+        HeliusSender.createTipIx(payerPubkey),
       ],
     }).compileToV0Message();
 
