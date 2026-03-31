@@ -83,13 +83,16 @@ function getKeyIcon(label: MemberLabel, color?: string) {
   }
 }
 
-function OtpInput({ value, onChange, disabled, colors }: {
+function OtpInput({ value, onChange, disabled, colors, onComplete }: {
   value: string;
   onChange: (v: string) => void;
   disabled: boolean;
   colors: any;
+  onComplete?: () => void;
 }) {
   const inputRef = useRef<TextInput>(null);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
   const digits = value.split('');
 
   return (
@@ -98,7 +101,13 @@ function OtpInput({ value, onChange, disabled, colors }: {
         ref={inputRef}
         style={styles.otpHiddenInput}
         value={value}
-        onChangeText={(t) => onChange(t.replace(/[^0-9]/g, '').slice(0, 6))}
+        onChangeText={(t) => {
+          const cleaned = t.replace(/[^0-9]/g, '').slice(0, 6);
+          onChange(cleaned);
+          if (cleaned.length === 6) {
+            setTimeout(() => onCompleteRef.current?.(), 50);
+          }
+        }}
         keyboardType="number-pad"
         maxLength={6}
         editable={!disabled}
@@ -995,6 +1004,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
               onChange={setEmailCode}
               disabled={addingKey}
               colors={colors}
+              onComplete={handleVerifyEmailCode}
             />
 
             <TouchableOpacity

@@ -61,13 +61,20 @@ function truncateAddress(addr: string): string {
   return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
 }
 
-function OtpInput({ value, onChange, disabled }: {
+const OtpInput = React.forwardRef<{ focus: () => void }, {
   value: string;
   onChange: (v: string) => void;
   disabled: boolean;
-}) {
+  onComplete?: () => void;
+}>(({ value, onChange, disabled, onComplete }, ref) => {
   const inputRef = useRef<TextInput>(null);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
   const digits = value.split('');
+
+  React.useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+  }));
 
   return (
     <View style={styles.otpContainer}>
@@ -75,11 +82,16 @@ function OtpInput({ value, onChange, disabled }: {
         ref={inputRef}
         style={styles.otpHiddenInput}
         value={value}
-        onChangeText={(t) => onChange(t.replace(/[^0-9]/g, '').slice(0, 6))}
+        onChangeText={(t) => {
+          const cleaned = t.replace(/[^0-9]/g, '').slice(0, 6);
+          onChange(cleaned);
+          if (cleaned.length === 6) {
+            setTimeout(() => onCompleteRef.current?.(), 50);
+          }
+        }}
         keyboardType="number-pad"
         maxLength={6}
         editable={!disabled}
-        autoFocus
         caretHidden
       />
       <View style={styles.otpCells}>
@@ -104,7 +116,7 @@ function OtpInput({ value, onChange, disabled }: {
       </View>
     </View>
   );
-}
+});
 
 export default function VaultRecoveryExecutionScreen({
   vault,
@@ -143,6 +155,19 @@ export default function VaultRecoveryExecutionScreen({
   const [privySending, setPrivySending] = useState(false);
   const [privyError, setPrivyError] = useState<string | null>(null);
   const [privySignerAddress, setPrivySignerAddress] = useState('');
+
+  const privyEmailRef = useRef<TextInput>(null);
+  const privyOtpRef = useRef<{ focus: () => void }>(null);
+
+  // Focus inputs after bottom sheet animation settles
+  useEffect(() => {
+    if (!privySheetVisible) return;
+    const timer = setTimeout(() => {
+      if (privyStep === 'email') privyEmailRef.current?.focus();
+      else if (privyStep === 'otp') privyOtpRef.current?.focus();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [privySheetVisible, privyStep]);
 
   // Privy hooks
   const { sendCode, loginWithCode } = useLoginWithEmail();
@@ -593,6 +618,7 @@ export default function VaultRecoveryExecutionScreen({
 
               <View style={[styles.privyInputRow, { backgroundColor: colors.cardSecondary }]}>
                 <TextInput
+                  ref={privyEmailRef}
                   style={[styles.privyInput, { color: colors.textPrimary }]}
                   value={privyEmail}
                   onChangeText={setPrivyEmail}
@@ -602,6 +628,8 @@ export default function VaultRecoveryExecutionScreen({
                   autoCapitalize="none"
                   autoCorrect={false}
                   editable={!privySending}
+                  onSubmitEditing={handlePrivySendCode}
+                  returnKeyType="send"
                 />
               </View>
 
@@ -638,9 +666,11 @@ export default function VaultRecoveryExecutionScreen({
               </Text>
 
               <OtpInput
+                ref={privyOtpRef}
                 value={privyOtp}
                 onChange={setPrivyOtp}
                 disabled={privySending}
+                onComplete={handlePrivyVerifyAndSign}
               />
 
               {privyError && <Text style={styles.privyErrorText}>{privyError}</Text>}
