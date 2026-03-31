@@ -8,6 +8,7 @@ import { prop, getModelForClass, modelOptions, index, Severity } from '@typegoos
 })
 @index({ publicKey: 1 }, { unique: true })
 @index({ xp: -1, lastXpAt: 1 })
+@index({ status: 1, xp: -1, lastXpAt: 1 })
 export class WaitlistUser {
   @prop({ required: true })
   public publicKey!: string;

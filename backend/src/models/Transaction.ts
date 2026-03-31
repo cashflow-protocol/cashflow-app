@@ -22,6 +22,8 @@ export enum TransactionStatus {
 })
 @index({ walletAddress: 1, status: 1 })
 @index({ status: 1 })
+@index({ signature: 1 }, { sparse: true })
+@index({ bundleSignatures: 1 })
 export class Transaction {
   @prop({ required: true, enum: TransactionAction })
   public action!: TransactionAction;

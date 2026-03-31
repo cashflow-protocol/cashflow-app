@@ -11,3 +11,4 @@ export { Notification, NotificationModel, NotificationType } from './Notificatio
 export { DeviceToken, DeviceTokenModel } from './DeviceToken';
 export { UserCostBasis, UserCostBasisModel } from './UserCostBasis';
 export { FeeTransaction, FeeTransactionModel, FeeTransactionStatus, FeeType } from './FeeTransaction';
+export { RecoveryProposal, RecoveryProposalModel, RecoveryProposalStatus } from './RecoveryProposal';

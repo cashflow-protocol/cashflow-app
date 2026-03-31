@@ -18,7 +18,7 @@ export enum FeeType {
   },
 })
 @index({ vaultAddress: 1, mint: 1 })
-@index({ withdrawTransactionId: 1 })
+@index({ withdrawTransactionId: 1, status: 1 }, { sparse: true })
 export class FeeTransaction {
   @prop({ required: true })
   public vaultAddress!: string;

@@ -7,6 +7,8 @@ import { prop, getModelForClass, modelOptions, index } from '@typegoose/typegoos
   },
 })
 @index({ vaultAddress: 1 }, { unique: true })
+@index({ waitlistUserId: 1 }, { sparse: true })
+@index({ createdAt: -1 })
 export class User {
   @prop({ required: true })
   public vaultAddress!: string;
