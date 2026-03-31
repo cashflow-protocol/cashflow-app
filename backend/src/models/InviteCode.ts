@@ -15,6 +15,7 @@ class InviteCodeUsage {
   },
 })
 @index({ code: 1 }, { unique: true })
+@index({ createdAt: -1 })
 export class InviteCode {
   @prop({ required: true })
   public code!: string;

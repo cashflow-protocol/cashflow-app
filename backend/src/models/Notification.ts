@@ -16,6 +16,7 @@ export enum NotificationType {
   },
 })
 @index({ vaultAddress: 1, createdAt: -1 })
+@index({ vaultAddress: 1, read: 1 })
 @index({ txSignature: 1 }, { unique: true, sparse: true })
 export class Notification {
   @prop({ required: true })

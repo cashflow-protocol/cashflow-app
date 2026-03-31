@@ -384,14 +384,16 @@ function App() {
     }
 
     return (
-      <ThemeProvider>
-        <SafeAreaProvider>
-          <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-          <WalletProvider>
-            {onboardingContent}
-          </WalletProvider>
-        </SafeAreaProvider>
-      </ThemeProvider>
+      <PrivyProvider appId={PRIVY_CONFIG.appId} clientId={PRIVY_CONFIG.clientId}>
+        <ThemeProvider>
+          <SafeAreaProvider>
+            <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+            <WalletProvider>
+              {onboardingContent}
+            </WalletProvider>
+          </SafeAreaProvider>
+        </ThemeProvider>
+      </PrivyProvider>
     );
   }
 

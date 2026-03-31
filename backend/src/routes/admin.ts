@@ -1,19 +1,69 @@
 import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType } from '../models';
 import { dispatchSystemNotification } from '../services/notificationService';
 
 const router = Router();
 
-// ─── Auth middleware ───
+const ADMIN_TOKEN_EXPIRY = '2h';
 
+// ─── Auth ───
+
+/**
+ * POST /login
+ * Exchange admin password for a short-lived JWT.
+ */
+router.post('/login', (req: Request, res: Response) => {
+  const { password } = req.body;
+  if (
+    !process.env.ADMIN_PASSWORD ||
+    !password ||
+    !crypto.timingSafeEqual(
+      Buffer.from(password),
+      Buffer.from(process.env.ADMIN_PASSWORD),
+    )
+  ) {
+    res.status(401).json({ success: false, error: 'Invalid password' });
+    return;
+  }
+
+  const token = jwt.sign({ role: 'admin' }, process.env.JWT_SECRET!, {
+    expiresIn: ADMIN_TOKEN_EXPIRY,
+  });
+
+  res.json({ success: true, token });
+});
+
+/**
+ * Middleware: verify admin JWT on all subsequent routes.
+ */
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!process.env.ADMIN_PASSWORD || token !== process.env.ADMIN_PASSWORD) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
     res.status(401).json({ success: false, error: 'Unauthorized' });
     return;
   }
-  next();
+
+  const token = authHeader.slice(7);
+
+  // Support legacy raw-password auth during migration (compare timing-safe)
+  if (process.env.ADMIN_PASSWORD && token === process.env.ADMIN_PASSWORD) {
+    // Legacy: still allow raw password but recommend migration
+    next();
+    return;
+  }
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET!) as { role: string };
+    if (payload.role !== 'admin') {
+      res.status(403).json({ success: false, error: 'Forbidden' });
+      return;
+    }
+    next();
+  } catch {
+    res.status(401).json({ success: false, error: 'Invalid or expired token' });
+  }
 }
 
 router.use(requireAdmin);

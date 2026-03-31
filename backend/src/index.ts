@@ -13,6 +13,7 @@ import onboardingRouter from './routes/onboarding';
 import adminRouter from './routes/admin';
 import { requireAuth } from './middleware/auth';
 import { signResponseMiddleware } from './middleware/signResponse';
+import { authLimiter, apiLimiter, adminLimiter, onboardingLimiter, debugLimiter } from './middleware/rateLimiter';
 import { initializeScheduler } from './services';
 import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
@@ -27,7 +28,14 @@ const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI;
 
 // Middleware
-app.use(cors({ origin: ['https://cashflow.fun', 'https://www.cashflow.fun', 'https://dev.cashflow.fun', 'https://admin.cashflow.fun', 'http://localhost:3000', 'http://localhost:5173'] }));
+const allowedOrigins = [
+  'https://cashflow.fun',
+  'https://www.cashflow.fun',
+  'https://dev.cashflow.fun',
+  'https://admin.cashflow.fun',
+  ...(process.env.NODE_ENV !== 'production' ? ['http://localhost:3000', 'http://localhost:5173'] : []),
+];
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -39,23 +47,23 @@ app.use('/suggestions/v1', suggestionsRouter);
 app.use('/waitlist/v1', waitlistRouter);
 
 // Auth routes (no auth required)
-app.use('/auth/v2', authRouter);
+app.use('/auth/v2', authLimiter, authRouter);
 
 // Onboarding routes (no auth required — pre-wallet users)
-app.use('/onboarding/v1', onboardingRouter);
+app.use('/onboarding/v1', onboardingLimiter, onboardingRouter);
 
 // Vault recovery routes (no auth required — recovering users)
-app.use('/vault-recovery/v1', vaultRecoveryRouter);
+app.use('/vault-recovery/v1', apiLimiter, vaultRecoveryRouter);
 
 // Admin routes (password-protected)
-app.use('/admin/v1', adminRouter);
+app.use('/admin/v1', adminLimiter, adminRouter);
 
 // v2 routes (JWT auth required, response signing for transaction routes)
-app.use('/earn/v2', requireAuth, signResponseMiddleware, earnRouter);
-app.use('/solana/v2', requireAuth, signResponseMiddleware, solanaRouter);
-app.use('/suggestions/v2', requireAuth, signResponseMiddleware, suggestionsRouter);
-app.use('/notifications/v2', requireAuth, notificationsRouter);
-app.use('/recovery/v1', requireAuth, recoveryRouter);
+app.use('/earn/v2', apiLimiter, requireAuth, signResponseMiddleware, earnRouter);
+app.use('/solana/v2', apiLimiter, requireAuth, signResponseMiddleware, solanaRouter);
+app.use('/suggestions/v2', apiLimiter, requireAuth, signResponseMiddleware, suggestionsRouter);
+app.use('/notifications/v2', apiLimiter, requireAuth, notificationsRouter);
+app.use('/recovery/v1', apiLimiter, requireAuth, recoveryRouter);
 
 // Helius webhook — receives enhanced transaction data (no JWT, secured by auth header)
 app.post('/helius/webhook', async (req, res) => {
@@ -80,7 +88,7 @@ app.get('/health', (req, res) => {
 app.use('/ipfs', proxyRouter);
 
 // Debug log relay — mobile client POSTs logs here so they appear in the server console
-app.post('/debug/log', (req, res) => {
+app.post('/debug/log', debugLimiter, (req, res) => {
   const { tag, lines } = req.body;
   for (const line of lines ?? []) {
     console.log(`[mobile:${tag}]`, line);

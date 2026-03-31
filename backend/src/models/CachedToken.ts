@@ -7,6 +7,7 @@ import { prop, getModelForClass, index, modelOptions } from '@typegoose/typegoos
   },
 })
 @index({ mint: 1 }, { unique: true })
+@index({ updatedAt: 1 })
 export class CachedToken {
   @prop({ required: true })
   public mint!: string;

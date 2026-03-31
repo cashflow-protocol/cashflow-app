@@ -79,7 +79,7 @@ interface SigningContext {
 /** Resolve cloud/device/wallet keys and seekerMode from vault storage */
 async function getSigningContext(errorPrefix: string): Promise<SigningContext> {
   const vaultData = await getVault();
-  const seekerMode = vaultData?.seekerMode === true;
+  const seekerMode = IS_SOLANA_MOBILE;
 
   const devicePubBase58 = await getDevicePublicKey();
   if (!devicePubBase58) {
@@ -108,6 +108,17 @@ async function getSigningContext(errorPrefix: string): Promise<SigningContext> {
   }
 
   const primaryKey = seekerMode ? walletPubkey! : cloudPubkey!;
+
+  // Seeker: wallet pays all fees directly — ensure it has enough SOL
+  if (seekerMode && walletPubkey) {
+    const MIN_WALLET_LAMPORTS = 10_000_000; // 0.01 SOL
+    const walletBalance = await connection.getBalance(walletPubkey, 'confirmed');
+    if (walletBalance < MIN_WALLET_LAMPORTS) {
+      const have = (walletBalance / 1e9).toFixed(4);
+      throw new Error(`Insufficient SOL in wallet (${have} SOL). You need at least 0.01 SOL to cover transaction fees. Please top up your Seeker wallet.`);
+    }
+  }
+
   return { seekerMode, cloudPubkey, devicePubkey, walletPubkey, primaryKey };
 }
 
@@ -555,7 +566,7 @@ export async function createMultisig(
 
   // Record vault creation fee in backend (fire-and-forget)
   if (getVaultCreationFee() > 0) {
-    apiService.recordVaultCreationFee(walletAddress, getVaultCreationFee().toString(), signature)
+    apiService.recordVaultCreationFee(vaultPda.toBase58(), getVaultCreationFee().toString(), signature)
       .catch(err => console.warn('[createMultisig] failed to record vault creation fee:', err));
   }
 
@@ -654,6 +665,14 @@ export async function addMember(
   const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
   const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
+  console.log('[addMember] seekerMode:', ctx.seekerMode);
+  console.log('[addMember] primaryKey (creator):', feePayer.toBase58());
+  console.log('[addMember] devicePubkey:', ctx.devicePubkey.toBase58());
+  console.log('[addMember] walletPubkey:', ctx.walletPubkey?.toBase58());
+  console.log('[addMember] cloudPubkey:', ctx.cloudPubkey?.toBase58());
+  console.log('[addMember] on-chain members:', multisigAccount.members.map((m: any) => m.key.toBase58()));
+  console.log('[addMember] newMember:', newMemberAddress);
+
   // TX1: create config tx + proposal + approvals
   const tx1Instructions: TransactionInstruction[] = [
     multisig.instructions.configTransactionCreate({
@@ -747,7 +766,7 @@ export async function executeVaultTransaction(
 ): Promise<{ signature: string; bundleSignatures: string[] }> {
   const multisigPda = new PublicKey(multisigAddress);
   const vaultData = await getVault();
-  const seekerMode = vaultData?.seekerMode === true;
+  const seekerMode = IS_SOLANA_MOBILE;
 
   // Get device public key (used in all modes)
   const devicePubBase58 = await getDevicePublicKey();
@@ -786,7 +805,15 @@ export async function executeVaultTransaction(
   const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
 
   // Check vault has enough SOL for fees (Seeker: MWA pays directly, still need vault SOL for inner txs)
-  if (!seekerMode) {
+  if (seekerMode) {
+    // Seeker: wallet pays all fees — check wallet balance
+    const MIN_WALLET_LAMPORTS = 10_000_000; // 0.01 SOL
+    const walletBalance = await connection.getBalance(walletPubkey!, 'confirmed');
+    if (walletBalance < MIN_WALLET_LAMPORTS) {
+      const have = (walletBalance / 1e9).toFixed(4);
+      throw new Error(`Insufficient SOL in wallet (${have} SOL). You need at least 0.01 SOL to cover transaction fees. Please top up your Seeker wallet.`);
+    }
+  } else {
     const vaultBalance = await connection.getBalance(vaultPda, 'confirmed');
     if (vaultBalance < getTargetCloudBalance()) {
       const needed = (getTargetCloudBalance() / 1e9).toFixed(3);
@@ -999,13 +1026,46 @@ export async function executeVaultTransaction(
 
     // --- Signing ---
     if (seekerMode) {
-      // Seeker: device signs TX2 (approval), MWA signs ALL TXs (payer + approval)
-      await signTransactionNatively(tx2, [
+      // Seeker: MWA signs all TXs first, then device co-signs TX2.
+      // Use MWA-returned transactions to avoid message normalization mismatch.
+      console.log('[VaultTx] MWA signing all TXs...');
+      const serialized = [tx1, tx2, tx3, tx4].map(tx => new Uint8Array(tx.serialize()));
+      const signedBytes = await walletService.signTransactions(serialized);
+      console.log('[VaultTx] MWA signing done');
+
+      const signedTx1 = VersionedTransaction.deserialize(signedBytes[0]);
+      const signedTx2 = VersionedTransaction.deserialize(signedBytes[1]);
+      const signedTx3 = VersionedTransaction.deserialize(signedBytes[2]);
+      const signedTx4 = VersionedTransaction.deserialize(signedBytes[3]);
+
+      // TX2 also needs device key signature (approval)
+      await signTransactionNatively(signedTx2, [
         { pubkey: devicePubkey, signFn: signWithDevice },
       ]);
-      console.log('[VaultTx] MWA signing all TXs...');
-      await signTransactionsWithWallet([tx1, tx2, tx3, tx4], [0, 1, 2, 3], walletPubkey!);
-      console.log('[VaultTx] MWA signing done');
+
+      // Send debug info to backend console
+      await apiService.debugLog('VaultTx', debugLines);
+
+      console.log('[VaultTx] serializing 4 transactions...');
+      const tx1Base64 = Buffer.from(signedTx1.serialize()).toString('base64');
+      const tx2Base64 = Buffer.from(signedTx2.serialize()).toString('base64');
+      const tx3Base64 = Buffer.from(signedTx3.serialize()).toString('base64');
+      const tx4Base64 = Buffer.from(signedTx4.serialize()).toString('base64');
+      console.log(`[VaultTx] sizes: TX1=${tx1Base64.length}, TX2=${tx2Base64.length}, TX3=${tx3Base64.length}, TX4=${tx4Base64.length}`);
+
+      console.log('[VaultTx] sending bundle...');
+      const bundleResult = await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64]);
+      console.log(`[VaultTx] bundle result: id=${bundleResult.bundleId}, status=${bundleResult.status}`);
+
+      const signature = bs58.encode(signedTx3.signatures[0]);
+      const bundleSignatures = [
+        bs58.encode(signedTx1.signatures[0]),
+        bs58.encode(signedTx2.signatures[0]),
+        bs58.encode(signedTx3.signatures[0]),
+        bs58.encode(signedTx4.signatures[0]),
+      ];
+      console.log(`[VaultTx] signature: ${signature}`);
+      return { signature, bundleSignatures };
     } else {
       // Standard: cloud signs TX1/TX2/TX3/TX4, device signs TX2
       await signTransactionNatively(tx1, [

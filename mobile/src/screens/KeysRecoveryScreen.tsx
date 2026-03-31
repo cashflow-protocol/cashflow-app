@@ -83,13 +83,16 @@ function getKeyIcon(label: MemberLabel, color?: string) {
   }
 }
 
-function OtpInput({ value, onChange, disabled, colors }: {
+function OtpInput({ value, onChange, disabled, colors, onComplete }: {
   value: string;
   onChange: (v: string) => void;
   disabled: boolean;
   colors: any;
+  onComplete?: () => void;
 }) {
   const inputRef = useRef<TextInput>(null);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
   const digits = value.split('');
 
   return (
@@ -98,7 +101,13 @@ function OtpInput({ value, onChange, disabled, colors }: {
         ref={inputRef}
         style={styles.otpHiddenInput}
         value={value}
-        onChangeText={(t) => onChange(t.replace(/[^0-9]/g, '').slice(0, 6))}
+        onChangeText={(t) => {
+          const cleaned = t.replace(/[^0-9]/g, '').slice(0, 6);
+          onChange(cleaned);
+          if (cleaned.length === 6) {
+            setTimeout(() => onCompleteRef.current?.(), 50);
+          }
+        }}
         keyboardType="number-pad"
         maxLength={6}
         editable={!disabled}
@@ -157,6 +166,8 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
   const { sendCode, loginWithCode } = useLoginWithEmail();
   const wallet = useEmbeddedSolanaWallet();
+  const walletRef = useRef(wallet);
+  walletRef.current = wallet;
   const { logout: privyLogout } = usePrivy();
 
   useEffect(() => { logScreenView('KeysRecoveryScreen'); }, []);
@@ -254,6 +265,8 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
   const openAddRecovery = () => {
     setAddRecoveryStep('choose');
     setNewWalletAddress('');
+    setRecoveryEmail('');
+    setEmailCode('');
     setAddingKey(false);
     setAddingStep('');
     setAddRecoveryVisible(true);
@@ -266,6 +279,10 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     }
     if (newWalletAddress.trim().length < 32 || newWalletAddress.trim().length > 44) {
       Alert.alert('Error', 'Invalid Solana wallet address');
+      return;
+    }
+    if (multisigInfo?.members.some(m => m.address === newWalletAddress.trim())) {
+      Alert.alert('Already Added', 'This wallet is already a member of your vault.');
       return;
     }
 
@@ -303,6 +320,11 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       Alert.alert('Error', 'Please enter a valid email address');
       return;
     }
+    const existingEmail = Object.values(emailMap).find(e => e.toLowerCase() === trimmed.toLowerCase());
+    if (existingEmail) {
+      Alert.alert('Already Added', 'This email is already a recovery key for your vault.');
+      return;
+    }
     setSendingCode(true);
     try {
       // Log out of any existing Privy session so loginWithCode won't conflict
@@ -332,8 +354,9 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       let solanaAddress: string | null = null;
 
       for (let i = 0; i < 20; i++) {
-        if (wallet.status === 'connected' && wallet.wallets.length > 0) {
-          solanaAddress = wallet.wallets[0].address;
+        const w = walletRef.current;
+        if (w.status === 'connected' && w.wallets.length > 0) {
+          solanaAddress = w.wallets[0].address;
           break;
         }
         await new Promise(r => setTimeout(r, 500));
@@ -342,13 +365,14 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       // If wallet wasn't ready yet, try creating (may already exist) then poll again
       if (!solanaAddress) {
         try {
-          await wallet.create?.();
+          await walletRef.current.create?.();
         } catch {
           // Wallet likely already exists — just need to wait for it to connect
         }
         for (let i = 0; i < 20; i++) {
-          if (wallet.status === 'connected' && wallet.wallets.length > 0) {
-            solanaAddress = wallet.wallets[0].address;
+          const w = walletRef.current;
+          if (w.status === 'connected' && w.wallets.length > 0) {
+            solanaAddress = w.wallets[0].address;
             break;
           }
           await new Promise(r => setTimeout(r, 500));
@@ -357,6 +381,10 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
       if (!solanaAddress) {
         throw new Error('Failed to connect to Privy embedded wallet');
+      }
+
+      if (multisigInfo?.members.some(m => m.address === solanaAddress)) {
+        throw new Error('This email\'s wallet is already a member of your vault.');
       }
 
       setAddingStep('Adding recovery key...');
@@ -421,6 +449,12 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
                 const vaultData = await getVault();
                 if (!vaultData) throw new Error('No vault found.');
                 await removeMember(vaultData.multisigAddress, member.address);
+
+                setEmailMap(prev => {
+                  const next = { ...prev };
+                  delete next[member.address];
+                  return next;
+                });
 
                 const info = await getMultisigInfo(vaultData.multisigAddress);
                 setMultisigInfo(info);
@@ -710,12 +744,12 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
               </TouchableOpacity>
               <View style={[
                 styles.infoIconWrapper,
-                { backgroundColor: colors.textPrimary },
+                { backgroundColor: colors.cardSecondary },
                 infoMember.label === 'Recovery' && { backgroundColor: colors.accentGreen },
               ]}>
                 {infoMember.label === 'Recovery'
-                  ? <Wallet size={28} color="#fff" />
-                  : getKeyIcon(infoMember.label, '#fff')}
+                  ? getRecoveryIcon(infoMember.address)
+                  : getKeyIcon(infoMember.label)}
               </View>
               <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>{content.title}</Text>
               <View style={styles.infoItems}>
@@ -970,6 +1004,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
               onChange={setEmailCode}
               disabled={addingKey}
               colors={colors}
+              onComplete={handleVerifyEmailCode}
             />
 
             <TouchableOpacity

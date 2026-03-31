@@ -362,17 +362,6 @@ export default function VaultModal({
                 </Text>
               )}
 
-              {/* Fee disclosure for withdrawals */}
-              {mode === 'withdraw' && feePreview && feePreview.feeUiAmount > 0 && (
-                <View style={[styles.feeBar, { backgroundColor: colors.infoBackground }]}>
-                  <Text style={[styles.feeLabel, { color: colors.textSecondary }]}>
-                    Profit fee (10%)
-                  </Text>
-                  <Text style={[styles.feeAmount, { color: colors.textPrimary }]}>
-                    {formatAmount(feePreview.feeUiAmount)} {symbol}
-                  </Text>
-                </View>
-              )}
 
               {/* Result banner */}
               {result && (

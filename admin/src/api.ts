@@ -17,29 +17,59 @@ function getApiBase() {
   return API_URLS[getEnv()];
 }
 
-function getPassword(): string | null {
-  return localStorage.getItem('admin_password');
+function getToken(): string | null {
+  return sessionStorage.getItem('admin_token');
 }
 
-export function setPassword(pw: string) {
-  localStorage.setItem('admin_password', pw);
+function setToken(token: string) {
+  sessionStorage.setItem('admin_token', token);
 }
 
 export function clearPassword() {
-  localStorage.removeItem('admin_password');
+  sessionStorage.removeItem('admin_token');
 }
 
 export function isLoggedIn(): boolean {
-  return !!getPassword();
+  const token = getToken();
+  if (!token) return false;
+  // Check if token is expired (JWT payload is base64url-encoded)
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Log in with admin password, receive a JWT session token.
+ */
+export async function login(password: string): Promise<{ success: boolean; error?: string }> {
+  const res = await fetch(`${getApiBase()}/admin/v1/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  const data = await res.json();
+  if (data.success && data.token) {
+    setToken(data.token);
+    return { success: true };
+  }
+  return { success: false, error: data.error || 'Login failed' };
+}
+
+// Keep old name for backwards compat in App.tsx
+export function setPassword(_pw: string) {
+  // No-op: use login() instead
 }
 
 async function apiFetch(path: string, options: RequestInit = {}) {
-  const pw = getPassword();
+  const token = getToken();
   const res = await fetch(`${getApiBase()}/admin/v1${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${pw}`,
+      Authorization: `Bearer ${token}`,
       ...options.headers,
     },
   });

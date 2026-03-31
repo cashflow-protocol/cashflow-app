@@ -15,6 +15,7 @@ router.get('/', (req: Request, res: Response) => {
       treasuryWallet: process.env.TREASURY_WALLET_ADDRESS ?? null,
       targetCloudBalance: TARGET_CLOUD_BALANCE,
       vaultCreationFee: VAULT_CREATION_FEE,
+      supportUrl: process.env.SUPPORT_URL ?? 'https://t.me/heymike777',
     },
   });
 });
@@ -22,13 +23,13 @@ router.get('/', (req: Request, res: Response) => {
 // POST /config/v1/vault-creation-fee - Record a vault creation fee payment
 router.post('/vault-creation-fee', async (req: Request, res: Response) => {
   try {
-    const { walletAddress, feeAmount, signature } = req.body;
-    if (!walletAddress || !feeAmount || !signature) {
-      res.status(400).json({ success: false, error: 'walletAddress, feeAmount, and signature are required' });
+    const { vaultAddress, feeAmount, signature } = req.body;
+    if (!vaultAddress || !feeAmount || !signature) {
+      res.status(400).json({ success: false, error: 'vaultAddress, feeAmount, and signature are required' });
       return;
     }
 
-    await createVaultCreationFeeRecord({ walletAddress, feeAmount, signature });
+    await createVaultCreationFeeRecord({ vaultAddress, feeAmount, signature });
     res.json({ success: true });
   } catch (error) {
     console.error('Error recording vault creation fee:', error);

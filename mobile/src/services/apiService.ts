@@ -43,6 +43,7 @@ class ApiService {
     treasuryWallet: string | null;
     targetCloudBalance: number | null;
     vaultCreationFee: number | null;
+    supportUrl: string | null;
   }> {
     // Config is needed during vault creation (before auth is available) — bypass auth
     const r = await fetch(`${this.baseUrl}/config/v1`);
@@ -51,12 +52,12 @@ class ApiService {
     return res.data;
   }
 
-  async recordVaultCreationFee(walletAddress: string, feeAmount: string, signature: string): Promise<void> {
+  async recordVaultCreationFee(vaultAddress: string, feeAmount: string, signature: string): Promise<void> {
     // Bypass auth — vault creation happens before login
     const r = await fetch(`${this.baseUrl}/config/v1/vault-creation-fee`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ walletAddress, feeAmount, signature }),
+      body: JSON.stringify({ vaultAddress, feeAmount, signature }),
     });
     if (!r.ok) console.warn('Failed to record vault creation fee:', r.status);
   }
@@ -108,7 +109,7 @@ class ApiService {
     return res.data;
   }
 
-  async getFeePreview(walletAddress: string, mint: string, amount: string): Promise<{
+  async getFeePreview(vaultAddress: string, mint: string, amount: string): Promise<{
     feeAmount: string;
     profitAmount: string;
     feeUiAmount: number;
@@ -117,7 +118,7 @@ class ApiService {
     const res = await this.get<{
       success: boolean;
       data: { feeAmount: string; profitAmount: string; feeUiAmount: number; profitUiAmount: number };
-    }>('/earn/v2/fee-preview', { walletAddress, mint, amount });
+    }>('/earn/v2/fee-preview', { vaultAddress, mint, amount });
     return res.data;
   }
 
@@ -497,6 +498,7 @@ class ApiService {
     proposalId: string;
     multisigAddress: string;
     vaultAddress: string;
+    transactionIndex: number;
     threshold: number;
     status: string;
     signaturesCollected: number;
@@ -504,6 +506,38 @@ class ApiService {
   }> {
     const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}`);
     if (!r.ok) throw new Error(`API error: ${r.status}`);
+    const res = await r.json();
+    return res.data;
+  }
+
+  async buildApproveTx(memberAddress: string, multisigAddress: string, transactionIndex: number, feePayerAddress?: string): Promise<{
+    transaction: string;
+    blockhash: string;
+    lastValidBlockHeight: number;
+  }> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/build-approve-tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberAddress, multisigAddress, transactionIndex, feePayerAddress }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: 'Failed' }));
+      throw new Error(err.error || `API error: ${r.status}`);
+    }
+    const res = await r.json();
+    return res.data;
+  }
+
+  async sendApproveTx(proposalId: string, signedTransaction: string): Promise<{ signature: string }> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}/send-approve-tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signedTransaction }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: 'Failed' }));
+      throw new Error(err.error || `API error: ${r.status}`);
+    }
     const res = await r.json();
     return res.data;
   }

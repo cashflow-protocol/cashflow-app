@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { isLoggedIn, setPassword, clearPassword, getEnv, setEnv, type Env } from './api';
+import { isLoggedIn, login, clearPassword, getEnv, setEnv, type Env } from './api';
 import InviteCodesPage from './pages/InviteCodes';
 import WaitlistUsersPage from './pages/WaitlistUsers';
 import WaitlistTasksPage from './pages/WaitlistTasks';
@@ -17,13 +17,20 @@ function getPageFromPath(): Page {
 function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [pw, setPw] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pw.trim()) return;
-    setPassword(pw.trim());
+    setLoading(true);
     setError('');
-    onLogin();
+    const result = await login(pw.trim());
+    setLoading(false);
+    if (result.success) {
+      onLogin();
+    } else {
+      setError(result.error || 'Login failed');
+    }
   };
 
   return (
@@ -39,8 +46,8 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
           autoFocus
         />
         {error && <p className="error-text">{error}</p>}
-        <button type="submit" className="btn-primary" style={{ marginTop: 16 }}>
-          Login
+        <button type="submit" className="btn-primary" style={{ marginTop: 16 }} disabled={loading}>
+          {loading ? 'Logging in...' : 'Login'}
         </button>
       </form>
     </div>

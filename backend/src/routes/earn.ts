@@ -3,10 +3,33 @@ import { DBManager, JupiterManager, KaminoManager, DriftManager, PriceManager } 
 import { LookupManager } from '../managers/LookupManager';
 import { EarnTokenModel } from '../models/EarnToken';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
-import { TransactionAction, UserCostBasisModel } from '../models';
+import { TransactionAction, UserCostBasisModel, UserModel } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
 import { notifyAdmin } from '../services/telegramManager';
 import { calculateFee, buildFeeTransferInstructions, createFeeRecord } from '../services/feeService';
+import type { AuthenticatedRequest } from '../middleware/auth';
+import { isValidSolanaAddress } from '../utils/validation';
+
+/**
+ * Verify that the given walletAddress belongs to the authenticated user.
+ * Returns true if no auth is present (v1 routes) or if the address matches.
+ */
+async function verifyWalletOwnership(req: Request, walletAddress: string): Promise<boolean> {
+  const authReq = req as AuthenticatedRequest;
+  // If no auth context (v1 routes), skip ownership check
+  if (!authReq.user) return true;
+  // Check if the wallet matches the user's vault address from JWT
+  if (authReq.user.vaultAddress === walletAddress) return true;
+  // Also check against the user's record in the database (they may have multiple addresses)
+  const user = await UserModel.findOne({
+    $or: [
+      { vaultAddress: walletAddress },
+      { publicKey: walletAddress },
+    ],
+  }).lean();
+  if (!user) return false;
+  return user.vaultAddress === authReq.user.vaultAddress;
+}
 
 const router = Router();
 const dbManager = new DBManager();
@@ -51,8 +74,14 @@ try {
 router.get('/positions', async (req: Request, res: Response) => {
   try {
     const { walletAddress } = req.query;
-    if (!walletAddress || typeof walletAddress !== 'string') {
-      res.status(400).json({ success: false, error: 'walletAddress query param is required' });
+    if (!walletAddress || typeof walletAddress !== 'string' || !isValidSolanaAddress(walletAddress)) {
+      res.status(400).json({ success: false, error: 'Valid walletAddress query param is required' });
+      return;
+    }
+
+    // IDOR protection: verify the wallet belongs to the authenticated user
+    if (!(await verifyWalletOwnership(req, walletAddress))) {
+      res.status(403).json({ success: false, error: 'Forbidden' });
       return;
     }
     const positionPromises: [string, Promise<any[]>][] = [
@@ -155,14 +184,20 @@ router.get('/positions', async (req: Request, res: Response) => {
 router.get('/earnings', async (req: Request, res: Response) => {
   try {
     const { walletAddress } = req.query;
-    if (!walletAddress || typeof walletAddress !== 'string') {
-      res.status(400).json({ success: false, error: 'walletAddress query param is required' });
+    if (!walletAddress || typeof walletAddress !== 'string' || !isValidSolanaAddress(walletAddress)) {
+      res.status(400).json({ success: false, error: 'Valid walletAddress query param is required' });
+      return;
+    }
+
+    // IDOR protection: verify the wallet belongs to the authenticated user
+    if (!(await verifyWalletOwnership(req, walletAddress))) {
+      res.status(403).json({ success: false, error: 'Forbidden' });
       return;
     }
 
     // Fetch cost basis records and current positions in parallel
     const [costBasisRecords, positionsRes] = await Promise.all([
-      UserCostBasisModel.find({ walletAddress }).lean(),
+      UserCostBasisModel.find({ vaultAddress: walletAddress }).lean(),
       // Re-use the positions logic: fetch from all protocols
       (async () => {
         const positionPromises: [string, Promise<any[]>][] = [
@@ -292,13 +327,19 @@ router.get('/earnings', async (req: Request, res: Response) => {
 // GET /earn/v1/fee-preview - Preview the profit fee for a withdrawal
 router.get('/fee-preview', async (req: Request, res: Response) => {
   try {
-    const { walletAddress, mint, amount } = req.query;
-    if (!walletAddress || !mint || !amount || typeof walletAddress !== 'string' || typeof mint !== 'string' || typeof amount !== 'string') {
-      res.status(400).json({ success: false, error: 'walletAddress, mint, and amount query params are required' });
+    const { vaultAddress, mint, amount } = req.query;
+    if (!vaultAddress || !mint || !amount || typeof vaultAddress !== 'string' || typeof mint !== 'string' || typeof amount !== 'string') {
+      res.status(400).json({ success: false, error: 'vaultAddress, mint, and amount query params are required' });
       return;
     }
 
-    const { feeAmount, profitAmount } = await calculateFee(walletAddress, mint, amount);
+    // IDOR protection: verify the vault belongs to the authenticated user
+    if (!(await verifyWalletOwnership(req, vaultAddress))) {
+      res.status(403).json({ success: false, error: 'Forbidden' });
+      return;
+    }
+
+    const { feeAmount, profitAmount } = await calculateFee(vaultAddress, mint, amount);
     const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
     const decimals = tokenInfo?.decimals ?? 6;
 
@@ -511,7 +552,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
       }
 
       // Calculate and append profit fee instructions
-      const { feeAmount, profitAmount } = await calculateFee(walletAddress, mint, amount);
+      const { feeAmount, profitAmount } = await calculateFee(vaultAddress, mint, amount);
       let feeAmountStr: string | undefined;
       if (feeAmount > 0n) {
         const feeInstructions = await buildFeeTransferInstructions(mint, feeAmount.toString(), authority);
@@ -531,7 +572,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
 
       if (feeAmount > 0n) {
         await createFeeRecord({
-          walletAddress,
+          vaultAddress,
           mint,
           withdrawTransactionId: String(record._id),
           withdrawAmount: amount,

@@ -23,13 +23,19 @@ export default function ChangePinScreen({ onComplete, onBack }: ChangePinScreenP
   React.useEffect(() => { logScreenView('ChangePinScreen'); logPinChangeStart(); }, []);
 
   const handleVerify = useCallback(async (pin: string) => {
-    const valid = await verifyPin(pin);
-    if (valid) {
+    const result = await verifyPin(pin);
+    if (result.success) {
       setError('');
       setStep('create');
     } else {
       logPinChangeWrongPin();
-      setError('Wrong PIN');
+      if (result.attemptsRemaining === 0) {
+        setError('Too many attempts. Try again in 5 minutes.');
+      } else if (result.attemptsRemaining != null) {
+        setError(`Wrong PIN. ${result.attemptsRemaining} attempts remaining.`);
+      } else {
+        setError('Wrong PIN');
+      }
     }
   }, []);
 

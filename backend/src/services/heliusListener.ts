@@ -134,8 +134,10 @@ async function updateWebhookAddresses(): Promise<void> {
  * Verify the auth header on an incoming webhook request.
  */
 export function verifyWebhookAuth(authHeader: string | undefined): boolean {
-  if (!webhookSecret) return false;
-  return authHeader === webhookSecret;
+  if (!webhookSecret || !authHeader) return false;
+  if (authHeader.length !== webhookSecret.length) return false;
+  const { timingSafeEqual } = require('crypto');
+  return timingSafeEqual(Buffer.from(authHeader), Buffer.from(webhookSecret));
 }
 
 /**
