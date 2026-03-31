@@ -521,6 +521,7 @@ router.get('/proposal/:proposalId', async (req: Request, res: Response) => {
         proposalId: proposal._id!.toString(),
         multisigAddress: proposal.multisigAddress,
         vaultAddress: proposal.vaultAddress,
+        transactionIndex: proposal.transactionIndex,
         threshold: proposal.threshold,
         status: isReady ? RecoveryProposalStatus.READY : proposal.status,
         actions: proposal.actions,

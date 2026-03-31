@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   ScrollView,
   RefreshControl,
-  Linking,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
@@ -15,7 +15,6 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import {
   ArrowLeft,
   CheckCircle2,
-  Circle,
   Clock,
   Copy,
   ExternalLink,
@@ -30,6 +29,9 @@ import { backupCloudKeyToBlockStore } from '../services/keypairStorage';
 import { IS_SOLANA_MOBILE } from '../config/constants';
 import apiService from '../services/apiService';
 import Toast from '../components/Toast';
+import BottomSheet from '../components/BottomSheet';
+import { useLoginWithEmail, useEmbeddedSolanaWallet, usePrivy } from '@privy-io/expo';
+import { VersionedTransaction } from '@solana/web3.js';
 
 import { useTheme } from '../theme/ThemeContext';
 
@@ -58,9 +60,49 @@ function truncateAddress(addr: string): string {
   return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
 }
 
-function maskEmail(email: string): string {
-  if (email.length <= 12) return email.slice(0, 2) + '...' + email.slice(-4);
-  return email.slice(0, 2) + '...' + email.slice(-10);
+function OtpInput({ value, onChange, disabled }: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+}) {
+  const inputRef = useRef<TextInput>(null);
+  const digits = value.split('');
+
+  return (
+    <View style={styles.otpContainer}>
+      <TextInput
+        ref={inputRef}
+        style={styles.otpHiddenInput}
+        value={value}
+        onChangeText={(t) => onChange(t.replace(/[^0-9]/g, '').slice(0, 6))}
+        keyboardType="number-pad"
+        maxLength={6}
+        editable={!disabled}
+        autoFocus
+        caretHidden
+      />
+      <View style={styles.otpCells}>
+        {Array.from({ length: 6 }).map((_, i) => {
+          const isFocused = value.length === i;
+          return (
+            <TouchableOpacity
+              key={i}
+              style={[
+                styles.otpCell,
+                { borderColor: isFocused ? '#a78bfa' : 'rgba(255,255,255,0.15)' },
+              ]}
+              activeOpacity={1}
+              onPress={() => inputRef.current?.focus()}
+            >
+              <Text style={styles.otpDigit}>
+                {digits[i] || ''}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
 }
 
 export default function VaultRecoveryExecutionScreen({
@@ -74,6 +116,7 @@ export default function VaultRecoveryExecutionScreen({
   const [step, setStep] = useState<ExecutionStep>('building');
   const [statusText, setStatusText] = useState('Preparing recovery...');
   const [proposalId, setProposalId] = useState<string | null>(null);
+  const [transactionIndex, setTransactionIndex] = useState<number | null>(null);
   const [externalSigningUrl, setExternalSigningUrl] = useState<string | null>(null);
   const [signers, setSigners] = useState<Array<{
     address: string;
@@ -90,6 +133,21 @@ export default function VaultRecoveryExecutionScreen({
   const [refreshing, setRefreshing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Privy email signing state
+  const [privySheetVisible, setPrivySheetVisible] = useState(false);
+  const [privyStep, setPrivyStep] = useState<'email' | 'otp' | 'signing'>('email');
+  const [privyEmail, setPrivyEmail] = useState('');
+  const [privyOtp, setPrivyOtp] = useState('');
+  const [privySending, setPrivySending] = useState(false);
+  const [privyError, setPrivyError] = useState<string | null>(null);
+  const [privySignerAddress, setPrivySignerAddress] = useState('');
+
+  // Privy hooks
+  const { sendCode, loginWithCode } = useLoginWithEmail();
+  const embeddedWallet = useEmbeddedSolanaWallet();
+  const walletRef = useRef(embeddedWallet);
+  walletRef.current = embeddedWallet;
+  const { logout: privyLogout } = usePrivy();
 
   const handleRefresh = useCallback(async () => {
     if (!proposalId) return;
@@ -98,6 +156,7 @@ export default function VaultRecoveryExecutionScreen({
       const status = await apiService.getRecoveryProposalStatus(proposalId);
       setSigners(status.requiredSigners);
       setSignaturesCollected(status.signaturesCollected);
+      if (status.transactionIndex != null) setTransactionIndex(status.transactionIndex);
       if (status.status === 'ready') {
         setStep('ready');
         if (pollRef.current) clearInterval(pollRef.current);
@@ -157,6 +216,7 @@ export default function VaultRecoveryExecutionScreen({
       const status = await apiService.getRecoveryProposalStatus(result.proposalId);
       setSigners(status.requiredSigners);
       setSignaturesCollected(status.signaturesCollected);
+      if (status.transactionIndex != null) setTransactionIndex(status.transactionIndex);
       if (status.status === 'ready') {
         setStep('ready');
       }
@@ -175,12 +235,105 @@ export default function VaultRecoveryExecutionScreen({
     };
   }, []);
 
-  const handlePrivySign = useCallback((_address: string, _email?: string) => {
-    // Open the web recovery page where Privy frontend SDK handles auth + signing
-    if (externalSigningUrl) {
-      Linking.openURL(externalSigningUrl);
+  const handlePrivySign = useCallback((address: string, email?: string) => {
+    setPrivySignerAddress(address);
+    setPrivyEmail(email || '');
+    setPrivyOtp('');
+    setPrivyError(null);
+    setPrivyStep('email');
+    setPrivySheetVisible(true);
+  }, []);
+
+  const handlePrivySendCode = useCallback(async () => {
+    const trimmed = privyEmail.trim();
+    if (!trimmed || !trimmed.includes('@')) {
+      setPrivyError('Please enter a valid email address');
+      return;
     }
-  }, [externalSigningUrl]);
+    setPrivySending(true);
+    setPrivyError(null);
+    try {
+      await privyLogout().catch(() => {});
+      await sendCode({ email: trimmed });
+      setPrivyStep('otp');
+    } catch (err: any) {
+      setPrivyError(err?.message || 'Failed to send code');
+    } finally {
+      setPrivySending(false);
+    }
+  }, [privyEmail, sendCode, privyLogout]);
+
+  const handlePrivyVerifyAndSign = useCallback(async () => {
+    if (privyOtp.length !== 6) return;
+    if (!proposalId || transactionIndex == null) {
+      setPrivyError('Proposal data not available. Try refreshing.');
+      return;
+    }
+
+    setPrivySending(true);
+    setPrivyError(null);
+    setPrivyStep('signing');
+
+    try {
+      // Step 1: Verify OTP — authenticates user with Privy
+      await loginWithCode({ code: privyOtp, email: privyEmail.trim() });
+
+      // Step 2: Wait for embedded wallet to connect
+      let walletReady = false;
+      for (let i = 0; i < 30; i++) {
+        const w = walletRef.current;
+        if (w.status === 'connected' && w.wallets.length > 0) {
+          walletReady = true;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      if (!walletReady) {
+        throw new Error('Failed to connect to Privy wallet. Please try again.');
+      }
+
+      // Step 3: Get provider for signing
+      const wallets = walletRef.current.wallets;
+      if (!wallets || wallets.length === 0) {
+        throw new Error('Privy wallet not available');
+      }
+      const provider = await wallets[0].getProvider();
+
+      // Step 4: Build unsigned approve TX from backend
+      const { transaction: txBase64 } = await apiService.buildApproveTx(
+        privySignerAddress,
+        vault.multisigAddress,
+        transactionIndex,
+      );
+
+      // Step 5: Deserialize and sign the transaction
+      const txBytes = Buffer.from(txBase64, 'base64');
+      const tx = VersionedTransaction.deserialize(txBytes);
+
+      const { signedTransaction } = await provider.request({
+        method: 'signTransaction',
+        params: { transaction: tx },
+      });
+
+      // Step 6: Serialize signed TX and send via backend
+      const signedBase64 = Buffer.from(signedTransaction.serialize()).toString('base64');
+      await apiService.sendApproveTx(proposalId, signedBase64);
+
+      // Step 7: Cleanup and refresh
+      await privyLogout().catch(() => {});
+      setPrivySheetVisible(false);
+      await handleRefresh();
+
+      showToast('Recovery signature submitted');
+    } catch (err: any) {
+      console.error('Privy sign error:', err);
+      setPrivyError(err?.message || 'Failed to sign. Please try again.');
+      setPrivyStep('otp');
+    } finally {
+      setPrivySending(false);
+    }
+  }, [privyOtp, privyEmail, proposalId, transactionIndex, vault.multisigAddress, privySignerAddress, loginWithCode, handleRefresh, privyLogout, showToast]);
 
   const handleCopyUrl = useCallback(() => {
     if (externalSigningUrl) {
@@ -192,7 +345,7 @@ export default function VaultRecoveryExecutionScreen({
 
   const handleOpenUrl = useCallback(() => {
     if (externalSigningUrl) {
-      Linking.openURL(externalSigningUrl);
+      import('react-native').then(({ Linking }) => Linking.openURL(externalSigningUrl));
     }
   }, [externalSigningUrl]);
 
@@ -354,7 +507,7 @@ export default function VaultRecoveryExecutionScreen({
           )}
 
           {/* External signing URL */}
-          {externalSigningUrl && step === 'signing' && (
+          {externalSigningUrl && step === 'signing' && signers.some(s => s.type === 'external' && !s.signed) && (
             <View style={[styles.externalCard, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
               <Text style={styles.sectionTitle}>External Wallet Signing</Text>
               <Text style={[styles.externalDesc, { color: colors.onboardingTextMuted }]}>
@@ -393,6 +546,103 @@ export default function VaultRecoveryExecutionScreen({
         </View>
       </SafeAreaView>
 
+      {/* Privy Email Signing Bottom Sheet */}
+      <BottomSheet
+        visible={privySheetVisible}
+        onClose={() => !privySending && setPrivySheetVisible(false)}
+        avoidKeyboard
+      >
+        <View style={styles.privySheet}>
+          {privyStep === 'email' && (
+            <>
+              <Text style={[styles.privyTitle, { color: colors.textPrimary }]}>Verify Email</Text>
+              <Text style={[styles.privySubtitle, { color: colors.textSecondary }]}>
+                Enter the email address linked to this recovery key to sign the proposal.
+              </Text>
+
+              <View style={[styles.privyInputRow, { backgroundColor: colors.cardSecondary }]}>
+                <TextInput
+                  style={[styles.privyInput, { color: colors.textPrimary }]}
+                  value={privyEmail}
+                  onChangeText={setPrivyEmail}
+                  placeholder="email@example.com"
+                  placeholderTextColor={colors.placeholderColor}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!privySending}
+                />
+              </View>
+
+              {privyError && <Text style={styles.privyErrorText}>{privyError}</Text>}
+
+              <TouchableOpacity
+                style={[styles.privyButton, { backgroundColor: colors.primaryButton }, (!privyEmail.trim() || privySending) && { opacity: 0.4 }]}
+                activeOpacity={0.7}
+                onPress={handlePrivySendCode}
+                disabled={!privyEmail.trim() || privySending}
+              >
+                {privySending ? (
+                  <ActivityIndicator size="small" color={colors.primaryButtonText} />
+                ) : (
+                  <Text style={[styles.privyButtonText, { color: colors.primaryButtonText }]}>Send Code</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+
+          {privyStep === 'otp' && (
+            <>
+              <TouchableOpacity
+                onPress={() => !privySending && setPrivyStep('email')}
+                activeOpacity={0.7}
+                style={[styles.privyBackButton, { backgroundColor: colors.cardSecondary }]}
+              >
+                <ArrowLeft size={20} color={colors.textPrimary} />
+              </TouchableOpacity>
+
+              <Text style={[styles.privyTitle, { color: colors.textPrimary }]}>Enter Code</Text>
+              <Text style={[styles.privySubtitle, { color: colors.textSecondary }]}>
+                Enter the 6-digit code sent to{'\n'}{privyEmail.trim()}
+              </Text>
+
+              <OtpInput
+                value={privyOtp}
+                onChange={setPrivyOtp}
+                disabled={privySending}
+              />
+
+              {privyError && <Text style={styles.privyErrorText}>{privyError}</Text>}
+
+              <TouchableOpacity
+                style={[styles.privyButton, { backgroundColor: colors.primaryButton }, (privyOtp.length !== 6 || privySending) && { opacity: 0.4 }]}
+                activeOpacity={0.7}
+                onPress={handlePrivyVerifyAndSign}
+                disabled={privyOtp.length !== 6 || privySending}
+              >
+                {privySending ? (
+                  <View style={styles.privyLoadingRow}>
+                    <ActivityIndicator size="small" color={colors.primaryButtonText} />
+                    <Text style={[styles.privyButtonText, { color: colors.primaryButtonText, marginLeft: 8 }]}>Verifying...</Text>
+                  </View>
+                ) : (
+                  <Text style={[styles.privyButtonText, { color: colors.primaryButtonText }]}>Verify & Sign</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+
+          {privyStep === 'signing' && (
+            <View style={styles.privySigningContainer}>
+              <ActivityIndicator size="large" color={colors.accentGreen} />
+              <Text style={[styles.privySigningText, { color: colors.textPrimary }]}>
+                Signing recovery transaction...
+              </Text>
+              {privyError && <Text style={styles.privyErrorText}>{privyError}</Text>}
+            </View>
+          )}
+        </View>
+      </BottomSheet>
     </View>
   );
 }
@@ -549,5 +799,100 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: 17,
     fontWeight: '600',
+  },
+  // Privy bottom sheet styles
+  privySheet: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  privyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  privySubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  privyInputRow: {
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  privyInput: {
+    fontSize: 15,
+    fontWeight: '500',
+    paddingVertical: 12,
+  },
+  privyButton: {
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  privyButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  privyBackButton: {
+    alignSelf: 'flex-start',
+    padding: 6,
+    borderRadius: 20,
+    marginBottom: 8,
+  },
+  privyErrorText: {
+    color: '#ef4444',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  privyLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  privySigningContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 16,
+  },
+  privySigningText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // OTP styles
+  otpContainer: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  otpHiddenInput: {
+    position: 'absolute',
+    opacity: 0,
+    height: 0,
+    width: 0,
+  },
+  otpCells: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  otpCell: {
+    flex: 1,
+    aspectRatio: 1,
+    maxWidth: 52,
+    borderRadius: 14,
+    borderWidth: 2,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  otpDigit: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

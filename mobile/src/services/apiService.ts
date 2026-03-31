@@ -497,6 +497,7 @@ class ApiService {
     proposalId: string;
     multisigAddress: string;
     vaultAddress: string;
+    transactionIndex: number;
     threshold: number;
     status: string;
     signaturesCollected: number;
@@ -504,6 +505,38 @@ class ApiService {
   }> {
     const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}`);
     if (!r.ok) throw new Error(`API error: ${r.status}`);
+    const res = await r.json();
+    return res.data;
+  }
+
+  async buildApproveTx(memberAddress: string, multisigAddress: string, transactionIndex: number): Promise<{
+    transaction: string;
+    blockhash: string;
+    lastValidBlockHeight: number;
+  }> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/build-approve-tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberAddress, multisigAddress, transactionIndex }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: 'Failed' }));
+      throw new Error(err.error || `API error: ${r.status}`);
+    }
+    const res = await r.json();
+    return res.data;
+  }
+
+  async sendApproveTx(proposalId: string, signedTransaction: string): Promise<{ signature: string }> {
+    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}/send-approve-tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signedTransaction }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: 'Failed' }));
+      throw new Error(err.error || `API error: ${r.status}`);
+    }
     const res = await r.json();
     return res.data;
   }
