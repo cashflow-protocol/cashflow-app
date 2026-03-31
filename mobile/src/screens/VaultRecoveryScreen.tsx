@@ -105,16 +105,6 @@ export default function VaultRecoveryScreen({ pin, onComplete, onBack }: VaultRe
         // Single match — auto-select
         setSelectedVault(multisigs[0]);
         setStep('confirm');
-      } else if (cloudKey) {
-        // Multiple matches — check if only one matches cloud key
-        const cloudMatches = multisigs.filter((m) => m.matchesCloudKey);
-        if (cloudMatches.length === 1) {
-          setSelectedVault(cloudMatches[0]);
-          setStep('confirm');
-        } else {
-          setVaults(multisigs);
-          setStep('select');
-        }
       } else {
         setVaults(multisigs);
         setStep('select');

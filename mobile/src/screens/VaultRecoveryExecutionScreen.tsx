@@ -130,6 +130,7 @@ export default function VaultRecoveryExecutionScreen({
   const [threshold, setThreshold] = useState(0);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'warning'>('warning');
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -166,8 +167,9 @@ export default function VaultRecoveryExecutionScreen({
     setRefreshing(false);
   }, [proposalId]);
 
-  const showToast = useCallback((msg: string) => {
+  const showToast = useCallback((msg: string, type: 'success' | 'warning' = 'warning') => {
     setToastMessage(msg);
+    setToastType(type);
     setToastVisible(true);
   }, []);
 
@@ -337,12 +339,24 @@ export default function VaultRecoveryExecutionScreen({
       const signedBase64 = Buffer.from(finalTx.serialize()).toString('base64');
       await apiService.sendApproveTx(proposalId, signedBase64);
 
-      // Step 7: Cleanup and refresh
+      // Step 8: Cleanup — mark signer as signed immediately and refresh
       await privyLogout().catch(() => {});
       setPrivySheetVisible(false);
-      await handleRefresh();
 
-      showToast('Recovery signature submitted');
+      // Update signer status locally so the UI reflects it right away
+      setSigners(prev => prev.map(s =>
+        s.address === privySignerAddress ? { ...s, signed: true } : s
+      ));
+      setSignaturesCollected(prev => prev + 1);
+
+      // Check if we've hit threshold
+      const newCollected = signaturesCollected + 1;
+      if (newCollected >= threshold) {
+        setStep('ready');
+        if (pollRef.current) clearInterval(pollRef.current);
+      }
+
+      showToast('Recovery signature submitted', 'success');
     } catch (err: any) {
       console.error('Privy sign error:', err);
       setPrivyError(err?.message || 'Failed to sign. Please try again.');
@@ -440,7 +454,7 @@ export default function VaultRecoveryExecutionScreen({
       <Toast
         visible={toastVisible}
         message={toastMessage}
-        type="warning"
+        type={toastType}
         onDismiss={() => setToastVisible(false)}
       />
 
