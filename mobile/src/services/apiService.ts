@@ -43,6 +43,7 @@ class ApiService {
     treasuryWallet: string | null;
     targetCloudBalance: number | null;
     vaultCreationFee: number | null;
+    supportUrl: string | null;
   }> {
     // Config is needed during vault creation (before auth is available) — bypass auth
     const r = await fetch(`${this.baseUrl}/config/v1`);

@@ -15,6 +15,7 @@ router.get('/', (req: Request, res: Response) => {
       treasuryWallet: process.env.TREASURY_WALLET_ADDRESS ?? null,
       targetCloudBalance: TARGET_CLOUD_BALANCE,
       vaultCreationFee: VAULT_CREATION_FEE,
+      supportUrl: process.env.SUPPORT_URL ?? 'https://t.me/heymike777',
     },
   });
 });

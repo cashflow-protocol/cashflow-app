@@ -60,6 +60,7 @@ export interface ColorPalette {
   homeGradient: string[];
   earnGradient: string[];
   assetsGradient: string[];
+  moreGradient: string[];
 
   // Onboarding (purple gradient screens)
   onboardingGradient: string[];
@@ -135,6 +136,7 @@ export const darkColors: ColorPalette = {
   homeGradient: ['#0B2545', '#133E6B', '#1B4F7A', '#111827'],
   earnGradient: ['#1E8260', '#19C394'],
   assetsGradient: ['#104982', '#3985D8'],
+  moreGradient: ['#1E293B', '#334155'],
 
   // Onboarding (purple gradient screens)
   onboardingGradient: ['#0d0620', '#1a0e3d', '#2d1469', '#4c1d95'],
@@ -210,6 +212,7 @@ export const lightColors: ColorPalette = {
   homeGradient: ['#175DA3', '#347AC0', '#8EB2D8', '#E8EAF1'],
   earnGradient: ['#1E8260', '#19C394'],
   assetsGradient: ['#104982', '#3985D8'],
+  moreGradient: ['#475569', '#94A3B8'],
 
   // Onboarding (purple gradient screens)
   onboardingGradient: ['#1a0533', '#2d1b69', '#4c1d95', '#6d28d9'],
