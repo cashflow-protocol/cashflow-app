@@ -199,7 +199,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
               </View>
               <View style={styles.menuInfo}>
                 <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Support</Text>
-                <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>Get help via Telegram</Text>
+                <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>Chat with Cashflow team</Text>
               </View>
               <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>{'>'}</Text>
             </TouchableOpacity>
