@@ -20,3 +20,13 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// Prevent expo library from generating ExpoModulesPackageList (the app generates its own).
+// Without this, R8 fails with "Type expo.modules.ExpoModulesPackageList is defined multiple times".
+gradle.projectsEvaluated {
+    def expoProject = project(':expo')
+    // Disable the package list generation so the class isn't compiled into the library JAR
+    expoProject.tasks.matching { it.name == 'generatePackagesList' }.configureEach {
+        enabled = false
+    }
+}
