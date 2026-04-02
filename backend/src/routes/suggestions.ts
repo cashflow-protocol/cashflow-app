@@ -15,7 +15,7 @@ const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
 
 // Latest app version – bump when a new release is published
-const LATEST_APP_VERSION = '0.0';
+const LATEST_APP_VERSION = '1.1';
 
 /** Returns true if a < b using numeric segment comparison (e.g. "1.3" < "1.11") */
 function isVersionOlder(a: string, b: string): boolean {
@@ -117,9 +117,6 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    console.log('[suggestions]', 'appVersion:', appVersion)
-    console.log('[suggestions]', 'LATEST_APP_VERSION:', LATEST_APP_VERSION)
-    if (appVersion) console.log('[suggestions]', 'isVersionOlder:', isVersionOlder(appVersion, LATEST_APP_VERSION))
     // --- Update app suggestion ---
     if (appVersion && isVersionOlder(appVersion, LATEST_APP_VERSION)) {
       suggestions.push({
