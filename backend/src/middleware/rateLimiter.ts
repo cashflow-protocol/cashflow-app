@@ -42,7 +42,7 @@ export const adminLimiter = rateLimit({
  */
 export const onboardingLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 5,
+  max: 50,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many requests, please try again later' },
