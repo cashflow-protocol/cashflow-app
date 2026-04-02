@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const codeInputRef = useRef<TextInput>(null);
 
   const handleSendCode = useCallback(async () => {
     if (!email.trim()) return;
@@ -109,18 +110,44 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
           onSubmitEditing={handleSendCode}
         />
       ) : (
-        <TextInput
-          key="code-input"
-          style={[styles.input, styles.codeInput, { backgroundColor: colors.inputBackground, color: colors.textPrimary }]}
-          value={code}
-          onChangeText={setCode}
-          placeholder="000000"
-          placeholderTextColor={colors.placeholderColor}
-          keyboardType="number-pad"
-          maxLength={6}
-          returnKeyType="done"
-          onSubmitEditing={handleVerify}
-        />
+        <View style={styles.otpContainer}>
+          <TextInput
+            ref={codeInputRef}
+            style={styles.otpHiddenInput}
+            value={code}
+            onChangeText={(t) => {
+              const cleaned = t.replace(/[^0-9]/g, '').slice(0, 6);
+              setCode(cleaned);
+              if (cleaned.length === 6) {
+                setTimeout(() => handleVerify(), 50);
+              }
+            }}
+            keyboardType="number-pad"
+            maxLength={6}
+            autoFocus
+            caretHidden
+          />
+          <View style={styles.otpCells}>
+            {Array.from({ length: 6 }).map((_, i) => {
+              const isFocused = code.length === i;
+              return (
+                <TouchableOpacity
+                  key={i}
+                  style={[
+                    styles.otpCell,
+                    { backgroundColor: colors.inputBackground, borderColor: isFocused ? colors.accentBlue : 'transparent' },
+                  ]}
+                  activeOpacity={1}
+                  onPress={() => codeInputRef.current?.focus()}
+                >
+                  <Text style={[styles.otpDigit, { color: colors.textPrimary }]}>
+                    {code[i] || ''}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
       )}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -163,11 +190,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
   },
-  codeInput: {
-    textAlign: 'center',
+  otpContainer: {
+    marginTop: 4,
+  },
+  otpHiddenInput: {
+    position: 'absolute',
+    opacity: 0,
+    height: 0,
+    width: 0,
+  },
+  otpCells: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  otpCell: {
+    flex: 1,
+    aspectRatio: 1,
+    maxWidth: 52,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  otpDigit: {
     fontSize: 24,
     fontWeight: '700',
-    letterSpacing: 8,
   },
   error: {
     color: '#E53E3E',
