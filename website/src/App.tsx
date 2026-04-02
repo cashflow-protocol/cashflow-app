@@ -3,6 +3,7 @@ import { AppProvider, getDefaultConfig } from '@solana/connector/react';
 import { PrivyProvider } from '@privy-io/react-auth';
 import LandingPage from './pages/LandingPage';
 import RecoveryPage from './pages/RecoveryPage';
+import DownloadPage from './pages/DownloadPage';
 
 const connectorConfig = getDefaultConfig({
   appName: 'Cashflow',
@@ -24,6 +25,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/recovery/:id" element={<RecoveryPage />} />
+          <Route path="/download" element={<DownloadPage />} />
         </Routes>
       </AppProvider>
     </PrivyProvider>

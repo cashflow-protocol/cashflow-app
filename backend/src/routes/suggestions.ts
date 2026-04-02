@@ -14,6 +14,22 @@ const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
 
+// Latest app version – bump when a new release is published
+const LATEST_APP_VERSION = '1.0';
+
+/** Returns true if a < b using numeric segment comparison (e.g. "1.3" < "1.11") */
+function isVersionOlder(a: string, b: string): boolean {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] ?? 0;
+    const nb = pb[i] ?? 0;
+    if (na < nb) return true;
+    if (na > nb) return false;
+  }
+  return false;
+}
+
 // Minimum SOL balance (in lamports) below which we suggest funding
 const LOW_SOL_THRESHOLD = 50_000_000n; // 0.05 SOL
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -98,6 +114,19 @@ router.post('/', async (req: Request, res: Response) => {
         description: 'Your vault has no recovery keys. Add a recovery wallet to protect against losing access.',
         color: '#F5A623',
         buttonTitle: 'Set Up',
+      });
+    }
+
+    // --- Update app suggestion ---
+    if (appVersion && isVersionOlder(appVersion, LATEST_APP_VERSION)) {
+      suggestions.push({
+        id: 'update-app',
+        type: 'link',
+        title: 'App update available',
+        description: 'A new version of Cashflow is available. Update to get the latest features and improvements.',
+        color: '#007AFF',
+        // buttonTitle: 'Update',
+        // url: 'https://store.solanamobile.com/products/cashflow',
       });
     }
 
