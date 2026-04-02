@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { ArrowLeft, Check, Lock, ChevronRight, Zap, Hash, Clock } from 'lucide-react-native';
+import * as WebBrowser from 'expo-web-browser';
 import {
   getWaitlistTasks,
   checkWaitlistStatus,
@@ -183,7 +184,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         case 'x': {
           const xResult = await startConnectX(publicKey);
           if (xResult?.authUrl) {
-            Linking.openURL(xResult.authUrl);
+            await WebBrowser.openAuthSessionAsync(xResult.authUrl, 'cashflow://oauth/callback');
           } else {
             Alert.alert('Not Available', 'Twitter integration is not configured yet.');
           }
@@ -192,7 +193,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         case 'discord': {
           const dResult = await startConnectDiscord(publicKey);
           if (dResult?.authUrl) {
-            Linking.openURL(dResult.authUrl);
+            await WebBrowser.openAuthSessionAsync(dResult.authUrl, 'cashflow://oauth/callback');
           } else {
             Alert.alert('Not Available', 'Discord integration is not configured yet.');
           }

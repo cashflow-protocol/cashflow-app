@@ -49,12 +49,13 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
     }
   }, [email, publicKey]);
 
-  const handleVerify = useCallback(async () => {
-    if (!code.trim()) return;
+  const handleVerify = useCallback(async (codeOverride?: string) => {
+    const verifyCode = codeOverride ?? code;
+    if (!verifyCode.trim()) return;
     setLoading(true);
     setError('');
     try {
-      const result = await verifyEmailCode(publicKey, email.trim(), code.trim());
+      const result = await verifyEmailCode(publicKey, email.trim(), verifyCode.trim());
       if (result.success) {
         logEmailVerifySuccess();
         onSuccess(result.xpAwarded ?? 100);
@@ -119,7 +120,7 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
               const cleaned = t.replace(/[^0-9]/g, '').slice(0, 6);
               setCode(cleaned);
               if (cleaned.length === 6) {
-                setTimeout(() => handleVerify(), 50);
+                setTimeout(() => handleVerify(cleaned), 50);
               }
             }}
             keyboardType="number-pad"
