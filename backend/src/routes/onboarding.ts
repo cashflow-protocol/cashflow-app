@@ -517,7 +517,8 @@ router.post('/waitlist/connect-x/start', async (req, res) => {
 
 /**
  * GET /waitlist/connect-x/auth
- * Redirects to Twitter OAuth — avoids X app intercepting twitter.com links on mobile.
+ * Navigates to Twitter OAuth via JS — avoids X app intercepting twitter.com links on mobile.
+ * (302 redirects can still trigger app links; JS navigations do not.)
  */
 router.get('/waitlist/connect-x/auth', (req, res) => {
   const { state } = req.query as { state?: string };
@@ -538,7 +539,7 @@ router.get('/waitlist/connect-x/auth', (req, res) => {
     return;
   }
 
-  res.redirect(authUrl);
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><script>window.location.replace(${JSON.stringify(authUrl)});</script></body></html>`);
 });
 
 /**
