@@ -15,7 +15,7 @@ const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
 
 // Latest app version – bump when a new release is published
-const LATEST_APP_VERSION = '1.0';
+const LATEST_APP_VERSION = '0.0';
 
 /** Returns true if a < b using numeric segment comparison (e.g. "1.3" < "1.11") */
 function isVersionOlder(a: string, b: string): boolean {
