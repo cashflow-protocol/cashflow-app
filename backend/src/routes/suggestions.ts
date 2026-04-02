@@ -117,6 +117,9 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
+    console.log('[suggestions]', 'appVersion:', appVersion)
+    console.log('[suggestions]', 'LATEST_APP_VERSION:', LATEST_APP_VERSION)
+    if (appVersion) console.log('[suggestions]', 'isVersionOlder:', isVersionOlder(appVersion, LATEST_APP_VERSION))
     // --- Update app suggestion ---
     if (appVersion && isVersionOlder(appVersion, LATEST_APP_VERSION)) {
       suggestions.push({
