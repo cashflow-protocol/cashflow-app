@@ -2,6 +2,37 @@ import { useEffect } from 'react';
 import { Link } from 'react-router';
 import '../styles/download.css';
 
+function AppStoreBadge() {
+  return (
+    <svg viewBox="0 0 120 40" className="store-badge" xmlns="http://www.w3.org/2000/svg">
+      <rect width="120" height="40" rx="6" fill="#000" stroke="#a6a6a6" strokeWidth="0.6" />
+      <g fill="#fff">
+        <path d="M24.769 20.3a4.949 4.949 0 0 1 2.356-4.151 5.066 5.066 0 0 0-3.99-2.158c-1.68-.176-3.308 1.005-4.164 1.005-.872 0-2.19-.988-3.608-.958a5.315 5.315 0 0 0-4.473 2.728c-1.934 3.348-.491 8.269 1.361 10.976.927 1.325 2.01 2.805 3.428 2.753 1.387-.058 1.905-.885 3.58-.885 1.658 0 2.144.885 3.591.852 1.489-.025 2.426-1.332 3.32-2.669a10.962 10.962 0 0 0 1.52-3.092 4.782 4.782 0 0 1-2.92-4.4zM22.037 12.21a4.872 4.872 0 0 0 1.115-3.49 4.957 4.957 0 0 0-3.208 1.66 4.636 4.636 0 0 0-1.144 3.36 4.1 4.1 0 0 0 3.237-1.53z" />
+        <text x="36.5" y="15" fontSize="5" fontFamily="'Poppins', sans-serif" fontWeight="400">Download on the</text>
+        <text x="36.5" y="27" fontSize="11" fontFamily="'Poppins', sans-serif" fontWeight="600">App Store</text>
+      </g>
+    </svg>
+  );
+}
+
+function GooglePlayBadge() {
+  return (
+    <svg viewBox="0 0 135 40" className="store-badge" xmlns="http://www.w3.org/2000/svg">
+      <rect width="135" height="40" rx="6" fill="#000" stroke="#a6a6a6" strokeWidth="0.6" />
+      <g transform="translate(10, 7.5)">
+        <path d="M1.1 0.5L13.5 12.5L1.1 24.5C0.7 24.1 0.5 23.5 0.5 22.8V2.2C0.5 1.5 0.7 0.9 1.1 0.5Z" fill="#4285F4" />
+        <path d="M17.8 8.8L14.4 11.6L13.5 12.5L14.4 13.4L17.8 16.2L18.3 16.5L22.4 14.2C23.6 13.5 23.6 11.5 22.4 10.8L18.3 8.5L17.8 8.8Z" fill="#FBBC04" />
+        <path d="M14.4 13.4L13.5 12.5L1.1 24.5C1.7 25.1 2.6 25.2 3.6 24.6L18.3 16.5L14.4 13.4Z" fill="#EA4335" />
+        <path d="M1.1 0.5C1.7 -0.1 2.6 -0.2 3.6 0.4L18.3 8.5L14.4 11.6L13.5 12.5L1.1 0.5Z" fill="#34A853" />
+      </g>
+      <g fill="#fff">
+        <text x="38" y="13" fontSize="4.5" fontFamily="'Poppins', sans-serif" fontWeight="400" letterSpacing="0.5">GET IT ON</text>
+        <text x="38" y="27" fontSize="10.5" fontFamily="'Poppins', sans-serif" fontWeight="500">Google Play</text>
+      </g>
+    </svg>
+  );
+}
+
 export default function DownloadPage() {
   useEffect(() => {
     document.title = 'Download — Cashflow';
@@ -21,49 +52,32 @@ export default function DownloadPage() {
           </p>
         </div>
 
-        <div className="download-cards">
+        <div className="download-badges">
           <a
             href="https://store.solanamobile.com/products/cashflow"
             target="_blank"
             rel="noopener noreferrer"
-            className="download-card active"
+            className="store-link"
           >
-            <div className="download-icon">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
-                <rect x="5" y="1" width="14" height="22" rx="3" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="12" cy="19" r="1" fill="currentColor" />
-                <line x1="9" y1="4" x2="15" y2="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            </div>
-            <h2>Solana dApp Store</h2>
-            <p>Available now on Solana Mobile</p>
-            <span className="download-badge available">Download</span>
+            <img
+              src="/assets/badges/dapp-store.svg"
+              alt="Get it on Solana dApp Store"
+              className="store-badge"
+            />
           </a>
 
-          <div className="download-card disabled">
-            <div className="download-icon">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
-                <path d="M18.71 19.5C17.88 20.74 17 21.95 15.66 21.97C14.32 22 13.89 21.18 12.37 21.18C10.84 21.18 10.37 21.95 9.1 22C7.79 22.05 6.8 20.68 5.96 19.47C4.25 16.56 2.94 11.3 4.7 7.72C5.57 5.96 7.36 4.86 9.28 4.84C10.56 4.81 11.78 5.7 12.56 5.7C13.34 5.7 14.85 4.63 16.41 4.8C17.07 4.83 18.91 5.07 20.08 6.79C19.97 6.85 17.76 8.16 17.79 10.83C17.82 14.01 20.56 15.07 20.59 15.08C20.56 15.16 20.13 16.62 19.08 18.12L18.71 19.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                <path d="M15.5 2C15.5 3.5 14.78 4.88 13.73 5.78C12.73 6.65 11.34 7.22 10 7.1C9.95 5.65 10.68 4.26 11.69 3.37C12.78 2.42 14.28 1.82 15.5 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-              </svg>
+          <div className="store-link disabled">
+            <div className="store-badge-wrapper coming-soon">
+              <AppStoreBadge />
+              <span className="badge-overlay">Coming Soon</span>
             </div>
-            <h2>App Store</h2>
-            <p>For iPhone and iPad</p>
-            <span className="download-badge coming-soon">Coming Soon</span>
           </div>
 
-          <div className="download-card disabled">
-            <div className="download-icon">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
-                <path d="M17.523 2.235L15.39 5.59C16.86 6.44 17.95 7.82 18.38 9.47H5.62C6.05 7.82 7.14 6.44 8.61 5.59L6.477 2.235" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                <rect x="4" y="9.5" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="9" cy="7" r="0.75" fill="currentColor" />
-                <circle cx="15" cy="7" r="0.75" fill="currentColor" />
-              </svg>
+          <div className="store-link disabled">
+            <div className="store-badge-wrapper coming-soon">
+              <GooglePlayBadge />
+              <span className="badge-overlay">Coming Soon</span>
             </div>
-            <h2>Google Play</h2>
-            <p>For Android devices</p>
-            <span className="download-badge coming-soon">Coming Soon</span>
           </div>
         </div>
       </div>

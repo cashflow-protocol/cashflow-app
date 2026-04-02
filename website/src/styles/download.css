@@ -10,7 +10,7 @@
 }
 
 .download-container {
-  max-width: 900px;
+  max-width: 600px;
   width: 100%;
 }
 
@@ -54,95 +54,64 @@
   line-height: 1.6;
 }
 
-.download-cards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-
-.download-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-card);
-  padding: 40px 28px;
-  text-align: center;
-  transition: all 0.3s ease;
-  text-decoration: none;
-  color: var(--white);
+.download-badges {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 16px;
 }
 
-.download-card.active {
-  cursor: pointer;
+.store-link {
+  text-decoration: none;
+  display: block;
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-.download-card.active:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.15);
-  transform: translateY(-4px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+.store-link:hover:not(.disabled) {
+  transform: scale(1.05);
 }
 
-.download-card.disabled {
-  opacity: 0.5;
+.store-link.disabled {
   cursor: default;
 }
 
-.download-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 24px;
-  color: var(--white);
+img.store-badge {
+  height: 60px;
+  width: auto;
+  display: block;
 }
 
-.download-card.active .download-icon {
-  background: linear-gradient(135deg, var(--blue), var(--green));
+svg.store-badge {
+  height: 60px;
+  width: auto;
+  display: block;
 }
 
-.download-card h2 {
-  font-size: 20px;
-  font-weight: 600;
-  margin-bottom: 8px;
+.store-badge-wrapper {
+  position: relative;
+  display: block;
+  line-height: 0;
 }
 
-.download-card p {
-  font-size: 14px;
-  color: var(--gray-500);
-  margin-bottom: 24px;
+.store-badge-wrapper.coming-soon svg {
+  opacity: 0.35;
 }
 
-.download-badge {
-  display: inline-block;
+.badge-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   font-size: 13px;
   font-weight: 500;
-  padding: 8px 20px;
-  border-radius: var(--radius-btn);
-}
-
-.download-badge.available {
-  background: linear-gradient(135deg, var(--blue), var(--green));
-  color: var(--white);
-}
-
-.download-badge.coming-soon {
-  background: rgba(255, 255, 255, 0.08);
   color: var(--gray-500);
+  background: rgba(0, 0, 0, 0.7);
+  padding: 4px 14px;
+  border-radius: var(--radius-btn);
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {
-  .download-cards {
-    grid-template-columns: 1fr;
-    max-width: 360px;
-    margin: 0 auto;
-  }
-
   .download-hero h1 {
     font-size: 36px;
   }
