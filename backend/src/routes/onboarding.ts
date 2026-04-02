@@ -479,6 +479,7 @@ router.post('/waitlist/connect-wallet', async (req, res) => {
 /**
  * POST /waitlist/connect-x/start
  * Generate Twitter OAuth URL for the user.
+ * Returns a redirect URL on our own backend to avoid X app intercepting twitter.com links.
  */
 router.post('/waitlist/connect-x/start', async (req, res) => {
   try {
@@ -504,11 +505,40 @@ router.post('/waitlist/connect-x/start', async (req, res) => {
       expiresAt: Date.now() + CODE_EXPIRY_MS,
     });
 
-    res.json({ success: true, authUrl });
+    // Return a URL on our backend that redirects to Twitter,
+    // so the mobile browser doesn't trigger X app universal links.
+    const BACKEND_URL = process.env.BACKEND_URL || 'https://api.cashflow.fun';
+    res.json({ success: true, authUrl: `${BACKEND_URL}/onboarding/v1/waitlist/connect-x/auth?state=${state}` });
   } catch (error) {
     console.error('Connect X start error:', error);
     res.status(500).json({ success: false, error: 'Failed to start Twitter auth' });
   }
+});
+
+/**
+ * GET /waitlist/connect-x/auth
+ * Redirects to Twitter OAuth — avoids X app intercepting twitter.com links on mobile.
+ */
+router.get('/waitlist/connect-x/auth', (req, res) => {
+  const { state } = req.query as { state?: string };
+  if (!state) {
+    res.status(400).send('Missing state');
+    return;
+  }
+
+  const pending = pendingOAuthStates.get(state);
+  if (!pending || pending.provider !== 'twitter' || Date.now() > pending.expiresAt) {
+    res.status(400).send('Invalid or expired OAuth state');
+    return;
+  }
+
+  const authUrl = socialAuth.generateTwitterOAuthUrl(state, pending.codeVerifier!);
+  if (!authUrl) {
+    res.status(503).send('Twitter integration not configured');
+    return;
+  }
+
+  res.redirect(authUrl);
 });
 
 /**
