@@ -136,23 +136,32 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
     return () => sub.remove();
   }, [publicKey]);
 
-  // Auto-close Telegram sheet when returning to app after connecting
+  // Refresh waitlist data when app returns to foreground
   useEffect(() => {
-    if (!telegramSheetVisible || !publicKey) return;
+    if (!publicKey) return;
     const sub = AppState.addEventListener('change', async (state) => {
       if (state === 'active') {
         const data = await getWaitlistTasks(publicKey);
-        const tgTask = data.tasks.find((t) => t.metadata?.provider === 'telegram');
-        if (tgTask?.completed) {
-          setTelegramSheetVisible(false);
-          setTasks(data.tasks);
-          setXp(data.xp);
-          setRank(data.rank);
+        setTasks(data.tasks);
+        setXp(data.xp);
+        setRank(data.rank);
+
+        if (telegramSheetVisible) {
+          const tgTask = data.tasks.find((t) => t.metadata?.provider === 'telegram');
+          if (tgTask?.completed) {
+            setTelegramSheetVisible(false);
+          }
+        }
+
+        const status = await checkWaitlistStatus(publicKey);
+        if (status.approved && status.inviteCode) {
+          logWaitlistApproved();
+          onApproved(status.inviteCode);
         }
       }
     });
     return () => sub.remove();
-  }, [telegramSheetVisible, publicKey]);
+  }, [publicKey, telegramSheetVisible]);
 
   React.useEffect(() => { logScreenView('WaitlistDashboardScreen'); }, []);
 
