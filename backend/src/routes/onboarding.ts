@@ -505,10 +505,7 @@ router.post('/waitlist/connect-x/start', async (req, res) => {
       expiresAt: Date.now() + CODE_EXPIRY_MS,
     });
 
-    // Return a URL on our backend that redirects to Twitter,
-    // so the mobile browser doesn't trigger X app universal links.
-    const BACKEND_URL = process.env.BACKEND_URL || 'https://api.cashflow.fun';
-    res.json({ success: true, authUrl: `${BACKEND_URL}/onboarding/v1/waitlist/connect-x/auth?state=${state}` });
+    res.json({ success: true, authUrl });
   } catch (error) {
     console.error('Connect X start error:', error);
     res.status(500).json({ success: false, error: 'Failed to start Twitter auth' });
