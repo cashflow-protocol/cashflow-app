@@ -12,6 +12,8 @@ interface EarnToken {
   status: 'active' | 'inactive';
   minDepositAmount: string;
   minWithdrawAmount: string;
+  poolSize: string | null;
+  decimals: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +40,14 @@ function solscanAccount(addr: string) {
 
 function solscanToken(mint: string) {
   return `https://solscan.io/token/${mint}`;
+}
+
+function formatPoolSize(raw: string | null, decimals: number): string {
+  if (!raw || raw === '0') return '—';
+  const num = Number(raw) / 10 ** decimals;
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + 'M';
+  if (num >= 1_000) return (num / 1_000).toFixed(2) + 'K';
+  return num.toFixed(2);
 }
 
 export default function VaultsPage() {
@@ -152,6 +162,7 @@ export default function VaultsPage() {
               <th>Type</th>
               <th>Vault Address</th>
               <th>Coin</th>
+              <th>Pool Size</th>
               <th>Reward Rate</th>
               <th>Status</th>
               <th>Config</th>
@@ -160,9 +171,9 @@ export default function VaultsPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
             ) : tokens.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: '#999' }}>No vaults found</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: '#999' }}>No vaults found</td></tr>
             ) : tokens.map((t) => (
               <tr key={t.id}>
                 <td>
@@ -200,8 +211,13 @@ export default function VaultsPage() {
                   </a>
                 </td>
                 <td>
+                  <span style={{ fontWeight: 500 }}>
+                    {formatPoolSize(t.poolSize, t.decimals)} {t.symbol}
+                  </span>
+                </td>
+                <td>
                   <span style={{ fontWeight: 600, color: '#2e7d32' }}>
-                    {(t.rewardsRate * 100).toFixed(2)}%
+                    {(t.rewardsRate / 10000 * 100).toFixed(2)}%
                   </span>
                 </td>
                 <td>
