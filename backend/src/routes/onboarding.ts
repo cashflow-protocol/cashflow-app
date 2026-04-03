@@ -193,6 +193,11 @@ router.post('/waitlist/tasks', async (req, res) => {
       tasks: taskList,
       xp: user?.xp ?? 0,
       rank: rank + 1,
+      config: {
+        // 'browser' = open OAuth in external browser (default)
+        // 'webview' = open OAuth in in-app WebView (fallback for devices where X app intercepts browser)
+        xOauthMode: (process.env.X_OAUTH_MODE as string) || 'browser',
+      },
     });
   } catch (error) {
     console.error('Waitlist tasks error:', error);

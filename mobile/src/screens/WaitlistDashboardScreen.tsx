@@ -10,7 +10,9 @@ import {
   Linking,
   Alert,
   AppState,
+  Modal,
 } from 'react-native';
+import { WebView, type WebViewNavigation } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { ArrowLeft, Check, Lock, ChevronRight, Zap, Hash, Clock } from 'lucide-react-native';
@@ -22,6 +24,7 @@ import {
   startConnectX,
   startConnectDiscord,
   startConnectTelegram,
+  type WaitlistConfig,
   type WaitlistTaskItem,
 } from '../services/onboardingService';
 import { useWallet } from '../hooks/useWallet';
@@ -66,6 +69,8 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [emailSheetVisible, setEmailSheetVisible] = useState(false);
+  const [oauthWebViewUrl, setOauthWebViewUrl] = useState<string | null>(null);
+  const [config, setConfig] = useState<WaitlistConfig>({ xOauthMode: 'browser' });
   const [telegramSheetVisible, setTelegramSheetVisible] = useState(false);
   const [telegramCode, setTelegramCode] = useState('');
   const [telegramBotUrl, setTelegramBotUrl] = useState('');
@@ -104,6 +109,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
     setTasks(data.tasks);
     setXp(data.xp);
     setRank(data.rank);
+    if (data.config) setConfig(data.config);
 
     const status = await checkWaitlistStatus(pk);
     if (status.approved && status.inviteCode) {
@@ -144,6 +150,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         setTasks(data.tasks);
         setXp(data.xp);
         setRank(data.rank);
+        if (data.config) setConfig(data.config);
 
         if (telegramSheetVisible) {
           const tgTask = data.tasks.find((t) => t.metadata?.provider === 'telegram');
@@ -191,10 +198,15 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
           break;
         case 'x': {
           const xResult = await startConnectX(publicKey);
-          if (xResult?.authUrl) {
-            Linking.openURL(xResult.authUrl);
-          } else {
+          if (!xResult?.authUrl) {
             Alert.alert('Not Available', 'Twitter integration is not configured yet.');
+            break;
+          }
+          Alert.alert('DEBUG', `xOauthMode: ${config.xOauthMode}`);
+          if (config.xOauthMode === 'webview') {
+            setOauthWebViewUrl(xResult.authUrl);
+          } else {
+            Linking.openURL(xResult.authUrl);
           }
           break;
         }
@@ -456,6 +468,31 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         </>
       )}
 
+      {/* OAuth WebView fallback — shown when X app intercepts the browser flow */}
+      <Modal visible={!!oauthWebViewUrl} animationType="slide" onRequestClose={() => setOauthWebViewUrl(null)}>
+        <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={styles.webViewHeader}>
+            <TouchableOpacity onPress={() => setOauthWebViewUrl(null)} style={styles.webViewClose}>
+              <ArrowLeft size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <Text style={[styles.webViewTitle, { color: colors.textPrimary }]}>Sign in with X</Text>
+          </View>
+          {oauthWebViewUrl && (
+            <WebView
+              source={{ uri: oauthWebViewUrl }}
+              style={{ flex: 1 }}
+              onShouldStartLoadWithRequest={(request: WebViewNavigation) => {
+                if (request.url.startsWith('cashflow://')) {
+                  setOauthWebViewUrl(null);
+                  if (publicKey) loadTasks(publicKey);
+                  return false;
+                }
+                return true;
+              }}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -632,5 +669,18 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     opacity: 0.6,
     marginTop: 8,
+  },
+  webViewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+  },
+  webViewClose: {
+    padding: 4,
+  },
+  webViewTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 12,
   },
 });

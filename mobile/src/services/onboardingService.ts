@@ -20,10 +20,15 @@ export interface WaitlistTaskItem {
   locked: boolean;
 }
 
+export interface WaitlistConfig {
+  xOauthMode: 'browser' | 'webview';
+}
+
 export interface WaitlistTasksResponse {
   tasks: WaitlistTaskItem[];
   xp: number;
   rank: number;
+  config?: WaitlistConfig;
 }
 
 export interface LeaderboardEntry {
@@ -84,7 +89,7 @@ export async function getWaitlistTasks(publicKey: string): Promise<WaitlistTasks
     body: JSON.stringify({ publicKey }),
   });
   const data = await res.json();
-  return { tasks: data.tasks, xp: data.xp, rank: data.rank };
+  return { tasks: data.tasks, xp: data.xp, rank: data.rank, config: data.config };
 }
 
 export async function checkWaitlistStatus(publicKey: string): Promise<{ approved: boolean; inviteCode?: string }> {
