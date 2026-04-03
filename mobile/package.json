@@ -1,5 +1,5 @@
 {
-  "name": "Cashflow",
+  "name": "cashflow",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -34,6 +34,7 @@
     "expo-apple-authentication": "~7.2.4",
     "expo-application": "~6.1.5",
     "expo-crypto": "~14.1.5",
+    "expo-intent-launcher": "~12.1.5",
     "expo-linking": "~7.1.7",
     "expo-secure-store": "~14.2.4",
     "expo-web-browser": "~14.2.0",
