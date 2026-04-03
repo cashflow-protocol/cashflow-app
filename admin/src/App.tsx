@@ -4,10 +4,11 @@ import InviteCodesPage from './pages/InviteCodes';
 import WaitlistUsersPage from './pages/WaitlistUsers';
 import WaitlistTasksPage from './pages/WaitlistTasks';
 import UsersPage from './pages/Users';
+import VaultsPage from './pages/Vaults';
 
-type Page = 'invite-codes' | 'waitlist-users' | 'waitlist-tasks' | 'users';
+type Page = 'invite-codes' | 'waitlist-users' | 'waitlist-tasks' | 'users' | 'vaults';
 
-const PAGES: Page[] = ['invite-codes', 'waitlist-users', 'waitlist-tasks', 'users'];
+const PAGES: Page[] = ['invite-codes', 'waitlist-users', 'waitlist-tasks', 'users', 'vaults'];
 
 function getPageFromPath(): Page {
   const path = window.location.pathname.replace(/^\//, '');
@@ -113,6 +114,12 @@ export default function App() {
           >
             Users
           </button>
+          <button
+            className={page === 'vaults' ? 'active' : ''}
+            onClick={() => setPage('vaults')}
+          >
+            Vaults
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -137,6 +144,7 @@ export default function App() {
         {page === 'waitlist-users' && <WaitlistUsersPage />}
         {page === 'waitlist-tasks' && <WaitlistTasksPage />}
         {page === 'users' && <UsersPage />}
+        {page === 'vaults' && <VaultsPage />}
       </main>
     </div>
   );

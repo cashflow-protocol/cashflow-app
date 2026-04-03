@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType } from '../models';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel } from '../models';
 import { dispatchSystemNotification } from '../services/notificationService';
 
 const router = Router();
@@ -657,6 +657,135 @@ router.post('/users/broadcast-notification', async (req, res) => {
   } catch (error) {
     console.error('Admin broadcast notification error:', error);
     res.status(500).json({ success: false, error: 'Failed to broadcast notification' });
+  }
+});
+
+// ─── Earn Tokens (Vaults) ───
+
+/**
+ * GET /earn-tokens
+ * List all earn tokens with full data.
+ */
+router.get('/earn-tokens', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+    const search = (req.query.search as string) || '';
+    const type = (req.query.type as string) || '';
+
+    const filter: any = {};
+    if (search) {
+      filter.$or = [
+        { vaultAddress: { $regex: search, $options: 'i' } },
+        { symbol: { $regex: search, $options: 'i' } },
+        { vaultTitle: { $regex: search, $options: 'i' } },
+        { mint: { $regex: search, $options: 'i' } },
+      ];
+    }
+    if (type) {
+      filter.type = type;
+    }
+
+    const [tokens, total] = await Promise.all([
+      EarnTokenModel.find(filter)
+        .sort({ type: 1, rewardsRate: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      EarnTokenModel.countDocuments(filter),
+    ]);
+
+    res.json({
+      success: true,
+      tokens: tokens.map((t) => ({
+        id: t._id,
+        type: t.type,
+        vaultAddress: t.vaultAddress,
+        vaultTitle: t.vaultTitle,
+        mint: t.mint,
+        symbol: t.symbol,
+        rewardsRate: t.rewardsRate,
+        status: t.status,
+        minDepositAmount: t.minDepositAmount || '0',
+        minWithdrawAmount: t.minWithdrawAmount || '0',
+        createdAt: (t as any).createdAt,
+        updatedAt: (t as any).updatedAt,
+      })),
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    console.error('Admin list earn tokens error:', error);
+    res.status(500).json({ success: false, error: 'Failed to list earn tokens' });
+  }
+});
+
+/**
+ * PATCH /earn-tokens/:id/status
+ * Toggle earn token status between active/inactive.
+ */
+router.patch('/earn-tokens/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['active', 'inactive'].includes(status)) {
+      res.status(400).json({ success: false, error: 'status must be "active" or "inactive"' });
+      return;
+    }
+
+    const token = await EarnTokenModel.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true },
+    );
+
+    if (!token) {
+      res.status(404).json({ success: false, error: 'Earn token not found' });
+      return;
+    }
+
+    res.json({ success: true, status: token.status });
+  } catch (error) {
+    console.error('Admin update earn token status error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update status' });
+  }
+});
+
+/**
+ * PATCH /earn-tokens/:id/config
+ * Update earn token config (minDepositAmount, minWithdrawAmount).
+ */
+router.patch('/earn-tokens/:id/config', async (req, res) => {
+  try {
+    const { minDepositAmount, minWithdrawAmount } = req.body;
+    const update: any = {};
+    if (minDepositAmount !== undefined) update.minDepositAmount = String(minDepositAmount);
+    if (minWithdrawAmount !== undefined) update.minWithdrawAmount = String(minWithdrawAmount);
+
+    if (Object.keys(update).length === 0) {
+      res.status(400).json({ success: false, error: 'No fields to update' });
+      return;
+    }
+
+    const token = await EarnTokenModel.findByIdAndUpdate(
+      req.params.id,
+      update,
+      { new: true },
+    );
+
+    if (!token) {
+      res.status(404).json({ success: false, error: 'Earn token not found' });
+      return;
+    }
+
+    res.json({
+      success: true,
+      minDepositAmount: token.minDepositAmount,
+      minWithdrawAmount: token.minWithdrawAmount,
+    });
+  } catch (error) {
+    console.error('Admin update earn token config error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update config' });
   }
 });
 

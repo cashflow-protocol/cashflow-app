@@ -96,7 +96,7 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
           <View style={styles.content}>
             <Text style={[styles.title, { color: colors.onboardingText }]}>Enter Invite Code</Text>
             <Text style={[styles.description, { color: colors.onboardingText + 'CC' }]}>
-              Enter your invite code to unlock early access. For hackathon - enter SEEKER code
+              Enter your invite code to unlock early access.
             </Text>
 
             <TextInput
