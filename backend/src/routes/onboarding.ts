@@ -573,6 +573,7 @@ router.get('/waitlist/connect-x/callback', async (req, res) => {
       twitterId: twitterUser.id,
       twitterHandle: twitterUser.username,
       twitterAccessToken: twitterUser.accessToken,
+      twitterRefreshToken: twitterUser.refreshToken,
     });
 
     res.redirect('cashflow://oauth/callback?provider=x&success=true');
@@ -883,13 +884,29 @@ router.post('/waitlist/verify-action', async (req, res) => {
 
     let verified = false;
 
+    // Ensure we have a fresh Twitter access token
+    let twitterAccessToken = user.twitterAccessToken;
+    if (user.twitterRefreshToken && (task.metadata?.handle || task.metadata?.tweetId)) {
+      try {
+        const refreshed = await socialAuth.refreshTwitterToken(user.twitterRefreshToken);
+        if (refreshed) {
+          twitterAccessToken = refreshed.accessToken;
+          await WaitlistUserModel.updateOne({ publicKey }, {
+            $set: { twitterAccessToken: refreshed.accessToken, twitterRefreshToken: refreshed.refreshToken },
+          });
+        }
+      } catch {
+        // Refresh failed — try with existing token anyway
+      }
+    }
+
     // Dispatch by metadata — each social_action task carries its verification data
     if (task.metadata?.handle) {
-      if (!user.twitterId || !user.twitterAccessToken) {
+      if (!user.twitterId || !twitterAccessToken) {
         res.json({ success: true, verified: false, message: 'Connect your X account first.' });
         return;
       }
-      verified = await socialAuth.checkTwitterFollow(user.twitterAccessToken, user.twitterId, task.metadata.handle);
+      verified = await socialAuth.checkTwitterFollow(twitterAccessToken, user.twitterId, task.metadata.handle);
     } else if (task.metadata?.tweetId) {
       if (!user.twitterId) {
         res.json({ success: true, verified: false, message: 'Connect your X account first.' });

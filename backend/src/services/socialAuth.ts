@@ -42,7 +42,7 @@ export function generateTwitterOAuthUrl(state: string, codeVerifier: string): st
 export async function exchangeTwitterCode(
   code: string,
   codeVerifier: string,
-): Promise<{ id: string; username: string; accessToken: string } | null> {
+): Promise<{ id: string; username: string; accessToken: string; refreshToken: string } | null> {
   const clientId = TWITTER_CLIENT_ID();
   const clientSecret = TWITTER_CLIENT_SECRET();
   if (!clientId || !clientSecret) return null;
@@ -66,6 +66,7 @@ export async function exchangeTwitterCode(
   );
 
   const accessToken = tokenRes.data.access_token;
+  const refreshToken = tokenRes.data.refresh_token;
 
   // Get user info
   const userRes = await axios.get('https://api.x.com/2/users/me', {
@@ -76,6 +77,35 @@ export async function exchangeTwitterCode(
     id: userRes.data.data.id,
     username: userRes.data.data.username,
     accessToken,
+    refreshToken,
+  };
+}
+
+export async function refreshTwitterToken(
+  refreshToken: string,
+): Promise<{ accessToken: string; refreshToken: string } | null> {
+  const clientId = TWITTER_CLIENT_ID();
+  const clientSecret = TWITTER_CLIENT_SECRET();
+  if (!clientId || !clientSecret) return null;
+
+  const tokenRes = await axios.post(
+    'https://api.x.com/2/oauth2/token',
+    new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+    }).toString(),
+    {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+      },
+    },
+  );
+
+  return {
+    accessToken: tokenRes.data.access_token,
+    refreshToken: tokenRes.data.refresh_token,
   };
 }
 

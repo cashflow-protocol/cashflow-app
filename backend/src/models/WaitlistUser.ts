@@ -41,6 +41,9 @@ export class WaitlistUser {
   public twitterAccessToken?: string;
 
   @prop()
+  public twitterRefreshToken?: string;
+
+  @prop()
   public discordId?: string;
 
   @prop()
