@@ -701,14 +701,18 @@ router.get('/earn-tokens', async (req, res) => {
       tokens: tokens.map((t) => {
         // Extract pool size from protocol-specific data
         let poolSize: string | null = null;
-        if (t.type === 'jupiter' && t.jupiterToken?.totalAssets) {
-          poolSize = t.jupiterToken.totalAssets;
-        } else if (t.type === 'kamino' && t.kaminoToken?.metrics) {
-          const avail = BigInt(t.kaminoToken.metrics.tokensAvailable || '0');
-          const invested = BigInt(t.kaminoToken.metrics.tokensInvested || '0');
-          poolSize = (avail + invested).toString();
-        } else if (t.type === 'drift' && t.driftToken?.depositBalance) {
-          poolSize = t.driftToken.depositBalance;
+        try {
+          if (t.type === 'jupiter' && t.jupiterToken?.totalAssets) {
+            poolSize = String(t.jupiterToken.totalAssets);
+          } else if (t.type === 'kamino' && t.kaminoToken?.metrics) {
+            const avail = Number(t.kaminoToken.metrics.tokensAvailable || 0);
+            const invested = Number(t.kaminoToken.metrics.tokensInvested || 0);
+            poolSize = String(Math.round(avail + invested));
+          } else if (t.type === 'drift' && t.driftToken?.depositBalance) {
+            poolSize = String(t.driftToken.depositBalance);
+          }
+        } catch {
+          // Pool size unavailable
         }
 
         const decimals = SUPPORTED_TOKENS_BY_MINT[t.mint]?.decimals ?? 6;

@@ -70,9 +70,9 @@ export default function VaultsPage() {
     setLoading(true);
     try {
       const data = await getEarnTokens(page, search, typeFilter);
-      setTokens(data.tokens);
-      setTotal(data.total);
-      setPages(data.pages);
+      setTokens(data.tokens || []);
+      setTotal(data.total || 0);
+      setPages(data.pages || 1);
     } catch (err) {
       console.error(err);
     } finally {
