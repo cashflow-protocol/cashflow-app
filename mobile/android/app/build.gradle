@@ -84,7 +84,7 @@ android {
         applicationId "fun.cashflow"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
+        versionCode 12
         versionName "1.0"
         ndk {
             abiFilters = project.properties["reactNativeArchitectures"]?.split(",")?.collect { it.trim() } ?: ["armeabi-v7a", "arm64-v8a", "x86", "x86_64"]
