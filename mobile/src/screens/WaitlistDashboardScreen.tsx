@@ -202,7 +202,6 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
             Alert.alert('Not Available', 'Twitter integration is not configured yet.');
             break;
           }
-          Alert.alert('DEBUG', `xOauthMode: ${config.xOauthMode}`);
           if (config.xOauthMode === 'webview') {
             setOauthWebViewUrl(xResult.authUrl);
           } else {
@@ -488,6 +487,17 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
                   return false;
                 }
                 return true;
+              }}
+              onNavigationStateChange={(navState) => {
+                if (navState.url.startsWith('cashflow://')) {
+                  setOauthWebViewUrl(null);
+                  if (publicKey) loadTasks(publicKey);
+                }
+              }}
+              onError={() => {
+                // WebView errors on custom schemes — treat as successful redirect
+                setOauthWebViewUrl(null);
+                if (publicKey) loadTasks(publicKey);
               }}
             />
           )}
