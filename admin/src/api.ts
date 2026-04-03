@@ -190,3 +190,25 @@ export async function broadcastNotification(title: string, body?: string) {
     body: JSON.stringify({ title, body }),
   });
 }
+
+// Earn tokens (vaults)
+export async function getEarnTokens(page = 1, search = '', type = '') {
+  const params = new URLSearchParams({ page: String(page), limit: '50' });
+  if (search) params.set('search', search);
+  if (type) params.set('type', type);
+  return apiFetch(`/earn-tokens?${params}`);
+}
+
+export async function updateEarnTokenStatus(id: string, status: 'active' | 'inactive') {
+  return apiFetch(`/earn-tokens/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function updateEarnTokenConfig(id: string, config: { minDepositAmount?: string; minWithdrawAmount?: string }) {
+  return apiFetch(`/earn-tokens/${id}/config`, {
+    method: 'PATCH',
+    body: JSON.stringify(config),
+  });
+}
