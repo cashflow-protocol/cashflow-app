@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel } from '../models';
+import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { dispatchSystemNotification } from '../services/notificationService';
 
 const router = Router();
@@ -697,20 +698,38 @@ router.get('/earn-tokens', async (req, res) => {
 
     res.json({
       success: true,
-      tokens: tokens.map((t) => ({
-        id: t._id,
-        type: t.type,
-        vaultAddress: t.vaultAddress,
-        vaultTitle: t.vaultTitle,
-        mint: t.mint,
-        symbol: t.symbol,
-        rewardsRate: t.rewardsRate,
-        status: t.status,
-        minDepositAmount: t.minDepositAmount || '0',
-        minWithdrawAmount: t.minWithdrawAmount || '0',
-        createdAt: (t as any).createdAt,
-        updatedAt: (t as any).updatedAt,
-      })),
+      tokens: tokens.map((t) => {
+        // Extract pool size from protocol-specific data
+        let poolSize: string | null = null;
+        if (t.type === 'jupiter' && t.jupiterToken?.totalAssets) {
+          poolSize = t.jupiterToken.totalAssets;
+        } else if (t.type === 'kamino' && t.kaminoToken?.metrics) {
+          const avail = BigInt(t.kaminoToken.metrics.tokensAvailable || '0');
+          const invested = BigInt(t.kaminoToken.metrics.tokensInvested || '0');
+          poolSize = (avail + invested).toString();
+        } else if (t.type === 'drift' && t.driftToken?.depositBalance) {
+          poolSize = t.driftToken.depositBalance;
+        }
+
+        const decimals = SUPPORTED_TOKENS_BY_MINT[t.mint]?.decimals ?? 6;
+
+        return {
+          id: t._id,
+          type: t.type,
+          vaultAddress: t.vaultAddress,
+          vaultTitle: t.vaultTitle,
+          mint: t.mint,
+          symbol: t.symbol,
+          rewardsRate: t.rewardsRate,
+          status: t.status,
+          minDepositAmount: t.minDepositAmount || '0',
+          minWithdrawAmount: t.minWithdrawAmount || '0',
+          poolSize,
+          decimals,
+          createdAt: (t as any).createdAt,
+          updatedAt: (t as any).updatedAt,
+        };
+      }),
       total,
       page,
       pages: Math.ceil(total / limit),
