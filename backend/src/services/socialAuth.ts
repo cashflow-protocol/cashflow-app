@@ -30,26 +30,26 @@ export function generateTwitterOAuthUrl(state: string, codeVerifier: string): st
     response_type: 'code',
     client_id: clientId,
     redirect_uri: `${OAUTH_CALLBACK_BASE}/waitlist/connect-x/callback`,
-    scope: 'tweet.read users.read follows.read offline.access',
+    scope: 'tweet.read users.read offline.access',
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256',
   });
 
-  return `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
+  return `https://x.com/i/oauth2/authorize?${params.toString()}`;
 }
 
 export async function exchangeTwitterCode(
   code: string,
   codeVerifier: string,
-): Promise<{ id: string; username: string; accessToken: string } | null> {
+): Promise<{ id: string; username: string; accessToken: string; refreshToken: string } | null> {
   const clientId = TWITTER_CLIENT_ID();
   const clientSecret = TWITTER_CLIENT_SECRET();
   if (!clientId || !clientSecret) return null;
 
   // Exchange code for token
   const tokenRes = await axios.post(
-    'https://api.twitter.com/2/oauth2/token',
+    'https://api.x.com/2/oauth2/token',
     new URLSearchParams({
       code,
       grant_type: 'authorization_code',
@@ -66,9 +66,10 @@ export async function exchangeTwitterCode(
   );
 
   const accessToken = tokenRes.data.access_token;
+  const refreshToken = tokenRes.data.refresh_token;
 
   // Get user info
-  const userRes = await axios.get('https://api.twitter.com/2/users/me', {
+  const userRes = await axios.get('https://api.x.com/2/users/me', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
@@ -76,6 +77,35 @@ export async function exchangeTwitterCode(
     id: userRes.data.data.id,
     username: userRes.data.data.username,
     accessToken,
+    refreshToken,
+  };
+}
+
+export async function refreshTwitterToken(
+  refreshToken: string,
+): Promise<{ accessToken: string; refreshToken: string } | null> {
+  const clientId = TWITTER_CLIENT_ID();
+  const clientSecret = TWITTER_CLIENT_SECRET();
+  if (!clientId || !clientSecret) return null;
+
+  const tokenRes = await axios.post(
+    'https://api.x.com/2/oauth2/token',
+    new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+    }).toString(),
+    {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+      },
+    },
+  );
+
+  return {
+    accessToken: tokenRes.data.access_token,
+    refreshToken: tokenRes.data.refresh_token,
   };
 }
 
@@ -86,7 +116,7 @@ export async function checkTwitterFollow(
 ): Promise<boolean> {
   // Get target user ID
   const targetRes = await axios.get(
-    `https://api.twitter.com/2/users/by/username/${targetUsername}`,
+    `https://api.x.com/2/users/by/username/${targetUsername}`,
     { headers: { Authorization: `Bearer ${accessToken}` } },
   );
   const targetId = targetRes.data?.data?.id;
@@ -94,7 +124,7 @@ export async function checkTwitterFollow(
 
   // Check if source follows target
   const followRes = await axios.get(
-    `https://api.twitter.com/2/users/${sourceUserId}/following`,
+    `https://api.x.com/2/users/${sourceUserId}/following`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
       params: { max_results: 1000 },
@@ -113,7 +143,7 @@ export async function checkTwitterRetweet(
   if (!bearer) return false;
 
   const res = await axios.get(
-    `https://api.twitter.com/2/tweets/${tweetId}/retweeted_by`,
+    `https://api.x.com/2/tweets/${tweetId}/retweeted_by`,
     {
       headers: { Authorization: `Bearer ${bearer}` },
       params: { max_results: 100 },
