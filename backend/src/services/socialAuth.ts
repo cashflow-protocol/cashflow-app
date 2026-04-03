@@ -30,7 +30,7 @@ export function generateTwitterOAuthUrl(state: string, codeVerifier: string): st
     response_type: 'code',
     client_id: clientId,
     redirect_uri: `${OAUTH_CALLBACK_BASE}/waitlist/connect-x/callback`,
-    scope: 'tweet.read users.read follows.read offline.access',
+    scope: 'tweet.read users.read offline.access',
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256',
