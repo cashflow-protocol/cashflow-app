@@ -884,35 +884,19 @@ router.post('/waitlist/verify-action', async (req, res) => {
 
     let verified = false;
 
-    // Ensure we have a fresh Twitter access token
-    let twitterAccessToken = user.twitterAccessToken;
-    if (user.twitterRefreshToken && (task.metadata?.handle || task.metadata?.tweetId)) {
-      try {
-        const refreshed = await socialAuth.refreshTwitterToken(user.twitterRefreshToken);
-        if (refreshed) {
-          twitterAccessToken = refreshed.accessToken;
-          await WaitlistUserModel.updateOne({ publicKey }, {
-            $set: { twitterAccessToken: refreshed.accessToken, twitterRefreshToken: refreshed.refreshToken },
-          });
-        }
-      } catch {
-        // Refresh failed — try with existing token anyway
-      }
-    }
-
     // Dispatch by metadata — each social_action task carries its verification data
     if (task.metadata?.handle) {
-      if (!user.twitterId || !twitterAccessToken) {
+      if (!user.twitterHandle) {
         res.json({ success: true, verified: false, message: 'Connect your X account first.' });
         return;
       }
-      verified = await socialAuth.checkTwitterFollow(twitterAccessToken, user.twitterId, task.metadata.handle);
+      verified = await socialAuth.checkTwitterFollow(user.twitterHandle, task.metadata.handle);
     } else if (task.metadata?.tweetId) {
-      if (!user.twitterId) {
+      if (!user.twitterHandle) {
         res.json({ success: true, verified: false, message: 'Connect your X account first.' });
         return;
       }
-      verified = await socialAuth.checkTwitterRetweet(task.metadata.tweetId, user.twitterId);
+      verified = await socialAuth.checkTwitterRetweet(task.metadata.tweetId, user.twitterHandle);
     } else if (task.metadata?.channel) {
       if (!user.telegramId) {
         res.json({ success: true, verified: false, message: 'Connect your Telegram first.' });
