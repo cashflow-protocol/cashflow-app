@@ -116,8 +116,9 @@ export async function checkTwitterFollow(
   targetUsername: string,
 ): Promise<boolean> {
   const apiKey = TWITTERAPI_IO_KEY();
-  if (!apiKey) return false;
+  if (!apiKey) { console.log('[twitterapi.io] No API key'); return false; }
 
+  console.log(`[twitterapi.io] checkFollow: ${sourceUsername} -> ${targetUsername}`);
   const res = await axios.get(
     'https://api.twitterapi.io/twitter/user/check_follow_relationship',
     {
@@ -125,6 +126,7 @@ export async function checkTwitterFollow(
       params: { source_user_name: sourceUsername, target_user_name: targetUsername },
     },
   );
+  console.log(`[twitterapi.io] checkFollow response:`, JSON.stringify(res.data));
 
   return res.data?.data?.following === true;
 }
@@ -134,9 +136,11 @@ export async function checkTwitterRetweet(
   username: string,
 ): Promise<boolean> {
   const apiKey = TWITTERAPI_IO_KEY();
-  if (!apiKey) return false;
+  if (!apiKey) { console.log('[twitterapi.io] No API key'); return false; }
 
+  console.log(`[twitterapi.io] checkRetweet: tweetId=${tweetId}, user=${username}`);
   let cursor: string | undefined;
+  let page = 0;
   // Paginate through retweeters to find the user
   do {
     const res = await axios.get(
@@ -148,13 +152,19 @@ export async function checkTwitterRetweet(
     );
 
     const users = res.data?.users || [];
+    const userNames = users.map((u: any) => u.userName);
+    console.log(`[twitterapi.io] retweeters page ${page}: ${userNames.length} users:`, userNames);
+
     if (users.some((u: any) => u.userName?.toLowerCase() === username.toLowerCase())) {
+      console.log(`[twitterapi.io] Found ${username} in retweeters!`);
       return true;
     }
 
     cursor = res.data?.has_next_page ? res.data.next_cursor : undefined;
+    page++;
   } while (cursor);
 
+  console.log(`[twitterapi.io] ${username} NOT found in retweeters`);
   return false;
 }
 
