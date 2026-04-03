@@ -884,6 +884,8 @@ router.post('/waitlist/verify-action', async (req, res) => {
 
     let verified = false;
 
+    console.log(`[verify-action] task=${task.title}, category=${task.category}, metadata=${JSON.stringify(task.metadata)}, twitterHandle=${user.twitterHandle}, twitterId=${user.twitterId}`);
+
     // Dispatch by metadata — each social_action task carries its verification data
     if (task.metadata?.handle) {
       if (!user.twitterHandle) {
