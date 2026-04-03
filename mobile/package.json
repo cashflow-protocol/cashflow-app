@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest",
-    "build:prod-android": "./scripts/bump-build.sh && cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a && cd .."
+    "build:prod-seeker": "./scripts/bump-build.sh && cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a && cd .."
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",

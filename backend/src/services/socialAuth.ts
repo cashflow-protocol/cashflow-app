@@ -36,7 +36,7 @@ export function generateTwitterOAuthUrl(state: string, codeVerifier: string): st
     code_challenge_method: 'S256',
   });
 
-  return `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
+  return `https://x.com/i/oauth2/authorize?${params.toString()}`;
 }
 
 export async function exchangeTwitterCode(
