@@ -884,35 +884,27 @@ router.post('/waitlist/verify-action', async (req, res) => {
 
     let verified = false;
 
-    // Ensure we have a fresh Twitter access token
-    let twitterAccessToken = user.twitterAccessToken;
-    if (user.twitterRefreshToken && (task.metadata?.handle || task.metadata?.tweetId)) {
-      try {
-        const refreshed = await socialAuth.refreshTwitterToken(user.twitterRefreshToken);
-        if (refreshed) {
-          twitterAccessToken = refreshed.accessToken;
-          await WaitlistUserModel.updateOne({ publicKey }, {
-            $set: { twitterAccessToken: refreshed.accessToken, twitterRefreshToken: refreshed.refreshToken },
-          });
-        }
-      } catch {
-        // Refresh failed — try with existing token anyway
-      }
-    }
+    console.log(`[verify-action] task=${task.title}, category=${task.category}, metadata=${JSON.stringify(task.metadata)}, twitterHandle=${user.twitterHandle}, twitterId=${user.twitterId}`);
 
     // Dispatch by metadata — each social_action task carries its verification data
     if (task.metadata?.handle) {
-      if (!user.twitterId || !twitterAccessToken) {
+      if (!user.twitterHandle) {
         res.json({ success: true, verified: false, message: 'Connect your X account first.' });
         return;
       }
-      verified = await socialAuth.checkTwitterFollow(twitterAccessToken, user.twitterId, task.metadata.handle);
-    } else if (task.metadata?.tweetId) {
-      if (!user.twitterId) {
+      verified = await socialAuth.checkTwitterFollow(user.twitterHandle, task.metadata.handle);
+    } else if (task.metadata?.tweetId || task.metadata?.tweetUrl) {
+      if (!user.twitterHandle) {
         res.json({ success: true, verified: false, message: 'Connect your X account first.' });
         return;
       }
-      verified = await socialAuth.checkTwitterRetweet(task.metadata.tweetId, user.twitterId);
+      // Extract tweet ID from URL if needed (e.g. https://x.com/user/status/123456)
+      const tweetId = task.metadata.tweetId || task.metadata.tweetUrl.split('/status/')[1]?.split('?')[0];
+      if (!tweetId) {
+        res.status(400).json({ success: false, error: 'Invalid tweet reference' });
+        return;
+      }
+      verified = await socialAuth.checkTwitterRetweet(tweetId, user.twitterHandle);
     } else if (task.metadata?.channel) {
       if (!user.telegramId) {
         res.json({ success: true, verified: false, message: 'Connect your Telegram first.' });

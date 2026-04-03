@@ -5,7 +5,7 @@ import axios from 'axios';
 
 const TWITTER_CLIENT_ID = () => process.env.TWITTER_CLIENT_ID;
 const TWITTER_CLIENT_SECRET = () => process.env.TWITTER_CLIENT_SECRET;
-const TWITTER_BEARER_TOKEN = () => process.env.TWITTER_BEARER_TOKEN;
+const TWITTERAPI_IO_KEY = () => process.env.TWITTERAPI_IO_KEY;
 const DISCORD_CLIENT_ID = () => process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = () => process.env.DISCORD_CLIENT_SECRET;
 const BACKEND_URL = process.env.BACKEND_URL || 'https://api.cashflow.fun';
@@ -109,49 +109,63 @@ export async function refreshTwitterToken(
   };
 }
 
+// ─── twitterapi.io (follow/retweet checks) ───
+
 export async function checkTwitterFollow(
-  accessToken: string,
-  sourceUserId: string,
+  sourceUsername: string,
   targetUsername: string,
 ): Promise<boolean> {
-  // Get target user ID
-  const targetRes = await axios.get(
-    `https://api.x.com/2/users/by/username/${targetUsername}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
-  const targetId = targetRes.data?.data?.id;
-  if (!targetId) return false;
+  const apiKey = TWITTERAPI_IO_KEY();
+  if (!apiKey) { console.log('[twitterapi.io] No API key'); return false; }
 
-  // Check if source follows target
-  const followRes = await axios.get(
-    `https://api.x.com/2/users/${sourceUserId}/following`,
+  console.log(`[twitterapi.io] checkFollow: ${sourceUsername} -> ${targetUsername}`);
+  const res = await axios.get(
+    'https://api.twitterapi.io/twitter/user/check_follow_relationship',
     {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      params: { max_results: 1000 },
+      headers: { 'x-api-key': apiKey },
+      params: { source_user_name: sourceUsername, target_user_name: targetUsername },
     },
   );
+  console.log(`[twitterapi.io] checkFollow response:`, JSON.stringify(res.data));
 
-  const following = followRes.data?.data || [];
-  return following.some((u: any) => u.id === targetId);
+  return res.data?.data?.following === true;
 }
 
 export async function checkTwitterRetweet(
   tweetId: string,
-  userId: string,
+  username: string,
 ): Promise<boolean> {
-  const bearer = TWITTER_BEARER_TOKEN();
-  if (!bearer) return false;
+  const apiKey = TWITTERAPI_IO_KEY();
+  if (!apiKey) { console.log('[twitterapi.io] No API key'); return false; }
 
-  const res = await axios.get(
-    `https://api.x.com/2/tweets/${tweetId}/retweeted_by`,
-    {
-      headers: { Authorization: `Bearer ${bearer}` },
-      params: { max_results: 100 },
-    },
-  );
+  console.log(`[twitterapi.io] checkRetweet: tweetId=${tweetId}, user=${username}`);
+  let cursor: string | undefined;
+  let page = 0;
+  // Paginate through retweeters to find the user
+  do {
+    const res = await axios.get(
+      'https://api.twitterapi.io/twitter/tweet/retweeters',
+      {
+        headers: { 'x-api-key': apiKey },
+        params: { tweetId, ...(cursor ? { cursor } : {}) },
+      },
+    );
 
-  const users = res.data?.data || [];
-  return users.some((u: any) => u.id === userId);
+    const users = res.data?.users || [];
+    const userNames = users.map((u: any) => u.userName);
+    console.log(`[twitterapi.io] retweeters page ${page}: ${userNames.length} users:`, userNames);
+
+    if (users.some((u: any) => u.userName?.toLowerCase() === username.toLowerCase())) {
+      console.log(`[twitterapi.io] Found ${username} in retweeters!`);
+      return true;
+    }
+
+    cursor = res.data?.has_next_page ? res.data.next_cursor : undefined;
+    page++;
+  } while (cursor);
+
+  console.log(`[twitterapi.io] ${username} NOT found in retweeters`);
+  return false;
 }
 
 // ─── Discord OAuth2 ───
