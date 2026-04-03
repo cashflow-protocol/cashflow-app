@@ -893,12 +893,18 @@ router.post('/waitlist/verify-action', async (req, res) => {
         return;
       }
       verified = await socialAuth.checkTwitterFollow(user.twitterHandle, task.metadata.handle);
-    } else if (task.metadata?.tweetId) {
+    } else if (task.metadata?.tweetId || task.metadata?.tweetUrl) {
       if (!user.twitterHandle) {
         res.json({ success: true, verified: false, message: 'Connect your X account first.' });
         return;
       }
-      verified = await socialAuth.checkTwitterRetweet(task.metadata.tweetId, user.twitterHandle);
+      // Extract tweet ID from URL if needed (e.g. https://x.com/user/status/123456)
+      const tweetId = task.metadata.tweetId || task.metadata.tweetUrl.split('/status/')[1]?.split('?')[0];
+      if (!tweetId) {
+        res.status(400).json({ success: false, error: 'Invalid tweet reference' });
+        return;
+      }
+      verified = await socialAuth.checkTwitterRetweet(tweetId, user.twitterHandle);
     } else if (task.metadata?.channel) {
       if (!user.telegramId) {
         res.json({ success: true, verified: false, message: 'Connect your Telegram first.' });
