@@ -49,7 +49,7 @@ export async function exchangeTwitterCode(
 
   // Exchange code for token
   const tokenRes = await axios.post(
-    'https://api.twitter.com/2/oauth2/token',
+    'https://api.x.com/2/oauth2/token',
     new URLSearchParams({
       code,
       grant_type: 'authorization_code',
@@ -68,7 +68,7 @@ export async function exchangeTwitterCode(
   const accessToken = tokenRes.data.access_token;
 
   // Get user info
-  const userRes = await axios.get('https://api.twitter.com/2/users/me', {
+  const userRes = await axios.get('https://api.x.com/2/users/me', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
@@ -86,7 +86,7 @@ export async function checkTwitterFollow(
 ): Promise<boolean> {
   // Get target user ID
   const targetRes = await axios.get(
-    `https://api.twitter.com/2/users/by/username/${targetUsername}`,
+    `https://api.x.com/2/users/by/username/${targetUsername}`,
     { headers: { Authorization: `Bearer ${accessToken}` } },
   );
   const targetId = targetRes.data?.data?.id;
@@ -94,7 +94,7 @@ export async function checkTwitterFollow(
 
   // Check if source follows target
   const followRes = await axios.get(
-    `https://api.twitter.com/2/users/${sourceUserId}/following`,
+    `https://api.x.com/2/users/${sourceUserId}/following`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
       params: { max_results: 1000 },
@@ -113,7 +113,7 @@ export async function checkTwitterRetweet(
   if (!bearer) return false;
 
   const res = await axios.get(
-    `https://api.twitter.com/2/tweets/${tweetId}/retweeted_by`,
+    `https://api.x.com/2/tweets/${tweetId}/retweeted_by`,
     {
       headers: { Authorization: `Bearer ${bearer}` },
       params: { max_results: 100 },
