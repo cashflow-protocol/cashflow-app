@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router';
 import WaitlistModal from '../components/WaitlistModal';
 import '../styles/landing.css';
 
@@ -206,6 +207,9 @@ export default function LandingPage() {
           <div className="footer-links">
             <a href="https://x.com/cashflow_fi" target="_blank" rel="noopener">Twitter</a>
             <a href="https://t.me/founders_journey" target="_blank" rel="noopener">Telegram</a>
+            <Link to="/licence">Licence</Link>
+            <Link to="/copyright">Copyright</Link>
+            <Link to="/privacy-policy">Privacy Policy</Link>
           </div>
         </div>
       </footer>
