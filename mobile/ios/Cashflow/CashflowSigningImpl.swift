@@ -209,6 +209,150 @@ class CashflowSigningImpl: NSObject {
     return try aesDecrypt(data)
   }
 
+  // MARK: - PIN Cache (in-memory only)
+
+  private var cachedPin: String?
+  private let pinKeychainService = "fun.cashflow.signing.pin"
+
+  func cachePin(
+    _ pin: String,
+    resolve: @escaping (Any?) -> Void,
+    reject: @escaping (String?, String?, (any Error)?) -> Void
+  ) {
+    cachedPin = pin
+    resolve(nil)
+  }
+
+  func clearCachedPin(
+    _ resolve: @escaping (Any?) -> Void,
+    reject: @escaping (String?, String?, (any Error)?) -> Void
+  ) {
+    cachedPin = nil
+    resolve(nil)
+  }
+
+  func storePinForBiometric(
+    _ pin: String,
+    resolve: @escaping (Any?) -> Void,
+    reject: @escaping (String?, String?, (any Error)?) -> Void
+  ) {
+    do {
+      // Delete any existing PIN entry
+      let deleteQuery: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: pinKeychainService,
+        kSecAttrAccount as String: "biometric-pin",
+      ]
+      SecItemDelete(deleteQuery as CFDictionary)
+
+      // Store PIN with biometric access control
+      var error: Unmanaged<CFError>?
+      guard let accessControl = SecAccessControlCreateWithFlags(
+        kCFAllocatorDefault,
+        kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+        .userPresence,
+        &error
+      ) else {
+        throw NSError(domain: "CashflowSigning", code: -1,
+                      userInfo: [NSLocalizedDescriptionKey: "Failed to create access control"])
+      }
+
+      let addQuery: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: pinKeychainService,
+        kSecAttrAccount as String: "biometric-pin",
+        kSecValueData as String: pin.data(using: .utf8)!,
+        kSecAttrAccessControl as String: accessControl,
+      ]
+
+      let status = SecItemAdd(addQuery as CFDictionary, nil)
+      guard status == errSecSuccess else {
+        throw NSError(domain: "CashflowSigning", code: Int(status),
+                      userInfo: [NSLocalizedDescriptionKey: "Failed to store PIN: \(status)"])
+      }
+      resolve(nil)
+    } catch {
+      reject("ERR_STORE_PIN", "Failed to store PIN for biometric: \(error.localizedDescription)", error)
+    }
+  }
+
+  func retrievePinWithBiometric(
+    _ resolve: @escaping (Any?) -> Void,
+    reject: @escaping (String?, String?, (any Error)?) -> Void
+  ) {
+    let context = LAContext()
+    context.localizedFallbackTitle = "Use Passcode"
+    context.touchIDAuthenticationAllowableReuseDuration = 10
+
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: pinKeychainService,
+      kSecAttrAccount as String: "biometric-pin",
+      kSecReturnData as String: true,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+      kSecUseAuthenticationContext as String: context,
+    ]
+
+    var result: AnyObject?
+    let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+    if status == errSecItemNotFound || status == errSecUserCanceled || status == errSecAuthFailed {
+      resolve(nil)
+      return
+    }
+    guard status == errSecSuccess, let data = result as? Data, let pin = String(data: data, encoding: .utf8) else {
+      resolve(nil)
+      return
+    }
+    // Auto-cache the retrieved PIN
+    cachedPin = pin
+    resolve(pin)
+  }
+
+  // MARK: - Cloud Key PIN Re-encryption (no-op on iOS — iCloud Keychain handles sync)
+
+  func reEncryptCloudKeyWithPin(
+    _ newPin: String,
+    resolve: @escaping (Any?) -> Void,
+    reject: @escaping (String?, String?, (any Error)?) -> Void
+  ) {
+    // On iOS, cloud keys are stored in iCloud Keychain which handles
+    // encryption/sync automatically. No PIN-based encryption needed.
+    resolve(nil)
+  }
+
+  // MARK: - Block Store (Android only — no-ops on iOS)
+
+  func backupCloudKeyToBlockStore(
+    _ pin: String,
+    resolve: @escaping (Any?) -> Void,
+    reject: @escaping (String?, String?, (any Error)?) -> Void
+  ) {
+    resolve(nil)
+  }
+
+  func restoreCloudKeyFromBlockStore(
+    _ pin: String,
+    resolve: @escaping (Any?) -> Void,
+    reject: @escaping (String?, String?, (any Error)?) -> Void
+  ) {
+    reject("ERR_NO_BACKUP", "Block Store is not available on iOS", nil)
+  }
+
+  func hasBlockStoreBackup(
+    _ resolve: @escaping (Any?) -> Void,
+    reject: @escaping (String?, String?, (any Error)?) -> Void
+  ) {
+    resolve(false)
+  }
+
+  func isGmsAvailable(
+    _ resolve: @escaping (Any?) -> Void,
+    reject: @escaping (String?, String?, (any Error)?) -> Void
+  ) {
+    resolve(false)
+  }
+
   // MARK: - Biometric Authentication
 
   func authenticate(
