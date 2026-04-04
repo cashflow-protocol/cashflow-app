@@ -1,16 +1,15 @@
 #import "RCTCashflowSigning.h"
-#import <React_RCTAppDelegate/RCTDefaultReactNativeFactoryDelegate.h>
-#import "Cashflow-Swift.h"
+#import "CashflowSigningBridge.h"
 
 @interface RCTCashflowSigning ()
-@property (nonatomic, strong) CashflowSigningImpl *impl;
+@property (nonatomic, strong) CashflowSigningBridge *impl;
 @end
 
 @implementation RCTCashflowSigning
 
 - (instancetype)init {
   if (self = [super init]) {
-    _impl = [[CashflowSigningImpl alloc] init];
+    _impl = [[CashflowSigningBridge alloc] init];
   }
   return self;
 }
@@ -71,6 +70,56 @@
 - (void)migrateKeypairsToBiometric:(RCTPromiseResolveBlock)resolve
                             reject:(RCTPromiseRejectBlock)reject {
   [self.impl migrateKeypairsToBiometric:resolve reject:reject];
+}
+
+- (void)cachePin:(NSString *)pin
+         resolve:(RCTPromiseResolveBlock)resolve
+          reject:(RCTPromiseRejectBlock)reject {
+  [self.impl cachePin:pin resolve:resolve reject:reject];
+}
+
+- (void)clearCachedPin:(RCTPromiseResolveBlock)resolve
+                reject:(RCTPromiseRejectBlock)reject {
+  [self.impl clearCachedPin:resolve reject:reject];
+}
+
+- (void)storePinForBiometric:(NSString *)pin
+                     resolve:(RCTPromiseResolveBlock)resolve
+                      reject:(RCTPromiseRejectBlock)reject {
+  [self.impl storePinForBiometric:pin resolve:resolve reject:reject];
+}
+
+- (void)retrievePinWithBiometric:(RCTPromiseResolveBlock)resolve
+                          reject:(RCTPromiseRejectBlock)reject {
+  [self.impl retrievePinWithBiometric:resolve reject:reject];
+}
+
+- (void)reEncryptCloudKeyWithPin:(NSString *)newPin
+                         resolve:(RCTPromiseResolveBlock)resolve
+                          reject:(RCTPromiseRejectBlock)reject {
+  [self.impl reEncryptCloudKeyWithPin:newPin resolve:resolve reject:reject];
+}
+
+- (void)backupCloudKeyToBlockStore:(NSString *)pin
+                           resolve:(RCTPromiseResolveBlock)resolve
+                            reject:(RCTPromiseRejectBlock)reject {
+  [self.impl backupCloudKeyToBlockStore:pin resolve:resolve reject:reject];
+}
+
+- (void)restoreCloudKeyFromBlockStore:(NSString *)pin
+                              resolve:(RCTPromiseResolveBlock)resolve
+                               reject:(RCTPromiseRejectBlock)reject {
+  [self.impl restoreCloudKeyFromBlockStore:pin resolve:resolve reject:reject];
+}
+
+- (void)hasBlockStoreBackup:(RCTPromiseResolveBlock)resolve
+                     reject:(RCTPromiseRejectBlock)reject {
+  [self.impl hasBlockStoreBackup:resolve reject:reject];
+}
+
+- (void)isGmsAvailable:(RCTPromiseResolveBlock)resolve
+                reject:(RCTPromiseRejectBlock)reject {
+  [self.impl isGmsAvailable:resolve reject:reject];
 }
 
 @end
