@@ -12,7 +12,8 @@ interface EarnToken {
   status: 'active' | 'inactive';
   minDepositAmount: string;
   minWithdrawAmount: string;
-  poolSize: string | null;
+  poolSizeUi: number | null;
+  poolSizeUsd: number | null;
   decimals: number;
   createdAt: string;
   updatedAt: string;
@@ -42,9 +43,8 @@ function solscanToken(mint: string) {
   return `https://solscan.io/token/${mint}`;
 }
 
-function formatPoolSize(raw: string | null, decimals: number): string {
-  if (!raw || raw === '0') return '—';
-  const num = Number(raw) / 10 ** decimals;
+function formatCompact(num: number): string {
+  if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + 'B';
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + 'M';
   if (num >= 1_000) return (num / 1_000).toFixed(2) + 'K';
   return num.toFixed(2);
@@ -70,7 +70,10 @@ export default function VaultsPage() {
     setLoading(true);
     try {
       const data = await getEarnTokens(page, search, typeFilter);
-      setTokens(data.tokens || []);
+      const sorted = (data.tokens || []).sort(
+        (a: EarnToken, b: EarnToken) => (b.poolSizeUsd ?? 0) - (a.poolSizeUsd ?? 0),
+      );
+      setTokens(sorted);
       setTotal(data.total || 0);
       setPages(data.pages || 1);
     } catch (err) {
@@ -212,7 +215,9 @@ export default function VaultsPage() {
                 </td>
                 <td>
                   <span style={{ fontWeight: 500 }}>
-                    {formatPoolSize(t.poolSize, t.decimals)} {t.symbol}
+                    {t.poolSizeUsd != null && t.poolSizeUsd > 0
+                      ? `$${formatCompact(t.poolSizeUsd)} (${formatCompact(t.poolSizeUi ?? 0)} ${t.symbol})`
+                      : '—'}
                   </span>
                 </td>
                 <td>

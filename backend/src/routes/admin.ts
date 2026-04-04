@@ -3,7 +3,10 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel } from '../models';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import { PriceManager } from '../managers';
 import { dispatchSystemNotification } from '../services/notificationService';
+
+const priceManager = new PriceManager();
 
 const router = Router();
 
@@ -699,25 +702,27 @@ router.get('/earn-tokens', async (req, res) => {
     res.json({
       success: true,
       tokens: tokens.map((t) => {
-        // Extract pool size from protocol-specific data
-        let poolSize: string | null = null;
+        // Extract pool size (UI amount) and USD value
+        let poolSizeUi: number | null = null;
+        let poolSizeUsd: number | null = null;
         try {
           if (t.type === 'jupiter' && t.jupiterToken?.totalAssets) {
-            poolSize = String(t.jupiterToken.totalAssets);
+            const dec = SUPPORTED_TOKENS_BY_MINT[t.mint]?.decimals ?? 6;
+            poolSizeUi = Number(t.jupiterToken.totalAssets) / 10 ** dec;
           } else if (t.type === 'kamino' && t.kaminoToken?.metrics) {
             const avail = Number(t.kaminoToken.metrics.tokensAvailable || 0);
             const invested = Number(t.kaminoToken.metrics.tokensInvested || 0);
-            const dec = SUPPORTED_TOKENS_BY_MINT[t.mint]?.decimals ?? 6;
-            poolSize = String(Math.round((avail + invested) * 10 ** dec));
+            poolSizeUi = avail + invested;
+            const usdAvail = Number(t.kaminoToken.metrics.tokensAvailableUsd || 0);
+            const usdInvested = Number(t.kaminoToken.metrics.tokensInvestedUsd || 0);
+            poolSizeUsd = usdAvail + usdInvested;
           } else if (t.type === 'drift' && t.driftToken?.depositBalance) {
-            // depositBalance is scaled by SPOT_MARKET_BALANCE_PRECISION (1e9)
-            // cumulativeDepositInterest is scaled by 1e10
-            // Convert to raw token amount: bal * interest / 1e9 / 1e10 * 10^decimals
             const bal = Number(t.driftToken.depositBalance);
             const interest = Number(t.driftToken.cumulativeDepositInterest || 1e10);
-            const dec = SUPPORTED_TOKENS_BY_MINT[t.mint]?.decimals ?? 6;
-            const uiAmount = (bal * interest) / 1e9 / 1e10;
-            poolSize = String(Math.round(uiAmount * 10 ** dec));
+            poolSizeUi = (bal * interest) / 1e9 / 1e10;
+          }
+          if (poolSizeUi !== null && poolSizeUsd === null) {
+            poolSizeUsd = priceManager.getUsdValue(t.symbol, poolSizeUi);
           }
         } catch {
           // Pool size unavailable
@@ -736,7 +741,8 @@ router.get('/earn-tokens', async (req, res) => {
           status: t.status,
           minDepositAmount: t.minDepositAmount || '0',
           minWithdrawAmount: t.minWithdrawAmount || '0',
-          poolSize,
+          poolSizeUi,
+          poolSizeUsd,
           decimals,
           createdAt: (t as any).createdAt,
           updatedAt: (t as any).updatedAt,
