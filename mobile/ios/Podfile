@@ -5,6 +5,8 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
+require File.join(File.dirname(`node --print "require.resolve('expo/package.json', { paths: ['#{__dir__}/..'] })"`), "scripts/autolinking")
+
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
@@ -22,6 +24,7 @@ if linkage != nil
 end
 
 target 'Cashflow' do
+  use_expo_modules!
   config = use_native_modules!
 
   use_react_native!(
@@ -37,6 +40,30 @@ target 'Cashflow' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Fix fmt 11.0.2 consteval errors with Xcode 26.4 Clang
+    # Patch fmt prefix header to disable consteval before any fmt header is included
+    fmt_pch = File.join(installer.sandbox.root, 'Target Support Files', 'fmt', 'fmt-prefix.pch')
+    if File.exist?(fmt_pch)
+      content = File.read(fmt_pch)
+      unless content.include?('FMT_USE_CONSTEVAL')
+        File.write(fmt_pch, "#define FMT_USE_CONSTEVAL 0\n" + content)
+      end
+    end
+    # Also patch the base.h header directly as fmt is included from many other pods
+    # Disable consteval for all Apple clang — broken in Xcode 26.4
+    fmt_base = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base)
+      content = File.read(fmt_base)
+      unless content.include?('// Xcode 26.4 fix')
+        FileUtils.chmod(0644, fmt_base)
+        content.sub!(
+          '#elif defined(__cpp_consteval)',
+          "// Xcode 26.4 fix: consteval is broken in Apple clang shipped with Xcode 26.4\n#elif defined(__apple_build_version__)\n#  define FMT_USE_CONSTEVAL 0\n#elif defined(__cpp_consteval)"
+        )
+        File.write(fmt_base, content)
+      end
+    end
 
     # Fix Firebase 12.x: FirebaseAuth-Swift.h is generated in DerivedData but
     # RNFBMessaging/RNFBDatabase need it via <FirebaseAuth/FirebaseAuth-Swift.h>.
