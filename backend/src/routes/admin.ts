@@ -707,9 +707,17 @@ router.get('/earn-tokens', async (req, res) => {
           } else if (t.type === 'kamino' && t.kaminoToken?.metrics) {
             const avail = Number(t.kaminoToken.metrics.tokensAvailable || 0);
             const invested = Number(t.kaminoToken.metrics.tokensInvested || 0);
-            poolSize = String(Math.round(avail + invested));
+            const dec = SUPPORTED_TOKENS_BY_MINT[t.mint]?.decimals ?? 6;
+            poolSize = String(Math.round((avail + invested) * 10 ** dec));
           } else if (t.type === 'drift' && t.driftToken?.depositBalance) {
-            poolSize = String(t.driftToken.depositBalance);
+            // depositBalance is scaled by SPOT_MARKET_BALANCE_PRECISION (1e9)
+            // cumulativeDepositInterest is scaled by 1e10
+            // Convert to raw token amount: bal * interest / 1e9 / 1e10 * 10^decimals
+            const bal = Number(t.driftToken.depositBalance);
+            const interest = Number(t.driftToken.cumulativeDepositInterest || 1e10);
+            const dec = SUPPORTED_TOKENS_BY_MINT[t.mint]?.decimals ?? 6;
+            const uiAmount = (bal * interest) / 1e9 / 1e10;
+            poolSize = String(Math.round(uiAmount * 10 ** dec));
           }
         } catch {
           // Pool size unavailable
