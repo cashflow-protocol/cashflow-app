@@ -220,11 +220,11 @@ export async function initializeScheduler() {
   });
 
   // Fetch Drift Earn tokens every minute
-  if (driftManager) {
-    cron.schedule('* * * * *', updateDriftEarnTokens, {
-      timezone: 'UTC',
-    });
-  }
+  // if (driftManager) {
+  //   cron.schedule('* * * * *', updateDriftEarnTokens, {
+  //     timezone: 'UTC',
+  //   });
+  // }
 
   // Confirm submitted transactions every 30 seconds
   cron.schedule('*/30 * * * * *', confirmTransactions, {
@@ -263,9 +263,9 @@ export async function initializeScheduler() {
   updatePrices();
   updateJupiterEarnTokens();
   updateKaminoEarnTokens();
-  if (driftManager) {
-    updateDriftEarnTokens();
-  }
+  // if (driftManager) {
+  //   updateDriftEarnTokens();
+  // }
 }
 
 export default {
