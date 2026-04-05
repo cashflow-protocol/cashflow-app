@@ -353,7 +353,8 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor={colors.accentBlue}
+            tintColor="#fff"
+            colors={['#fff']}
           />
         }
       >

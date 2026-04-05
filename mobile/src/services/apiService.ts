@@ -62,6 +62,59 @@ class ApiService {
     if (!r.ok) console.warn('Failed to record vault creation fee:', r.status);
   }
 
+  /**
+   * Create a Squads vault via the backend.
+   * - Standard mode: backend signs + sends, returns txSignature.
+   * - Seeker/android_gms: backend returns partially-signed tx for MWA signing.
+   * Bypasses auth — vault creation happens before login.
+   */
+  async createVault(params: {
+    paymentId: string;
+    platform: 'ios' | 'android';
+    mode: 'standard' | 'seeker' | 'android_gms';
+    deviceKey: string;
+    cloudKey?: string;
+    walletAddress?: string;
+  }): Promise<{
+    multisigAddress: string;
+    vaultAddress: string;
+    txSignature?: string;
+    serializedTx?: string;
+  }> {
+    const r = await fetch(`${this.baseUrl}/onboarding/v1/create-vault`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const text = await r.text();
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`Server returned non-JSON response (${r.status}). Please try again later.`);
+    }
+    if (!r.ok || !json.success) {
+      throw new Error(json.error || `Failed to create vault: ${r.status}`);
+    }
+    return json.data;
+  }
+
+  /**
+   * Confirm vault creation after MWA signing (Seeker/android_gms mode).
+   * Bypasses auth — vault creation happens before login.
+   */
+  async confirmVault(paymentId: string, txSignature: string): Promise<void> {
+    const r = await fetch(`${this.baseUrl}/onboarding/v1/confirm-vault`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId, txSignature }),
+    });
+    const json = await r.json();
+    if (!r.ok || !json.success) {
+      throw new Error(json.error || `Failed to confirm vault: ${r.status}`);
+    }
+  }
+
   async getEarnTokens(): Promise<EarnToken[]> {
     const res = await this.get<{ success: boolean; data: EarnToken[] }>('/earn/v2/tokens');
     return res.data;

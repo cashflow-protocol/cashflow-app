@@ -3,7 +3,7 @@ import { TransferManager } from '../managers/TransferManager';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import type { SerializedInstruction } from '../types';
 
-const FEE_RATE_NUMERATOR = 10n;
+const FEE_RATE_NUMERATOR = 5n;
 const FEE_RATE_DENOMINATOR = 100n;
 
 const TREASURY_WALLET_ADDRESS = process.env.TREASURY_WALLET_ADDRESS;
@@ -16,7 +16,7 @@ export interface FeeCalculation {
 }
 
 /**
- * Calculate the 10% profit fee for a withdrawal.
+ * Calculate the 5% profit fee for a withdrawal.
  * Uses running cost basis: profit = cumulative_withdrawn - cumulative_deposited.
  * Only charges fee on the marginal profit of this specific withdrawal.
  */
@@ -42,7 +42,7 @@ export async function calculateFee(
   // Marginal profit attributable to this withdrawal
   const marginalProfit = totalProfit - previousProfit;
 
-  // 10% fee, integer division rounds down (favors user)
+  // 5% fee, integer division rounds down (favors user)
   const feeAmount = (marginalProfit * FEE_RATE_NUMERATOR) / FEE_RATE_DENOMINATOR;
 
   return { feeAmount, profitAmount: marginalProfit };

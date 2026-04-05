@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
   ScrollView,
@@ -192,8 +193,9 @@ export default function EarnScreen() {
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              onRefresh={refresh}
-              refreshing={refreshing}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#fff" colors={['#fff']} />
+              }
               renderItem={({ item }) => (
                 <EarnTokenItem
                   type={item.type}

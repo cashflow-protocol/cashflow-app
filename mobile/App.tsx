@@ -111,9 +111,9 @@ function App() {
         try {
           const status = await checkWaitlistStatus(cloudPk);
           if (status.approved && status.inviteCode) {
-            // Already approved — go through PIN setup first
+            // Already approved — skip PIN setup if PIN already exists
             setInviteCode(status.inviteCode);
-            setOnboardingStep('pin-setup');
+            setOnboardingStep(pinExists ? 'vault-setup' : 'pin-setup');
           } else {
             setOnboardingStep('waitlist');
           }

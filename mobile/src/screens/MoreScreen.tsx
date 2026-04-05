@@ -274,13 +274,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerGradient: {
-    paddingBottom: 24,
+    paddingBottom: 40,
   },
   header: {},
   headerContent: {
     alignItems: 'center',
     paddingHorizontal: 40,
     paddingTop: 8,
+    paddingBottom: 16,
   },
   title: {
     fontSize: 20,

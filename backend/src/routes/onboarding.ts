@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { Router } from 'express';
 import { BrevoClient } from '@getbrevo/brevo';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel } from '../models';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, VaultPaymentModel, VaultPaymentStatus, VaultMode } from '../models';
 import multer from 'multer';
 import * as socialAuth from '../services/socialAuth';
 import * as telegram from '../services/telegramManager';
@@ -90,6 +90,7 @@ router.post('/redeem-invite', async (req, res) => {
     await WaitlistUserModel.findOneAndUpdate(
       { publicKey },
       { $set: { status: 'approved', inviteCode: code.toUpperCase(), approvedAt: new Date() } },
+      { upsert: true },
     );
 
     res.json({ success: true });
@@ -959,6 +960,310 @@ router.post('/waitlist/register-device', async (req, res) => {
   } catch (error) {
     console.error('Waitlist register device error:', error);
     res.status(500).json({ success: false, error: 'Failed to register device' });
+  }
+});
+
+// ─── Vault creation (backend-signed) ───
+
+/**
+ * Validate that a string is a valid base58-encoded 32-byte Solana public key.
+ */
+function isValidPublicKey(key: string): boolean {
+  try {
+    const bs58Chars = /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/;
+    if (!bs58Chars.test(key) || key.length < 32 || key.length > 44) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * POST /create-vault
+ * Build a multisigCreateV2 transaction on the backend.
+ *
+ * - Standard mode (iOS/web): admin wallet pays gas & rent, tx is signed and sent by backend.
+ * - Seeker / android_gms mode: MWA wallet pays, tx is partially signed (createKey only)
+ *   and returned to the client for MWA signing + sending.
+ */
+router.post('/create-vault', async (req, res) => {
+  try {
+    const { paymentId, platform, mode, deviceKey, cloudKey, walletAddress } = req.body;
+
+    // ── Validate inputs ──
+    if (!paymentId || typeof paymentId !== 'string') {
+      res.status(400).json({ success: false, error: 'paymentId is required' });
+      return;
+    }
+    if (!platform || !['ios', 'android'].includes(platform)) {
+      res.status(400).json({ success: false, error: 'platform must be ios or android' });
+      return;
+    }
+    if (!mode || !Object.values(VaultMode).includes(mode)) {
+      res.status(400).json({ success: false, error: 'mode must be standard, seeker, or android_gms' });
+      return;
+    }
+    if (!deviceKey || !isValidPublicKey(deviceKey)) {
+      res.status(400).json({ success: false, error: 'deviceKey must be a valid public key' });
+      return;
+    }
+
+    const needsCloudKey = mode !== VaultMode.SEEKER;
+    const needsWallet = mode === VaultMode.SEEKER || mode === VaultMode.ANDROID_GMS;
+
+    if (needsCloudKey && (!cloudKey || !isValidPublicKey(cloudKey))) {
+      res.status(400).json({ success: false, error: 'cloudKey is required for this mode' });
+      return;
+    }
+    if (needsWallet && (!walletAddress || !isValidPublicKey(walletAddress))) {
+      res.status(400).json({ success: false, error: 'walletAddress is required for this mode' });
+      return;
+    }
+
+    // Ensure all member keys are distinct
+    const memberKeys = [deviceKey, cloudKey, walletAddress].filter(Boolean);
+    if (new Set(memberKeys).size !== memberKeys.length) {
+      res.status(400).json({ success: false, error: 'All member keys must be distinct' });
+      return;
+    }
+
+    // ── Check paymentId not already used (atomic) ──
+    const existing = await VaultPaymentModel.findOne({ paymentId });
+    if (existing) {
+      if (existing.status === VaultPaymentStatus.USED) {
+        res.status(409).json({ success: false, error: 'Payment ID already used' });
+        return;
+      }
+      // If pending/failed from a previous attempt, allow retry
+    }
+
+    const paymentRecord = existing || await VaultPaymentModel.create({
+      paymentId,
+      platform,
+      mode,
+      status: VaultPaymentStatus.PENDING,
+      cloudKey: cloudKey || undefined,
+      deviceKey,
+      walletAddress: walletAddress || undefined,
+    });
+
+    // ── Lazy-import Squads SDK + web3.js ──
+    const multisigLib = await import('@sqds/multisig');
+    const { Connection, PublicKey, Keypair, TransactionMessage, VersionedTransaction, SystemProgram } = await import('@solana/web3.js');
+    const { Permissions } = multisigLib.types;
+
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl, 'confirmed');
+
+    // ── Determine members, threshold, rentCollector ──
+    let members: Array<{ key: InstanceType<typeof PublicKey>; permissions: ReturnType<typeof Permissions.all> }>;
+    let threshold: number;
+    let rentCollectorKey: InstanceType<typeof PublicKey>;
+
+    const devicePubkey = new PublicKey(deviceKey);
+
+    if (mode === VaultMode.SEEKER) {
+      const walletPubkey = new PublicKey(walletAddress);
+      members = [
+        { key: walletPubkey, permissions: Permissions.all() },
+        { key: devicePubkey, permissions: Permissions.all() },
+      ];
+      threshold = 2;
+      rentCollectorKey = walletPubkey;
+    } else if (mode === VaultMode.ANDROID_GMS) {
+      const cloudPubkey = new PublicKey(cloudKey);
+      const walletPubkey = new PublicKey(walletAddress);
+      members = [
+        { key: cloudPubkey, permissions: Permissions.all() },
+        { key: devicePubkey, permissions: Permissions.all() },
+        { key: walletPubkey, permissions: Permissions.all() },
+      ];
+      threshold = 3;
+      rentCollectorKey = cloudPubkey;
+    } else {
+      // standard (iOS / web)
+      const cloudPubkey = new PublicKey(cloudKey);
+      members = [
+        { key: cloudPubkey, permissions: Permissions.all() },
+        { key: devicePubkey, permissions: Permissions.all() },
+      ];
+      threshold = 2;
+      rentCollectorKey = cloudPubkey;
+    }
+
+    // ── Determine fee payer ──
+    const isAdminPays = mode === VaultMode.STANDARD;
+    let feePayer: InstanceType<typeof PublicKey>;
+    let adminKeypair: InstanceType<typeof Keypair> | null = null;
+
+    if (isAdminPays) {
+      if (!process.env.ADMIN_FEE_PAYER_PRIVATE_KEY) {
+        res.status(503).json({ success: false, error: 'Admin wallet not configured' });
+        return;
+      }
+      // Decode base58 admin private key to Keypair
+      const { getBase58Encoder } = await import('@solana/kit');
+      const secretKey = new Uint8Array(getBase58Encoder().encode(process.env.ADMIN_FEE_PAYER_PRIVATE_KEY));
+      adminKeypair = Keypair.fromSecretKey(secretKey);
+      feePayer = adminKeypair.publicKey;
+
+      // Check admin balance
+      const adminBalance = await conn.getBalance(feePayer);
+      if (adminBalance < 10_000_000) { // 0.01 SOL
+        console.error('[create-vault] Admin wallet balance too low:', adminBalance);
+        telegram.notifyAdmin(`⚠️ Admin wallet balance critically low: ${(adminBalance / 1e9).toFixed(4)} SOL`);
+        res.status(503).json({ success: false, error: 'Service temporarily unavailable' });
+        return;
+      }
+    } else {
+      feePayer = new PublicKey(walletAddress);
+    }
+
+    // ── Build multisigCreateV2 transaction ──
+    const createKey = Keypair.generate();
+
+    const [multisigPda] = multisigLib.getMultisigPda({ createKey: createKey.publicKey });
+    const [vaultPda] = multisigLib.getVaultPda({ multisigPda, index: 0 });
+
+    // Fetch program config for treasury
+    const [programConfigPda] = multisigLib.getProgramConfigPda({});
+    const programConfig = await multisigLib.accounts.ProgramConfig.fromAccountAddress(
+      conn,
+      programConfigPda,
+    );
+
+    const createMultisigIx = multisigLib.instructions.multisigCreateV2({
+      treasury: programConfig.treasury,
+      createKey: createKey.publicKey,
+      creator: feePayer,
+      multisigPda,
+      configAuthority: null,
+      threshold,
+      members,
+      timeLock: 0,
+      rentCollector: rentCollectorKey,
+      memo: 'Cashflow',
+    });
+
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+
+    const msg = new TransactionMessage({
+      payerKey: feePayer,
+      recentBlockhash: blockhash,
+      instructions: [createMultisigIx],
+    }).compileToV0Message();
+
+    const tx = new VersionedTransaction(msg);
+
+    // Always sign with ephemeral createKey
+    tx.sign([createKey]);
+
+    const multisigAddress = multisigPda.toBase58();
+    const vaultAddress = vaultPda.toBase58();
+
+    if (isAdminPays) {
+      // ── Standard mode: admin signs + sends ──
+      tx.sign([adminKeypair!]);
+
+      const signature = await conn.sendTransaction(tx, {
+        skipPreflight: false,
+        preflightCommitment: 'confirmed',
+      });
+
+      // Wait for confirmation
+      await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+
+      await VaultPaymentModel.findByIdAndUpdate(paymentRecord._id, {
+        $set: {
+          status: VaultPaymentStatus.USED,
+          multisigAddress,
+          vaultAddress,
+          txSignature: signature,
+        },
+      });
+
+      telegram.notifyAdmin(
+        `🏦 New vault created (backend-signed)\n\n` +
+        `Vault: <code>${vaultAddress.slice(0, 6)}...${vaultAddress.slice(-4)}</code>\n` +
+        `Mode: ${mode}\n` +
+        `Platform: ${platform}\n` +
+        `Payment: <code>${paymentId.slice(0, 8)}...</code>`,
+      );
+
+      res.json({
+        success: true,
+        data: { multisigAddress, vaultAddress, txSignature: signature },
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      // ── Seeker / android_gms: return partially-signed tx ──
+      const serializedTx = Buffer.from(tx.serialize()).toString('base64');
+
+      await VaultPaymentModel.findByIdAndUpdate(paymentRecord._id, {
+        $set: { multisigAddress, vaultAddress },
+      });
+
+      res.json({
+        success: true,
+        data: { multisigAddress, vaultAddress, serializedTx },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  } catch (error: any) {
+    console.error('[create-vault] Error:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to create vault' });
+  }
+});
+
+/**
+ * POST /confirm-vault
+ * Called by mobile after signing and sending a vault creation tx (Seeker/android_gms mode).
+ * Updates the VaultPayment record to 'used' with the on-chain signature.
+ */
+router.post('/confirm-vault', async (req, res) => {
+  try {
+    const { paymentId, txSignature } = req.body;
+
+    if (!paymentId || typeof paymentId !== 'string') {
+      res.status(400).json({ success: false, error: 'paymentId is required' });
+      return;
+    }
+    if (!txSignature || typeof txSignature !== 'string') {
+      res.status(400).json({ success: false, error: 'txSignature is required' });
+      return;
+    }
+
+    const result = await VaultPaymentModel.findOneAndUpdate(
+      { paymentId, status: VaultPaymentStatus.PENDING },
+      { $set: { status: VaultPaymentStatus.USED, txSignature } },
+      { new: true },
+    );
+
+    if (!result) {
+      res.status(404).json({ success: false, error: 'Payment not found or already confirmed' });
+      return;
+    }
+
+    telegram.notifyAdmin(
+      `🏦 New vault created (MWA-signed)\n\n` +
+      `Vault: <code>${result.vaultAddress?.slice(0, 6)}...${result.vaultAddress?.slice(-4)}</code>\n` +
+      `Mode: ${result.mode}\n` +
+      `Platform: ${result.platform}\n` +
+      `Tx: <code>${txSignature.slice(0, 8)}...</code>`,
+    );
+
+    res.json({
+      success: true,
+      data: {
+        multisigAddress: result.multisigAddress,
+        vaultAddress: result.vaultAddress,
+        txSignature,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('[confirm-vault] Error:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to confirm vault' });
   }
 });
 
