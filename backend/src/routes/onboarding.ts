@@ -1101,8 +1101,8 @@ router.post('/create-vault', async (req, res) => {
         return;
       }
       // Decode base58 admin private key to Keypair
-      const bs58 = await import('bs58');
-      const secretKey = bs58.default.decode(process.env.ADMIN_FEE_PAYER_PRIVATE_KEY);
+      const { getBase58Encoder } = await import('@solana/kit');
+      const secretKey = new Uint8Array(getBase58Encoder().encode(process.env.ADMIN_FEE_PAYER_PRIVATE_KEY));
       adminKeypair = Keypair.fromSecretKey(secretKey);
       feePayer = adminKeypair.publicKey;
 

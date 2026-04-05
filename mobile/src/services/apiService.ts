@@ -86,7 +86,13 @@ class ApiService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });
-    const json = await r.json();
+    const text = await r.text();
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`Server returned non-JSON response (${r.status}). Please try again later.`);
+    }
     if (!r.ok || !json.success) {
       throw new Error(json.error || `Failed to create vault: ${r.status}`);
     }
