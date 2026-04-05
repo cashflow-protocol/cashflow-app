@@ -167,7 +167,7 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
-          refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={colors.accentBlue} />}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor="#fff" colors={['#fff']} />}
           onEndReached={hasMore ? () => { logNotificationLoadMore(); loadMore(); } : undefined}
           onEndReachedThreshold={0.3}
         />

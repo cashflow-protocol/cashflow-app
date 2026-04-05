@@ -11,7 +11,7 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { ArrowLeft, MoreHorizontal, ScanFace, Cloud, Wallet, Compass, Info, X, KeyRound, ShieldCheck, RotateCcw, Download, TriangleAlert, MessageSquareText, CircleCheck, ChevronRight, Mail, ClipboardPaste, Trash2, CirclePlus } from 'lucide-react-native';
 import BottomSheet from '../components/BottomSheet';
@@ -140,6 +140,7 @@ function OtpInput({ value, onChange, disabled, colors, onComplete }: {
 
 export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryScreenProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [multisigInfo, setMultisigInfo] = useState<MultisigInfo | null>(null);
   const [cloudPubkey, setCloudPubkey] = useState<string | null>(null);
@@ -559,10 +560,10 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
       >
+        <TouchableOpacity onPress={onBack} style={[styles.backButton, { top: insets.top + 8 }]} activeOpacity={0.7}>
+          <ArrowLeft size={24} color="#fff" />
+        </TouchableOpacity>
         <SafeAreaView edges={['top']} style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton} activeOpacity={0.7}>
-            <ArrowLeft size={24} color="#fff" />
-          </TouchableOpacity>
           <View style={styles.headerContent}>
             <Text style={styles.title}>Keys & Recovery</Text>
             <Text style={styles.subtitle}>
@@ -1034,18 +1035,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerGradient: {
-    paddingBottom: 24,
+    paddingBottom: 40,
   },
   header: {},
   backButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    position: 'absolute',
+    top: 8,
+    left: 16,
+    zIndex: 1,
+    padding: 4,
   },
   headerContent: {
     alignItems: 'center',
     paddingHorizontal: 40,
     paddingTop: 8,
+    paddingBottom: 16,
   },
   title: {
     fontSize: 20,

@@ -90,6 +90,7 @@ router.post('/redeem-invite', async (req, res) => {
     await WaitlistUserModel.findOneAndUpdate(
       { publicKey },
       { $set: { status: 'approved', inviteCode: code.toUpperCase(), approvedAt: new Date() } },
+      { upsert: true },
     );
 
     res.json({ success: true });

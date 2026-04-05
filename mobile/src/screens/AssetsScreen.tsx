@@ -93,7 +93,7 @@ export default function AssetsScreen() {
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accentBlue} />
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#fff" colors={['#fff']} />
           }
         />
       )}
