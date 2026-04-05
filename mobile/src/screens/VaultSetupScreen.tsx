@@ -13,15 +13,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import ConfettiCannon from 'react-native-confetti-cannon';
-import { createMultisig } from '../services/squadsService';
+import { Platform } from 'react-native';
+import { createMultisigViaBackend } from '../services/squadsService';
 import { useWallet } from '../hooks/useWallet';
-import walletService from '../services/walletService';
 import { ArrowLeft } from 'lucide-react-native';
 import authService from '../services/authService';
 import { deleteAllKeypairs, backupCloudKeyToBlockStore } from '../services/keypairStorage';
 import Toast from '../components/Toast';
-import { getMinLamportsForVault, IS_SOLANA_MOBILE } from '../config/constants';
-import { logScreenView, logVaultSetupStart, logVaultSetupWalletConnected, logVaultSetupSuccess, logVaultSetupError, logVaultSetupInsufficientBalance } from '../services/analyticsService';
+import { IS_SOLANA_MOBILE } from '../config/constants';
+import { logScreenView, logVaultSetupStart, logVaultSetupWalletConnected, logVaultSetupSuccess, logVaultSetupError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
 interface VaultSetupScreenProps {
@@ -87,29 +87,26 @@ export default function VaultSetupScreen({ inviteCode, pin, onComplete, onBack, 
     logVaultSetupStart();
     setLoading(true);
     try {
-      setStatusText('Connecting wallet...');
-      const account = await connectWallet();
-      if (!account) return;
-      logVaultSetupWalletConnected();
-
-      setStatusText('Checking balance...');
-      const balanceSol = await walletService.getBalance(account.publicKey);
-      const minSol = getMinLamportsForVault() / 1e9;
-      if (balanceSol < minSol) {
-        logVaultSetupInsufficientBalance(balanceSol);
-        setToastMessage('Insufficient SOL Balance');
-        setToastDescription(
-          `You need at least ${minSol} SOL to create a vault.\nCurrent balance: ${balanceSol.toFixed(4)} SOL.`,
-        );
-        setToastVisible(true);
-        return;
-      }
-
       // Code already redeemed in InviteCodeScreen -- just set for auth
       authService.setInviteCode(inviteCode);
 
+      // Placeholder payment ID (will come from IAP later)
+      const paymentId = `${Platform.OS}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+      const seekerMode = IS_SOLANA_MOBILE;
+      let walletAddr: string | undefined;
+
+      if (seekerMode) {
+        // Seeker: connect MWA wallet (needed for signing the tx)
+        setStatusText('Connecting wallet...');
+        const account = await connectWallet();
+        if (!account) return;
+        logVaultSetupWalletConnected();
+        walletAddr = account.publicKey as string;
+      }
+
       setStatusText('Creating vault...');
-      await createMultisig(account.publicKey as string, IS_SOLANA_MOBILE);
+      await createMultisigViaBackend(paymentId, seekerMode, walletAddr);
 
       // Back up cloud key to Google Block Store (Android only, not on Seeker)
       if (pin && !IS_SOLANA_MOBILE) {

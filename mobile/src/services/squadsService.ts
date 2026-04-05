@@ -589,6 +589,94 @@ export async function createMultisig(
 }
 
 /**
+ * Create a new Squads vault via the backend.
+ *
+ * - Standard mode (iOS/web): backend signs + sends the tx (admin pays gas).
+ * - Seeker / android_gms: backend returns a partially-signed tx; mobile
+ *   signs via MWA and sends on-chain, then calls confirm-vault.
+ *
+ * Keypairs are generated locally as usual — only public keys are sent to backend.
+ */
+export async function createMultisigViaBackend(
+  paymentId: string,
+  seekerMode: boolean,
+  walletAddress?: string,
+): Promise<CreateMultisigResult> {
+  console.log('[createMultisigViaBackend] start, seekerMode:', seekerMode);
+
+  // Generate keypairs in native code — returns base58 public keys only
+  let cloudPubkeyBase58: string | undefined;
+  if (!seekerMode) {
+    console.log('[createMultisigViaBackend] generating cloud keypair...');
+    cloudPubkeyBase58 = await generateAndStoreCloudKeypair();
+    console.log('[createMultisigViaBackend] cloud:', cloudPubkeyBase58);
+  }
+
+  console.log('[createMultisigViaBackend] generating device keypair...');
+  const devicePubkeyBase58 = await generateAndStoreDeviceKeypair();
+  console.log('[createMultisigViaBackend] device:', devicePubkeyBase58);
+
+  // Determine mode
+  const { Platform } = require('react-native');
+  const mode = seekerMode ? 'seeker' : IS_SOLANA_MOBILE ? 'android_gms' : 'standard';
+  const platform = Platform.OS as 'ios' | 'android';
+
+  console.log('[createMultisigViaBackend] calling backend, mode:', mode);
+  const result = await apiService.createVault({
+    paymentId,
+    platform,
+    mode,
+    deviceKey: devicePubkeyBase58,
+    cloudKey: cloudPubkeyBase58,
+    walletAddress,
+  });
+
+  let signature: string;
+
+  if (result.txSignature) {
+    // Standard mode — backend already sent the tx
+    signature = result.txSignature;
+    console.log('[createMultisigViaBackend] backend sent tx:', signature);
+  } else if (result.serializedTx) {
+    // Seeker / android_gms — sign with MWA and send
+    console.log('[createMultisigViaBackend] signing with MWA...');
+    const txBytes = Buffer.from(result.serializedTx, 'base64');
+    const [signatureBytes] = await walletService.signAndSendTransactions([
+      new Uint8Array(txBytes),
+    ]);
+    signature = bs58.encode(signatureBytes);
+    console.log('[createMultisigViaBackend] MWA tx sent:', signature);
+
+    // Confirm with backend
+    await apiService.confirmVault(paymentId, signature);
+    console.log('[createMultisigViaBackend] vault confirmed with backend');
+  } else {
+    throw new Error('Unexpected response from create-vault: no txSignature or serializedTx');
+  }
+
+  // Wait for confirmation
+  await sleep(2000);
+
+  // Persist vault metadata locally
+  const vaultData: VaultData = {
+    multisigAddress: result.multisigAddress,
+    vaultAddress: result.vaultAddress,
+    label: 'Cashflow',
+    createdAt: new Date().toISOString(),
+    walletAddress: walletAddress || undefined,
+    seekerMode: seekerMode || undefined,
+  };
+  await saveVault(vaultData);
+
+  console.log('[createMultisigViaBackend] done, vault:', result.vaultAddress);
+  return {
+    multisigAddress: result.multisigAddress,
+    vaultAddress: result.vaultAddress,
+    signature,
+  };
+}
+
+/**
  * Fetch onchain multisig account data.
  */
 export async function getMultisigInfo(multisigAddress: string): Promise<MultisigInfo> {
