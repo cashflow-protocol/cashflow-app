@@ -23,7 +23,7 @@ import {
   signWithCloud,
   signWithDevice,
 } from './keypairStorage';
-import { createWithdrawInstruction } from '@heymike/send';
+import { createWithdrawInstruction, createCoverInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
 import { IS_SOLANA_MOBILE, getTargetCloudBalance, getVaultCreationFee } from '../config/constants';
 import { logError } from './analyticsService';
