@@ -1141,12 +1141,20 @@ router.post('/create-vault', async (req, res) => {
       memo: 'Cashflow',
     });
 
-    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+
+    const { HeliusSender } = await import('../managers/HeliusSender');
+
+    const txInstructions = [createMultisigIx];
+    // Add Helius SWQoS tip for standard mode (admin pays)
+    if (isAdminPays) {
+      txInstructions.push(HeliusSender.createTipIx(feePayer));
+    }
 
     const msg = new TransactionMessage({
       payerKey: feePayer,
       recentBlockhash: blockhash,
-      instructions: [createMultisigIx],
+      instructions: txInstructions,
     }).compileToV0Message();
 
     const tx = new VersionedTransaction(msg);
@@ -1158,16 +1166,11 @@ router.post('/create-vault', async (req, res) => {
     const vaultAddress = vaultPda.toBase58();
 
     if (isAdminPays) {
-      // ── Standard mode: admin signs + sends ──
+      // ── Standard mode: admin signs + sends via Helius SWQoS ──
       tx.sign([adminKeypair!]);
 
-      const signature = await conn.sendTransaction(tx, {
-        skipPreflight: false,
-        preflightCommitment: 'confirmed',
-      });
-
-      // Wait for confirmation
-      await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+      const base64Tx = Buffer.from(tx.serialize()).toString('base64');
+      const signature = await HeliusSender.sendAndConfirm(base64Tx);
 
       await VaultPaymentModel.findByIdAndUpdate(paymentRecord._id, {
         $set: {
