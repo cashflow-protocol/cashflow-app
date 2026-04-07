@@ -1055,10 +1055,9 @@ router.post('/create-vault', async (req, res) => {
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
     const conn = new Connection(rpcUrl, 'confirmed');
 
-    // ── Determine members, threshold, rentCollector ──
+    // ── Determine members, threshold ──
     let members: Array<{ key: InstanceType<typeof PublicKey>; permissions: ReturnType<typeof Permissions.all> }>;
     let threshold: number;
-    let rentCollectorKey: InstanceType<typeof PublicKey>;
 
     const devicePubkey = new PublicKey(deviceKey);
 
@@ -1069,7 +1068,6 @@ router.post('/create-vault', async (req, res) => {
         { key: devicePubkey, permissions: Permissions.all() },
       ];
       threshold = 2;
-      rentCollectorKey = walletPubkey;
     } else if (mode === VaultMode.ANDROID_GMS) {
       const cloudPubkey = new PublicKey(cloudKey);
       const walletPubkey = new PublicKey(walletAddress);
@@ -1079,7 +1077,6 @@ router.post('/create-vault', async (req, res) => {
         { key: walletPubkey, permissions: Permissions.all() },
       ];
       threshold = 3;
-      rentCollectorKey = cloudPubkey;
     } else {
       // standard (iOS / web)
       const cloudPubkey = new PublicKey(cloudKey);
@@ -1088,7 +1085,6 @@ router.post('/create-vault', async (req, res) => {
         { key: devicePubkey, permissions: Permissions.all() },
       ];
       threshold = 2;
-      rentCollectorKey = cloudPubkey;
     }
 
     // ── Determine fee payer ──
@@ -1141,7 +1137,7 @@ router.post('/create-vault', async (req, res) => {
       threshold,
       members,
       timeLock: 0,
-      rentCollector: rentCollectorKey,
+      rentCollector: vaultPda,
       memo: 'Cashflow',
     });
 

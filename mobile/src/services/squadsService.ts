@@ -23,9 +23,9 @@ import {
   signWithCloud,
   signWithDevice,
 } from './keypairStorage';
-import { createWithdrawInstruction, createCoverInstruction } from '@heymike/send';
+import { createCoverInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
-import { IS_SOLANA_MOBILE, getTargetCloudBalance, getVaultCreationFee } from '../config/constants';
+import { IS_SOLANA_MOBILE, getVaultCreationFee, getAdminTxFeePayerPublicKey, ADMIN_COVER_TARGET } from '../config/constants';
 import { logError } from './analyticsService';
 
 const { Permission, Permissions } = multisig.types;
@@ -108,16 +108,6 @@ async function getSigningContext(errorPrefix: string): Promise<SigningContext> {
   }
 
   const primaryKey = seekerMode ? walletPubkey! : cloudPubkey!;
-
-  // Seeker: wallet pays all fees directly — ensure it has enough SOL
-  if (seekerMode && walletPubkey) {
-    const MIN_WALLET_LAMPORTS = 10_000_000; // 0.01 SOL
-    const walletBalance = await connection.getBalance(walletPubkey, 'confirmed');
-    if (walletBalance < MIN_WALLET_LAMPORTS) {
-      const have = (walletBalance / 1e9).toFixed(4);
-      throw new Error(`Insufficient SOL in wallet (${have} SOL). You need at least 0.01 SOL to cover transaction fees. Please top up your Seeker wallet.`);
-    }
-  }
 
   return { seekerMode, cloudPubkey, devicePubkey, walletPubkey, primaryKey };
 }
@@ -318,7 +308,7 @@ function buildVaultExecuteIx(
 
 
 /** Convert a @solana/kit Instruction to a web3.js TransactionInstruction. */
-function kitIxToWeb3(ix: ReturnType<typeof createWithdrawInstruction>): TransactionInstruction {
+function kitIxToWeb3(ix: ReturnType<typeof createCoverInstruction>): TransactionInstruction {
   return new TransactionInstruction({
     programId: new PublicKey(ix.programAddress as string),
     keys: (ix.accounts ?? []).map((acc: any) => ({
@@ -338,6 +328,119 @@ function jitoTipIx(feePayer: PublicKey): TransactionInstruction {
     toPubkey: new PublicKey(tipAccount),
     lamports: JITO_TIP_LAMPORTS,
   });
+}
+
+/**
+ * Deterministic createKey for the gas cover spending limit PDA.
+ * Derived from the multisig address so we can always find the same PDA.
+ */
+const GAS_COVER_SPENDING_LIMIT_SEED = 'cashflow-gas-cover';
+
+function getGasCoverSpendingLimitCreateKey(multisigPda: PublicKey): PublicKey {
+  const hash = require('crypto').createHash('sha256')
+    .update(GAS_COVER_SPENDING_LIMIT_SEED)
+    .update(multisigPda.toBytes())
+    .digest();
+  // Use first 32 bytes of hash as a "public key" for PDA derivation
+  return new PublicKey(hash.slice(0, 32));
+}
+
+function getGasCoverSpendingLimitPda(multisigPda: PublicKey): PublicKey {
+  const createKey = getGasCoverSpendingLimitCreateKey(multisigPda);
+  const [pda] = multisig.getSpendingLimitPda({ multisigPda, createKey });
+  return pda;
+}
+
+/**
+ * Add a gas cover spending limit to a multisig via config transaction.
+ * Allows cloud wallet (standard) or MWA wallet (Seeker) to transfer
+ * up to ADMIN_COVER_TARGET lamports/day from vault to admin fee payer
+ * without the full proposal flow.
+ */
+export async function addGasCoverSpendingLimit(
+  multisigAddress: string,
+): Promise<{ signature: string }> {
+  const multisigPda = new PublicKey(multisigAddress);
+  const ctx = await getSigningContext('squads_add_spending_limit');
+  const creator = ctx.primaryKey;
+  const adminFeePayerPubkey = new PublicKey(getAdminTxFeePayerPublicKey());
+  const feePayer = adminFeePayerPubkey;
+
+  const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
+  const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
+
+  const createKey = getGasCoverSpendingLimitCreateKey(multisigPda);
+
+  // Members who can use this spending limit
+  const spendingLimitMembers = ctx.seekerMode
+    ? [ctx.walletPubkey!]
+    : ctx.cloudPubkey ? [ctx.cloudPubkey] : [];
+
+  const { Period } = multisig.types;
+
+  // TX1: create config tx + proposal + approvals
+  const tx1Instructions: TransactionInstruction[] = [
+    multisig.instructions.configTransactionCreate({
+      multisigPda,
+      transactionIndex,
+      creator,
+      rentPayer: feePayer,
+      actions: [{
+        __kind: 'AddSpendingLimit' as const,
+        createKey,
+        vaultIndex: 0,
+        mint: PublicKey.default, // native SOL
+        amount: ADMIN_COVER_TARGET,
+        period: Period.Day,
+        members: spendingLimitMembers,
+        destinations: [adminFeePayerPubkey],
+      }],
+    }),
+    multisig.instructions.proposalCreate({ multisigPda, transactionIndex, creator, rentPayer: feePayer }),
+    ...buildApprovalIxs(ctx, multisigPda, transactionIndex),
+  ];
+
+  const luts = await getLuts(connection);
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+
+  const msg1 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx1Instructions }).compileToV0Message(luts);
+  const tx1 = new VersionedTransaction(msg1);
+
+  // TX2: execute + close + Jito tip
+  const tx2Instructions: TransactionInstruction[] = [
+    multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: creator, rentPayer: feePayer }),
+  ];
+  if (multisigAccount.rentCollector) {
+    tx2Instructions.push(multisig.instructions.configTransactionAccountsClose({
+      multisigPda, transactionIndex, rentCollector: new PublicKey(multisigAccount.rentCollector),
+    }));
+  }
+  tx2Instructions.push(jitoTipIx(feePayer));
+
+  const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx2Instructions }).compileToV0Message(luts);
+  const tx2 = new VersionedTransaction(msg2);
+
+  const signature = await signAndSendConfigBundle(ctx, tx1, tx2);
+  console.log('[addGasCoverSpendingLimit] done, signature:', signature);
+  return { signature };
+}
+
+/**
+ * Ensure the gas cover spending limit exists for this multisig.
+ * If not, creates it via config transaction. No-op if already exists.
+ */
+export async function ensureGasCoverSpendingLimit(multisigAddress: string): Promise<void> {
+  const multisigPda = new PublicKey(multisigAddress);
+  const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+
+  const accountInfo = await connection.getAccountInfo(spendingLimitPda);
+  if (accountInfo) {
+    console.log('[ensureGasCoverSpendingLimit] already exists');
+    return;
+  }
+
+  console.log('[ensureGasCoverSpendingLimit] creating spending limit...');
+  await addGasCoverSpendingLimit(multisigAddress);
 }
 
 /**
@@ -471,16 +574,14 @@ export async function createMultisig(
   // Build members list based on mode
   let members: Array<{ key: PublicKey; permissions: ReturnType<typeof Permissions.all> }>;
   let threshold: number;
-  let rentCollectorKey: PublicKey;
 
   if (seekerMode) {
-    // Seeker: 2-of-2 (MWA wallet + device key), MWA wallet is rent collector
+    // Seeker: 2-of-2 (MWA wallet + device key)
     members = [
       { key: creatorPubkey, permissions: Permissions.all() },
       { key: devicePubkey, permissions: Permissions.all() },
     ];
     threshold = 2;
-    rentCollectorKey = creatorPubkey;
   } else if (IS_SOLANA_MOBILE) {
     // Android + GMS: 3-of-3 (cloud + device + MWA wallet)
     members = [
@@ -489,7 +590,6 @@ export async function createMultisig(
       { key: creatorPubkey, permissions: Permissions.all() },
     ];
     threshold = 3;
-    rentCollectorKey = cloudPubkey!;
   } else {
     // iOS / web: 2-of-2 (cloud + device)
     members = [
@@ -497,7 +597,6 @@ export async function createMultisig(
       { key: devicePubkey, permissions: Permissions.all() },
     ];
     threshold = 2;
-    rentCollectorKey = cloudPubkey!;
   }
 
   // --- TX 1: Create multisig (+ fund cloud key if not Seeker) ---
@@ -510,20 +609,11 @@ export async function createMultisig(
     threshold,
     members,
     timeLock: 0,
-    rentCollector: rentCollectorKey,
+    rentCollector: vaultPda,
     memo: 'Cashflow',
   });
 
   const instructions: TransactionInstruction[] = [createMultisigIx];
-
-  // Fund cloud key with initial SOL (not needed on Seeker — MWA pays fees directly)
-  if (!seekerMode && cloudPubkey) {
-    instructions.push(SystemProgram.transfer({
-      fromPubkey: creatorPubkey,
-      toPubkey: cloudPubkey,
-      lamports: getTargetCloudBalance(),
-    }));
-  }
 
   // Build vault creation fee instruction (0.05 SOL → treasury)
   if (getVaultCreationFee() > 0) {
@@ -580,6 +670,15 @@ export async function createMultisig(
     seekerMode: seekerMode || undefined,
   };
   await saveVault(vaultData);
+
+  // Set up gas cover spending limit for admin fee reimbursement
+  try {
+    console.log('[createMultisig] setting up gas cover spending limit...');
+    await addGasCoverSpendingLimit(multisigPda.toBase58());
+    console.log('[createMultisig] spending limit created');
+  } catch (err: any) {
+    console.warn('[createMultisig] failed to create spending limit (will retry on first tx):', err.message);
+  }
 
   return {
     multisigAddress: multisigPda.toBase58(),
@@ -668,6 +767,15 @@ export async function createMultisigViaBackend(
   };
   await saveVault(vaultData);
 
+  // Set up gas cover spending limit for admin fee reimbursement
+  try {
+    console.log('[createMultisigViaBackend] setting up gas cover spending limit...');
+    await addGasCoverSpendingLimit(result.multisigAddress);
+    console.log('[createMultisigViaBackend] spending limit created');
+  } catch (err: any) {
+    console.warn('[createMultisigViaBackend] failed to create spending limit (will retry on first tx):', err.message);
+  }
+
   console.log('[createMultisigViaBackend] done, vault:', result.vaultAddress);
   return {
     multisigAddress: result.multisigAddress,
@@ -733,7 +841,9 @@ export async function addMember(
   const multisigPda = new PublicKey(multisigAddress);
   const newMemberPubkey = new PublicKey(newMemberAddress);
   const ctx = await getSigningContext('squads_add_member');
-  const feePayer = ctx.primaryKey;
+  const creator = ctx.primaryKey;
+  const adminFeePayerPubkey = new PublicKey(getAdminTxFeePayerPublicKey());
+  const feePayer = adminFeePayerPubkey;
 
   // Determine permissions for new member
   let permissions: ReturnType<typeof Permissions.all>;
@@ -754,7 +864,7 @@ export async function addMember(
   const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
 
   console.log('[addMember] seekerMode:', ctx.seekerMode);
-  console.log('[addMember] primaryKey (creator):', feePayer.toBase58());
+  console.log('[addMember] primaryKey (creator):', creator.toBase58());
   console.log('[addMember] devicePubkey:', ctx.devicePubkey.toBase58());
   console.log('[addMember] walletPubkey:', ctx.walletPubkey?.toBase58());
   console.log('[addMember] cloudPubkey:', ctx.cloudPubkey?.toBase58());
@@ -764,10 +874,10 @@ export async function addMember(
   // TX1: create config tx + proposal + approvals
   const tx1Instructions: TransactionInstruction[] = [
     multisig.instructions.configTransactionCreate({
-      multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer,
+      multisigPda, transactionIndex, creator, rentPayer: feePayer,
       actions: [{ __kind: 'AddMember' as const, newMember: { key: newMemberPubkey, permissions } }],
     }),
-    multisig.instructions.proposalCreate({ multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer }),
+    multisig.instructions.proposalCreate({ multisigPda, transactionIndex, creator, rentPayer: feePayer }),
     ...buildApprovalIxs(ctx, multisigPda, transactionIndex),
   ];
 
@@ -779,7 +889,7 @@ export async function addMember(
 
   // TX2: execute + close + Jito tip
   const tx2Instructions: TransactionInstruction[] = [
-    multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: feePayer, rentPayer: feePayer }),
+    multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: creator, rentPayer: feePayer }),
   ];
   if (multisigAccount.rentCollector) {
     tx2Instructions.push(multisig.instructions.configTransactionAccountsClose({
@@ -802,7 +912,9 @@ export async function removeMember(
   const multisigPda = new PublicKey(multisigAddress);
   const memberPubkey = new PublicKey(memberAddress);
   const ctx = await getSigningContext('squads_remove_member');
-  const feePayer = ctx.primaryKey;
+  const creator = ctx.primaryKey;
+  const adminFeePayerPubkey = new PublicKey(getAdminTxFeePayerPublicKey());
+  const feePayer = adminFeePayerPubkey;
 
   const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
   const transactionIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
@@ -810,10 +922,10 @@ export async function removeMember(
   // TX1: create config tx + proposal + approvals
   const tx1Instructions: TransactionInstruction[] = [
     multisig.instructions.configTransactionCreate({
-      multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer,
+      multisigPda, transactionIndex, creator, rentPayer: feePayer,
       actions: [{ __kind: 'RemoveMember' as const, oldMember: memberPubkey }],
     }),
-    multisig.instructions.proposalCreate({ multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer }),
+    multisig.instructions.proposalCreate({ multisigPda, transactionIndex, creator, rentPayer: feePayer }),
     ...buildApprovalIxs(ctx, multisigPda, transactionIndex),
   ];
 
@@ -825,7 +937,7 @@ export async function removeMember(
 
   // TX2: execute + close + Jito tip
   const tx2Instructions: TransactionInstruction[] = [
-    multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: feePayer, rentPayer: feePayer }),
+    multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: creator, rentPayer: feePayer }),
   ];
   if (multisigAccount.rentCollector) {
     tx2Instructions.push(multisig.instructions.configTransactionAccountsClose({
@@ -885,29 +997,18 @@ export async function executeVaultTransaction(
     walletPubkey = new PublicKey(vaultData.walletAddress);
   }
 
-  // Primary key: MWA wallet on Seeker, cloud key otherwise
+  // Primary key: MWA wallet on Seeker, cloud key otherwise (used as creator/member)
   const primaryKey = seekerMode ? walletPubkey! : cloudPubkey!;
-  const feePayer = primaryKey;
+  // Admin fee payer pays all gas/rent/tips — backend co-signs
+  const adminFeePayerPubkey = new PublicKey(getAdminTxFeePayerPublicKey());
+  const feePayer = adminFeePayerPubkey;
 
   // Derive vault PDA
   const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
 
-  // Check vault has enough SOL for fees (Seeker: MWA pays directly, still need vault SOL for inner txs)
-  if (seekerMode) {
-    // Seeker: wallet pays all fees — check wallet balance
-    const MIN_WALLET_LAMPORTS = 10_000_000; // 0.01 SOL
-    const walletBalance = await connection.getBalance(walletPubkey!, 'confirmed');
-    if (walletBalance < MIN_WALLET_LAMPORTS) {
-      const have = (walletBalance / 1e9).toFixed(4);
-      throw new Error(`Insufficient SOL in wallet (${have} SOL). You need at least 0.01 SOL to cover transaction fees. Please top up your Seeker wallet.`);
-    }
-  } else {
-    const vaultBalance = await connection.getBalance(vaultPda, 'confirmed');
-    if (vaultBalance < getTargetCloudBalance()) {
-      const needed = (getTargetCloudBalance() / 1e9).toFixed(3);
-      const have = (vaultBalance / 1e9).toFixed(4);
-      throw new Error(`Insufficient SOL for transaction fees. Need ${needed} SOL but vault only has ${have} SOL. Please deposit SOL to your vault first.`);
-    }
+  // Ensure spending limit exists for non-Seeker mode (lazy migration for existing vaults)
+  if (!seekerMode) {
+    await ensureGasCoverSpendingLimit(multisigAddress);
   }
 
   // Get current transaction index
@@ -936,17 +1037,6 @@ export async function executeVaultTransaction(
         data: Buffer.from(ix.data, 'base64'),
       }),
   );
-
-  // Transfer SOL from vault to cloud wallet for tx fees (not needed on Seeker — MWA pays directly)
-  if (!seekerMode) {
-    txInstructions.unshift(
-      SystemProgram.transfer({
-        fromPubkey: vaultPda,
-        toPubkey: cloudPubkey!,
-        lamports: getTargetCloudBalance(),
-      }),
-    );
-  }
 
   const baseLuts = await getLuts(connection);
 
@@ -1023,7 +1113,7 @@ export async function executeVaultTransaction(
     luts,
   );
 
-  // --- TX 4: Close + Jito tip (+ withdraw cloud SOL back to vault if not Seeker) ---
+  // --- TX 4: Close + Jito tip + cover (reimburse admin fee payer) ---
   const tx4Instructions: TransactionInstruction[] = [];
   if (multisigAccount.rentCollector) {
     tx4Instructions.push(
@@ -1035,14 +1125,30 @@ export async function executeVaultTransaction(
     );
   }
   tx4Instructions.push(jitoTipIx(feePayer));
-  if (!seekerMode) {
-    // Withdraw cloud balance back to vault (not needed on Seeker — MWA pays directly)
+  if (seekerMode) {
+    // Seeker: MWA wallet reimburses admin via createCoverInstruction
+    // signer=MWA wallet, source=MWA wallet, destination=admin fee payer
     tx4Instructions.push(
-      kitIxToWeb3(createWithdrawInstruction(
-        kitAddress(cloudPubkey!.toBase58()),
-        kitAddress(vaultPda.toBase58()),
-        getTargetCloudBalance(),
+      kitIxToWeb3(createCoverInstruction(
+        kitAddress(walletPubkey!.toBase58()),
+        kitAddress(walletPubkey!.toBase58()),
+        kitAddress(adminFeePayerPubkey.toBase58()),
+        ADMIN_COVER_TARGET,
       )),
+    );
+  } else {
+    // Standard: use spending limit to transfer SOL from vault → admin
+    const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+    tx4Instructions.push(
+      multisig.instructions.spendingLimitUse({
+        multisigPda,
+        member: cloudPubkey!,
+        spendingLimit: spendingLimitPda,
+        vaultIndex: 0,
+        amount: ADMIN_COVER_TARGET,
+        decimals: 9,
+        destination: adminFeePayerPubkey,
+      }),
     );
   }
 
@@ -1221,16 +1327,19 @@ async function setRentCollector(
   currentTransactionIndex: bigint,
 ): Promise<void> {
   const transactionIndex = currentTransactionIndex + 1n;
-  const feePayer = ctx.primaryKey;
-  // Seeker: rent goes to MWA wallet. Standard: rent goes to cloud key.
-  const newRentCollector = feePayer;
+  const creator = ctx.primaryKey;
+  const adminFeePayerPubkey = new PublicKey(getAdminTxFeePayerPublicKey());
+  const feePayer = adminFeePayerPubkey;
+  // Rent goes back to the vault (Squad) so user keeps it
+  const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
+  const newRentCollector = vaultPda;
 
   const tx1Instructions: TransactionInstruction[] = [
     multisig.instructions.configTransactionCreate({
-      multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer,
+      multisigPda, transactionIndex, creator, rentPayer: feePayer,
       actions: [{ __kind: 'SetRentCollector' as const, newRentCollector }],
     }),
-    multisig.instructions.proposalCreate({ multisigPda, transactionIndex, creator: feePayer, rentPayer: feePayer }),
+    multisig.instructions.proposalCreate({ multisigPda, transactionIndex, creator, rentPayer: feePayer }),
     ...buildApprovalIxs(ctx, multisigPda, transactionIndex),
   ];
 
@@ -1240,7 +1349,7 @@ async function setRentCollector(
   const msg1 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx1Instructions }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
 
-  const executeIx = multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: feePayer, rentPayer: feePayer });
+  const executeIx = multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: creator, rentPayer: feePayer });
   const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: [executeIx, jitoTipIx(feePayer)] }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
 
@@ -1261,7 +1370,8 @@ export async function reclaimRent(
 ): Promise<{ closed: number; skipped: number; failed: number; cancelled: number }> {
   const multisigPda = new PublicKey(multisigAddress);
   const ctx = await getSigningContext('squads_reclaim_rent');
-  const feePayer = ctx.primaryKey;
+  const adminFeePayerPubkey = new PublicKey(getAdminTxFeePayerPublicKey());
+  const feePayer = adminFeePayerPubkey;
 
   let acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
 

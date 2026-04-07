@@ -41,9 +41,9 @@ class ApiService {
     lookupTableAddress: string | null;
     solanaRpcUrl: string | null;
     treasuryWallet: string | null;
-    targetCloudBalance: number | null;
     vaultCreationFee: number | null;
     supportUrl: string | null;
+    adminTxFeePayerPublicKey: string | null;
   }> {
     // Config is needed during vault creation (before auth is available) — bypass auth
     const r = await fetch(`${this.baseUrl}/config/v1`);

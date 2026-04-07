@@ -4,7 +4,6 @@ import { RecoveryProposalModel, RecoveryProposalStatus } from '../models/Recover
 import { UserModel } from '../models';
 import { signTransactionWithPrivy } from '../services/privyService';
 import { HeliusSender } from '../managers';
-import { TARGET_CLOUD_BALANCE } from '../constants';
 
 const router = Router();
 
@@ -1126,10 +1125,9 @@ router.get('/proposal/:proposalId/build-execute-tx', async (req: Request, res: R
     // Check for rent collector
     const multisigAccount = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
 
-    // Check MWA wallet has enough balance for fees + cloud key funding
+    // Check MWA wallet has enough balance for fees
     const ESTIMATED_FEE = 10_000_000; // ~0.01 SOL for tx fees + priority + tip
-    const cloudFundAmount = proposal.newCloudKey ? TARGET_CLOUD_BALANCE : 0;
-    const requiredBalance = cloudFundAmount + ESTIMATED_FEE;
+    const requiredBalance = ESTIMATED_FEE;
 
     const walletBalance = await conn.getBalance(memberPubkey);
     if (walletBalance < requiredBalance) {
@@ -1161,15 +1159,6 @@ router.get('/proposal/:proposalId/build-execute-tx', async (req: Request, res: R
         multisigPda,
         transactionIndex,
         rentCollector: new PublicKey(rentCollectorAddr),
-      }));
-    }
-
-    // Fund new cloud key so it can pay for tx fees
-    if (proposal.newCloudKey) {
-      instructions.push(SystemProgram.transfer({
-        fromPubkey: memberPubkey,
-        toPubkey: new PublicKey(proposal.newCloudKey),
-        lamports: TARGET_CLOUD_BALANCE,
       }));
     }
 

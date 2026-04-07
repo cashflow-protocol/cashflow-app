@@ -128,9 +128,10 @@ router.post('/send', async (req: Request, res: Response) => {
 });
 
 // POST /solana/v1/send-bundle - Send multiple signed transactions as a Jito bundle
+// If admin tx fee payer pubkey is a required signer, auto-signs with the admin key.
 router.post('/send-bundle', async (req: Request, res: Response) => {
   try {
-    const { transactions } = req.body;
+    let { transactions } = req.body;
 
     if (!Array.isArray(transactions) || transactions.length === 0 || transactions.length > 5) {
       res.status(400).json({
@@ -138,6 +139,31 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
         error: 'transactions must be an array of 1-5 base64-encoded signed transactions',
       });
       return;
+    }
+
+    // ── Admin co-signing ──
+    // If ADMIN_ALL_TX_FEE_PAYER_PRIVATE_KEY is configured, deserialize each tx,
+    // check if the admin pubkey is a required signer, and sign if so.
+    if (process.env.ADMIN_ALL_TX_FEE_PAYER_PRIVATE_KEY) {
+      const { VersionedTransaction } = await import('@solana/web3.js');
+      const { getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
+      const adminKeypair = getAdminTxFeePayerKeypair();
+      const adminPubkeyStr = adminKeypair.publicKey.toBase58();
+
+      transactions = transactions.map((txBase64: string) => {
+        const txBytes = Buffer.from(txBase64, 'base64');
+        const tx = VersionedTransaction.deserialize(txBytes);
+        const staticKeys = tx.message.staticAccountKeys.map((k: any) => k.toBase58());
+        const numRequiredSignatures = tx.message.header.numRequiredSignatures;
+
+        // Check if admin key is among the required signers (first N static keys)
+        const adminIndex = staticKeys.slice(0, numRequiredSignatures).indexOf(adminPubkeyStr);
+        if (adminIndex >= 0) {
+          tx.sign([adminKeypair]);
+          return Buffer.from(tx.serialize()).toString('base64');
+        }
+        return txBase64;
+      });
     }
 
     console.log('Should simulate:', kShouldSimulate);
