@@ -159,7 +159,7 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
 
       <TouchableOpacity
         style={[styles.button, { backgroundColor: colors.accentBlue }, loading && styles.buttonDisabled]}
-        onPress={step === 'email' ? handleSendCode : handleVerify}
+        onPress={step === 'email' ? handleSendCode : () => handleVerify()}
         disabled={loading || (step === 'email' ? !email.trim() : !code.trim())}
         activeOpacity={0.7}
       >
