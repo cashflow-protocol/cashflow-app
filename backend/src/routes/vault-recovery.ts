@@ -1037,54 +1037,6 @@ router.post('/proposal/:proposalId/mark-executed', async (req: Request, res: Res
 });
 
 /**
- * POST /proposal/:proposalId/send-bundle
- * Send the recovery transaction bundle via Jito.
- * No auth required — tied to a specific proposal.
- */
-router.post('/proposal/:proposalId/send-bundle', async (req: Request, res: Response) => {
-  try {
-    const { transactions } = req.body;
-
-    if (!Array.isArray(transactions) || transactions.length === 0 || transactions.length > 5) {
-      res.status(400).json({ success: false, error: 'transactions must be 1-5 base64 transactions' });
-      return;
-    }
-
-    const proposal = await RecoveryProposalModel.findById(req.params.proposalId);
-    if (!proposal) {
-      res.status(404).json({ success: false, error: 'Proposal not found' });
-      return;
-    }
-
-    if (proposal.status === RecoveryProposalStatus.EXECUTED) {
-      res.status(400).json({ success: false, error: 'Already executed' });
-      return;
-    }
-
-    // Send each transaction via HeliusSender SWQoS
-    const signatures: string[] = [];
-    for (const tx of transactions) {
-      const sig = await HeliusSender.sendAndConfirm(tx);
-      signatures.push(sig);
-    }
-
-    // Mark proposal as executed
-    proposal.status = RecoveryProposalStatus.EXECUTED;
-    proposal.executionSignature = signatures[0];
-    await proposal.save();
-
-    res.json({
-      success: true,
-      signatures,
-      status: 'confirmed',
-    });
-  } catch (error: any) {
-    console.error('Error sending recovery bundle:', error);
-    res.status(500).json({ success: false, error: error?.message || 'Failed to send bundle' });
-  }
-});
-
-/**
  * GET /proposal/:proposalId/build-execute-tx
  * Build a fresh execute transaction with a current blockhash.
  * TX1 (create + propose + approvals) is already onchain.

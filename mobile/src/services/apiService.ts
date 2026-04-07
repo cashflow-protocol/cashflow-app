@@ -624,19 +624,6 @@ class ApiService {
     return res.data;
   }
 
-  async sendRecoveryBundle(proposalId: string, transactions: string[]): Promise<{ bundleId: string; status: string }> {
-    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}/send-bundle`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transactions }),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({ error: 'Failed' }));
-      throw new Error(err.error || `API error: ${r.status}`);
-    }
-    const res = await r.json();
-    return { bundleId: res.bundleId, status: res.status };
-  }
 
 }
 
