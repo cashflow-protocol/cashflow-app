@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { addMember } from '../services/squadsService';
 import { getVault } from '../services/vaultStorage';
-import { logScreenView, logError, logAddMemberSubmit, logAddMemberSuccess } from '../services/analyticsService';
+import { logScreenView, logError, logAddMemberSubmit, logAddMemberSuccess, logAddMemberError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
 
@@ -75,6 +75,7 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
         [{ text: 'OK', onPress: () => onNavigate('squads') }],
       );
     } catch (err: any) {
+      logAddMemberError(err?.message || 'unknown');
       logError('add_member', err?.message || 'unknown');
       console.error('Failed to add member:', err);
       Alert.alert('Error', err?.message || 'Failed to add member. Please try again.');

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import BottomSheet from './BottomSheet';
 import { sendEmailCode, verifyEmailCode } from '../services/onboardingService';
-import { logEmailCodeSent, logEmailCodeError, logEmailVerifySuccess, logEmailVerifyError } from '../services/analyticsService';
+import { logEmailCodeSent, logEmailCodeError, logEmailVerifySuccess, logEmailVerifyError, logEmailSheetOpen, logEmailUseDifferent } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
 interface ConnectEmailSheetProps {
@@ -27,6 +27,10 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const codeInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (visible) logEmailSheetOpen();
+  }, [visible]);
 
   const handleSendCode = useCallback(async () => {
     if (!email.trim()) return;
@@ -169,7 +173,7 @@ export default function ConnectEmailSheet({ visible, onClose, publicKey, onSucce
       </TouchableOpacity>
 
       {step === 'code' && (
-        <TouchableOpacity onPress={() => setStep('email')} activeOpacity={0.7}>
+        <TouchableOpacity onPress={() => { logEmailUseDifferent(); setStep('email'); }} activeOpacity={0.7}>
           <Text style={[styles.linkText, { color: colors.accentBlue }]}>Use a different email</Text>
         </TouchableOpacity>
       )}

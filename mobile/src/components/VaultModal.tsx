@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,7 @@ import { useWallet } from '../hooks/useWallet';
 import { getCloudPublicKey } from '../services/keypairStorage';
 import { Buffer } from 'buffer';
 import bs58 from 'bs58';
-import { logVaultModalOpen, logVaultModeSwitch, logVaultMaxPress, logVaultSubmit, logVaultSuccess, logVaultError } from '../services/analyticsService';
+import { logVaultModalOpen, logVaultModeSwitch, logVaultMaxPress, logVaultSubmit, logVaultSuccess, logVaultError, logVaultValidationError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
 const PROTOCOL_LABELS: Record<EarnTokenType, string> = {
@@ -170,6 +170,19 @@ export default function VaultModal({
     : BigInt(minWithdrawAmount || '0');
   const belowMinimum = isValidAmount && minAmountRaw > 0n && parsedRaw < minAmountRaw;
   const canSubmit = isValidAmount && !exceedsBalance && !belowMinimum && !loading;
+
+  const validationLogged = useRef<string | null>(null);
+  useEffect(() => {
+    if (exceedsBalance && validationLogged.current !== 'exceeds_balance') {
+      logVaultValidationError(mode, symbol, 'exceeds_balance');
+      validationLogged.current = 'exceeds_balance';
+    } else if (belowMinimum && validationLogged.current !== 'below_minimum') {
+      logVaultValidationError(mode, symbol, 'below_minimum');
+      validationLogged.current = 'below_minimum';
+    } else if (!exceedsBalance && !belowMinimum) {
+      validationLogged.current = null;
+    }
+  }, [exceedsBalance, belowMinimum, mode, symbol]);
 
   const handleMaxPress = () => {
     logVaultMaxPress(mode, symbol);

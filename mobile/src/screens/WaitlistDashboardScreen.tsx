@@ -33,7 +33,7 @@ import ConnectEmailSheet from '../components/ConnectEmailSheet';
 import ConnectTelegramSheet from '../components/ConnectTelegramSheet';
 import VerifyActionSheet from '../components/VerifyActionSheet';
 import UploadScreenshotSheet from '../components/UploadScreenshotSheet';
-import { logScreenView, logWaitlistTaskPress, logWaitlistApproved, logOnboardingHaveInviteCode, logError } from '../services/analyticsService';
+import { logScreenView, logWaitlistTaskPress, logWaitlistApproved, logOnboardingHaveInviteCode, logError, logXOauthStart, logXOauthWebViewClose, logXOauthError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
 function getCountdown(): string {
@@ -199,9 +199,11 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         case 'x': {
           const xResult = await startConnectX(publicKey);
           if (!xResult?.authUrl) {
+            logXOauthError('auth_url_missing');
             Alert.alert('Not Available', 'Twitter integration is not configured yet.');
             break;
           }
+          logXOauthStart(config.xOauthMode === 'webview' ? 'webview' : 'browser');
           if (config.xOauthMode === 'webview') {
             setOauthWebViewUrl(xResult.authUrl);
           } else {
@@ -472,7 +474,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
       <Modal visible={!!oauthWebViewUrl} animationType="slide" onRequestClose={() => setOauthWebViewUrl(null)}>
         <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
           <View style={styles.webViewHeader}>
-            <TouchableOpacity onPress={() => setOauthWebViewUrl(null)} style={styles.webViewClose}>
+            <TouchableOpacity onPress={() => { logXOauthWebViewClose(); setOauthWebViewUrl(null); }} style={styles.webViewClose}>
               <ArrowLeft size={24} color={colors.textPrimary} />
             </TouchableOpacity>
             <Text style={[styles.webViewTitle, { color: colors.textPrimary }]}>Sign in with X</Text>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import BottomSheet from './BottomSheet';
-import { logTelegramCodeCopy, logTelegramBotOpen } from '../services/analyticsService';
+import { logTelegramCodeCopy, logTelegramBotOpen, logTelegramSheetOpen } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
 interface ConnectTelegramSheetProps {
@@ -21,6 +21,10 @@ interface ConnectTelegramSheetProps {
 export default function ConnectTelegramSheet({ visible, onClose, code, botUrl }: ConnectTelegramSheetProps) {
   const { colors } = useTheme();
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (visible) logTelegramSheetOpen();
+  }, [visible]);
 
   const handleCopy = () => {
     logTelegramCodeCopy();

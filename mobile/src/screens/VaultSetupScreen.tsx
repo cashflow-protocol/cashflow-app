@@ -21,7 +21,7 @@ import authService from '../services/authService';
 import { deleteAllKeypairs, backupCloudKeyToBlockStore } from '../services/keypairStorage';
 import Toast from '../components/Toast';
 import { IS_SOLANA_MOBILE } from '../config/constants';
-import { logScreenView, logVaultSetupStart, logVaultSetupWalletConnected, logVaultSetupSuccess, logVaultSetupError } from '../services/analyticsService';
+import { logScreenView, logVaultSetupStart, logVaultSetupWalletConnected, logVaultSetupSuccess, logVaultSetupError, logVaultSetupMode } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
 interface VaultSetupScreenProps {
@@ -94,6 +94,8 @@ export default function VaultSetupScreen({ inviteCode, pin, onComplete, onBack, 
       const paymentId = `${Platform.OS}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
       const seekerMode = IS_SOLANA_MOBILE;
+      const setupMode = seekerMode ? 'seeker' : 'standard';
+      logVaultSetupMode(setupMode);
       let walletAddr: string | undefined;
 
       if (seekerMode) {

@@ -63,6 +63,10 @@ export function logVaultSetupInsufficientBalance(balance: number) {
   analytics().logEvent('vault_setup_insufficient_balance', { balance });
 }
 
+export function logVaultSetupMode(mode: 'standard' | 'seeker' | 'android_gms') {
+  analytics().logEvent('vault_setup_mode', { mode });
+}
+
 // ── Waitlist ──
 
 export function logWaitlistTaskPress(taskId: string) {
@@ -75,6 +79,18 @@ export function logWaitlistTaskComplete(taskId: string, xpReward: number) {
 
 export function logWaitlistApproved() {
   analytics().logEvent('waitlist_approved');
+}
+
+export function logXOauthStart(mode: 'webview' | 'browser') {
+  analytics().logEvent('x_oauth_start', { mode });
+}
+
+export function logXOauthWebViewClose() {
+  analytics().logEvent('x_oauth_webview_close');
+}
+
+export function logXOauthError(reason: string) {
+  analytics().logEvent('x_oauth_error', { reason: reason.slice(0, 100) });
 }
 
 // ── PIN ──
@@ -215,6 +231,10 @@ export function logEarnRetry() {
   analytics().logEvent('earn_retry');
 }
 
+export function logEarnRefresh() {
+  analytics().logEvent('earn_refresh');
+}
+
 export function logVaultModalOpen(symbol: string, mode: string) {
   analytics().logEvent('vault_modal_open', { symbol, mode });
 }
@@ -237,6 +257,10 @@ export function logVaultSuccess(mode: string, symbol: string, amount: string, ty
 
 export function logVaultError(mode: string, symbol: string, error: string) {
   analytics().logEvent('vault_error', { mode, symbol, error: error.slice(0, 100) });
+}
+
+export function logVaultValidationError(mode: string, symbol: string, reason: 'exceeds_balance' | 'below_minimum') {
+  analytics().logEvent('vault_validation_error', { mode, symbol, reason });
 }
 
 // ── More Screen ──
@@ -363,6 +387,14 @@ export function logEmailVerifyError(reason: string) {
   analytics().logEvent('email_verify_error', { reason });
 }
 
+export function logEmailSheetOpen() {
+  analytics().logEvent('email_sheet_open');
+}
+
+export function logEmailUseDifferent() {
+  analytics().logEvent('email_use_different');
+}
+
 // ── Connect Telegram ──
 
 export function logTelegramCodeCopy() {
@@ -371,6 +403,10 @@ export function logTelegramCodeCopy() {
 
 export function logTelegramBotOpen() {
   analytics().logEvent('telegram_bot_open');
+}
+
+export function logTelegramSheetOpen() {
+  analytics().logEvent('telegram_sheet_open');
 }
 
 // ── Verify Action (Waitlist) ──
@@ -443,6 +479,14 @@ export function logFundWalletError(symbol: string, error: string) {
   analytics().logEvent('fund_wallet_error', { symbol, error: error.slice(0, 100) });
 }
 
+export function logFundWalletValidationError(symbol: string) {
+  analytics().logEvent('fund_wallet_validation_error', { symbol, reason: 'exceeds_balance' });
+}
+
+export function logFundWalletConnectError(error: string) {
+  analytics().logEvent('fund_wallet_connect_error', { error: error.slice(0, 100) });
+}
+
 // ── Add Member ──
 
 export function logAddMemberSubmit(permissionType: string) {
@@ -451,6 +495,10 @@ export function logAddMemberSubmit(permissionType: string) {
 
 export function logAddMemberSuccess() {
   analytics().logEvent('add_member_success');
+}
+
+export function logAddMemberError(error: string) {
+  analytics().logEvent('add_member_error', { error: error.slice(0, 100) });
 }
 
 // ── Keys & Recovery ──
