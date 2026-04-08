@@ -12,7 +12,7 @@ import {
 import * as multisig from '@sqds/multisig';
 import bs58 from 'bs58';
 import { SOLANA_CONFIG } from '../config/solana';
-import { saveVault, getVault, type VaultData } from './vaultStorage';
+import { saveVault, getVault, clearVault, type VaultData } from './vaultStorage';
 import apiService from './apiService';
 import walletService from './walletService';
 import {
@@ -668,6 +668,7 @@ export async function createMultisig(
     createdAt: new Date().toISOString(),
     walletAddress: walletAddress,
     seekerMode: seekerMode || undefined,
+    isInitialized: true,
   };
   await saveVault(vaultData);
 
@@ -746,6 +747,7 @@ export async function createMultisigViaBackend(
       createdAt: new Date().toISOString(),
       walletAddress: walletAddress || undefined,
       seekerMode: seekerMode || undefined,
+      isInitialized: true,
     };
     await saveVault(vaultData);
 
@@ -777,18 +779,7 @@ export async function createMultisigViaBackend(
       { pubkey: new PublicKey(devicePubkeyBase58), signFn: signWithDevice },
     ]);
 
-    // Send all 3 as a Jito bundle via backend
-    const bundleTxs = signedTxs.map(tx => Buffer.from(tx.serialize()).toString('base64'));
-    console.log('[createMultisigViaBackend] sending bundle...');
-    await apiService.sendBundle(bundleTxs);
-    signature = bs58.encode(signedTxs[0].signatures[0]);
-    console.log('[createMultisigViaBackend] bundle sent, sig:', signature);
-
-    // Confirm with backend
-    await apiService.confirmVault(paymentId, signature);
-    console.log('[createMultisigViaBackend] vault confirmed');
-
-    // Only persist vault after bundle has landed on-chain
+    // Persist vault metadata before sending (auth requires vaultAddress) — marked uninitialized
     const vaultData: VaultData = {
       multisigAddress: result.multisigAddress,
       vaultAddress: result.vaultAddress,
@@ -796,8 +787,30 @@ export async function createMultisigViaBackend(
       createdAt: new Date().toISOString(),
       walletAddress: walletAddress || undefined,
       seekerMode: seekerMode || undefined,
+      isInitialized: false,
     };
     await saveVault(vaultData);
+
+    // Send all 3 as a Jito bundle via backend
+    const bundleTxs = signedTxs.map(tx => Buffer.from(tx.serialize()).toString('base64'));
+    console.log('[createMultisigViaBackend] sending bundle...');
+    try {
+      await apiService.sendBundle(bundleTxs);
+      signature = bs58.encode(signedTxs[0].signatures[0]);
+      console.log('[createMultisigViaBackend] bundle sent, sig:', signature);
+
+      // Confirm with backend
+      await apiService.confirmVault(paymentId, signature);
+      console.log('[createMultisigViaBackend] vault confirmed');
+
+      // Bundle landed — mark vault as initialized
+      await saveVault({ ...vaultData, isInitialized: true });
+    } catch (err) {
+      // Bundle failed or didn't land — clear vault so user doesn't see a phantom squad
+      console.error('[createMultisigViaBackend] bundle/confirm failed, clearing vault:', err);
+      await clearVault();
+      throw err;
+    }
   } else {
     throw new Error('Unexpected response from create-vault: no txSignature or serializedTxs');
   }

@@ -436,6 +436,7 @@ export default function VaultRecoveryExecutionScreen({
         label: 'Cashflow',
         createdAt: new Date().toISOString(),
         walletAddress,
+        isInitialized: true,
       };
       await saveVault(vaultData);
 

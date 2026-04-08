@@ -95,7 +95,7 @@ function App() {
         if (config.solanaRpcUrl) setSolanaRpcEndpoint(config.solanaRpcUrl);
         applyRemoteConfig(config);
       }
-      const hasVault = vault !== null;
+      const hasVault = vault !== null && vault.isInitialized !== false;
       setOnboardingDone(hasVault);
       // Existing user with no PIN → prompt to create one
       setNeedsPinSetup(hasVault && !pinExists);
