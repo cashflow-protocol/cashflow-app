@@ -1111,6 +1111,10 @@ router.post('/create-vault', async (req, res) => {
         res.status(503).json({ success: false, error: 'Service temporarily unavailable' });
         return;
       }
+      else if (adminBalance < 50_000_000) { // 0.05 SOL
+        console.error('[create-vault] Admin wallet balance is too low (but still can proceed):', adminBalance);
+        telegram.notifyAdmin(`⚠️ Admin wallet (for fee creation) balance is low: ${(adminBalance / 1e9).toFixed(4)} SOL. Admin wallet address: ${feePayer}`);
+      }
     } else {
       feePayer = new PublicKey(walletAddress);
 
