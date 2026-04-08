@@ -1049,7 +1049,7 @@ router.post('/create-vault', async (req, res) => {
 
     // ── Lazy-import Squads SDK + web3.js ──
     const multisigLib = await import('@sqds/multisig');
-    const { Connection, PublicKey, Keypair, TransactionMessage, VersionedTransaction, SystemProgram } = await import('@solana/web3.js');
+    const { Connection, PublicKey, Keypair, TransactionMessage, VersionedTransaction, SystemProgram, TransactionInstruction } = await import('@solana/web3.js');
     const { Permissions } = multisigLib.types;
 
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
@@ -1301,8 +1301,28 @@ router.post('/create-vault', async (req, res) => {
         createKey: spendingLimitCreateKey,
       });
 
-      // TX3: execute + close + Jito tip (admin pays gas)
+      // TX3: execute + close + Jito tip + cover (admin pays gas, MWA wallet reimburses)
       const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
+
+      // Build cover instruction: MWA wallet tops up admin fee payer to ADMIN_COVER_TARGET
+      const { createCoverInstruction } = await import('@heymike/send');
+      const { address: kitAddress, AccountRole } = await import('@solana/kit');
+      const coverKitIx = createCoverInstruction(
+        kitAddress(walletAddress),
+        kitAddress(walletAddress),
+        kitAddress(adminFeePayerPubkey.toBase58()),
+        ADMIN_COVER_TARGET,
+      );
+      const coverIx = new TransactionInstruction({
+        programId: new PublicKey(coverKitIx.programAddress as string),
+        keys: (coverKitIx.accounts ?? []).map((acc: any) => ({
+          pubkey: new PublicKey(acc.address as string),
+          isSigner: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.READONLY_SIGNER,
+          isWritable: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.WRITABLE,
+        })),
+        data: Buffer.from(coverKitIx.data as Uint8Array),
+      });
+
       const tx3Instructions = [
         multisigLib.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: primaryKey, rentPayer: adminFeePayerPubkey, spendingLimits: [spendingLimitPda] }),
         multisigLib.instructions.configTransactionAccountsClose({
@@ -1313,6 +1333,7 @@ router.post('/create-vault', async (req, res) => {
           toPubkey: new PublicKey(tipAccount),
           lamports: JITO_TIP_LAMPORTS,
         }),
+        coverIx,
       ];
 
       // Fetch LUT for tx compression
