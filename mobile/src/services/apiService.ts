@@ -80,6 +80,7 @@ class ApiService {
     vaultAddress: string;
     txSignature?: string;
     serializedTx?: string;
+    serializedTxs?: string[];
   }> {
     const r = await fetch(`${this.baseUrl}/onboarding/v1/create-vault`, {
       method: 'POST',

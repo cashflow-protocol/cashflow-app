@@ -736,44 +736,70 @@ export async function createMultisigViaBackend(
     // Standard mode — backend already sent the tx
     signature = result.txSignature;
     console.log('[createMultisigViaBackend] backend sent tx:', signature);
-  } else if (result.serializedTx) {
-    // Seeker / android_gms — sign with MWA and send
-    console.log('[createMultisigViaBackend] signing with MWA...');
-    const txBytes = Buffer.from(result.serializedTx, 'base64');
-    const [signatureBytes] = await walletService.signAndSendTransactions([
-      new Uint8Array(txBytes),
+
+    // Set up gas cover spending limit separately for standard mode
+    await sleep(2000);
+    const vaultData: VaultData = {
+      multisigAddress: result.multisigAddress,
+      vaultAddress: result.vaultAddress,
+      label: 'Cashflow',
+      createdAt: new Date().toISOString(),
+      walletAddress: walletAddress || undefined,
+      seekerMode: seekerMode || undefined,
+    };
+    await saveVault(vaultData);
+
+    try {
+      console.log('[createMultisigViaBackend] setting up gas cover spending limit...');
+      await addGasCoverSpendingLimit(result.multisigAddress);
+      console.log('[createMultisigViaBackend] spending limit created');
+    } catch (err: any) {
+      console.warn('[createMultisigViaBackend] failed to create spending limit (will retry on first tx):', err.message);
+    }
+  } else if (result.serializedTxs) {
+    // Seeker / android_gms — backend built all 3 txs (vault + spending limit create + execute)
+    // Sign all in one MWA prompt, device cosigns TX2, send as Jito bundle
+    console.log('[createMultisigViaBackend] signing', result.serializedTxs.length, 'txs with MWA...');
+
+    const transactions = result.serializedTxs.map(b64 =>
+      VersionedTransaction.deserialize(new Uint8Array(Buffer.from(b64, 'base64'))),
+    );
+
+    // MWA signs all txs in a single prompt (wallet is signer on all 3)
+    const serialized = transactions.map(tx => new Uint8Array(tx.serialize()));
+    const signedBytes = await walletService.signTransactions(serialized);
+
+    const signedTxs = signedBytes.map(bytes => VersionedTransaction.deserialize(bytes));
+
+    // TX2 (config create + propose + approve) also needs device key signature
+    console.log('[createMultisigViaBackend] device cosigning TX2...');
+    await signTransactionNatively(signedTxs[1], [
+      { pubkey: new PublicKey(devicePubkeyBase58), signFn: signWithDevice },
     ]);
-    signature = bs58.encode(signatureBytes);
-    console.log('[createMultisigViaBackend] MWA tx sent:', signature);
+
+    // Persist vault metadata before sending — sendBundle needs auth which needs vault in storage
+    const vaultData: VaultData = {
+      multisigAddress: result.multisigAddress,
+      vaultAddress: result.vaultAddress,
+      label: 'Cashflow',
+      createdAt: new Date().toISOString(),
+      walletAddress: walletAddress || undefined,
+      seekerMode: seekerMode || undefined,
+    };
+    await saveVault(vaultData);
+
+    // Send all 3 as a Jito bundle via backend
+    const bundleTxs = signedTxs.map(tx => Buffer.from(tx.serialize()).toString('base64'));
+    console.log('[createMultisigViaBackend] sending bundle...');
+    await apiService.sendBundle(bundleTxs);
+    signature = bs58.encode(signedTxs[0].signatures[0]);
+    console.log('[createMultisigViaBackend] bundle sent, sig:', signature);
 
     // Confirm with backend
     await apiService.confirmVault(paymentId, signature);
-    console.log('[createMultisigViaBackend] vault confirmed with backend');
+    console.log('[createMultisigViaBackend] vault confirmed');
   } else {
-    throw new Error('Unexpected response from create-vault: no txSignature or serializedTx');
-  }
-
-  // Wait for confirmation
-  await sleep(2000);
-
-  // Persist vault metadata locally
-  const vaultData: VaultData = {
-    multisigAddress: result.multisigAddress,
-    vaultAddress: result.vaultAddress,
-    label: 'Cashflow',
-    createdAt: new Date().toISOString(),
-    walletAddress: walletAddress || undefined,
-    seekerMode: seekerMode || undefined,
-  };
-  await saveVault(vaultData);
-
-  // Set up gas cover spending limit for admin fee reimbursement
-  try {
-    console.log('[createMultisigViaBackend] setting up gas cover spending limit...');
-    await addGasCoverSpendingLimit(result.multisigAddress);
-    console.log('[createMultisigViaBackend] spending limit created');
-  } catch (err: any) {
-    console.warn('[createMultisigViaBackend] failed to create spending limit (will retry on first tx):', err.message);
+    throw new Error('Unexpected response from create-vault: no txSignature or serializedTxs');
   }
 
   console.log('[createMultisigViaBackend] done, vault:', result.vaultAddress);

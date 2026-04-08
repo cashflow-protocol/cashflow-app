@@ -10,6 +10,7 @@ import {
   Linking,
   TextInput,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
@@ -556,7 +557,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient
         colors={colors.earnGradient as [string, string]}
-        style={styles.headerGradient}
+        style={[styles.headerGradient, Platform.OS === 'android' && { paddingBottom: 16 }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
       >
@@ -564,7 +565,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
           <ArrowLeft size={24} color="#fff" />
         </TouchableOpacity>
         <SafeAreaView edges={['top']} style={styles.header}>
-          <View style={styles.headerContent}>
+          <View style={[styles.headerContent, Platform.OS === 'android' && { paddingTop: 4, paddingBottom: 4 }]}>
             <Text style={styles.title}>Keys & Recovery</Text>
             <Text style={styles.subtitle}>
               Manage the keys that control your wallet.
