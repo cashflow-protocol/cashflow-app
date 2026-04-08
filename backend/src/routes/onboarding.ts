@@ -1113,6 +1113,18 @@ router.post('/create-vault', async (req, res) => {
       }
     } else {
       feePayer = new PublicKey(walletAddress);
+
+      // Check user wallet balance — needs rent (~0.015 SOL) + creation fee (0.05 SOL) + tx fee
+      const { VAULT_CREATION_FEE } = await import('../constants/vault');
+      const minRequired = VAULT_CREATION_FEE + 20_000_000; // fee + rent + buffer
+      const userBalance = await conn.getBalance(feePayer);
+      if (userBalance < minRequired) {
+        res.status(400).json({
+          success: false,
+          error: `Insufficient balance. You need at least ${(minRequired / 1e9).toFixed(3)} SOL to create a vault. Current balance: ${(userBalance / 1e9).toFixed(4)} SOL`,
+        });
+        return;
+      }
     }
 
     // ── Build multisigCreateV2 transaction ──
@@ -1138,7 +1150,7 @@ router.post('/create-vault', async (req, res) => {
       members,
       timeLock: 0,
       rentCollector: vaultPda,
-      memo: 'Cashflow',
+      memo: 'cashflow',
     });
 
     const { blockhash } = await conn.getLatestBlockhash('confirmed');
@@ -1146,6 +1158,22 @@ router.post('/create-vault', async (req, res) => {
     const { HeliusSender } = await import('../managers/HeliusSender');
 
     const txInstructions = [createMultisigIx];
+
+    // Add vault creation fee (0.05 SOL → treasury wallet) for all modes
+    const { VAULT_CREATION_FEE } = await import('../constants/vault');
+    if (VAULT_CREATION_FEE > 0 && !isAdminPays) {
+      const treasuryWallet = process.env.TREASURY_WALLET_ADDRESS;
+      if (!treasuryWallet) {
+        res.status(503).json({ success: false, error: 'Treasury wallet not configured' });
+        return;
+      }
+      txInstructions.push(SystemProgram.transfer({
+        fromPubkey: feePayer,
+        toPubkey: new PublicKey(treasuryWallet),
+        lamports: VAULT_CREATION_FEE,
+      }));
+    }
+
     // Add Helius SWQoS tip for standard mode (admin pays)
     if (isAdminPays) {
       txInstructions.push(HeliusSender.createTipIx(feePayer));
