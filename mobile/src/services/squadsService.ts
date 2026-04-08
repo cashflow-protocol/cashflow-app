@@ -777,17 +777,6 @@ export async function createMultisigViaBackend(
       { pubkey: new PublicKey(devicePubkeyBase58), signFn: signWithDevice },
     ]);
 
-    // Persist vault metadata before sending — sendBundle needs auth which needs vault in storage
-    const vaultData: VaultData = {
-      multisigAddress: result.multisigAddress,
-      vaultAddress: result.vaultAddress,
-      label: 'Cashflow',
-      createdAt: new Date().toISOString(),
-      walletAddress: walletAddress || undefined,
-      seekerMode: seekerMode || undefined,
-    };
-    await saveVault(vaultData);
-
     // Send all 3 as a Jito bundle via backend
     const bundleTxs = signedTxs.map(tx => Buffer.from(tx.serialize()).toString('base64'));
     console.log('[createMultisigViaBackend] sending bundle...');
@@ -798,6 +787,17 @@ export async function createMultisigViaBackend(
     // Confirm with backend
     await apiService.confirmVault(paymentId, signature);
     console.log('[createMultisigViaBackend] vault confirmed');
+
+    // Only persist vault after bundle has landed on-chain
+    const vaultData: VaultData = {
+      multisigAddress: result.multisigAddress,
+      vaultAddress: result.vaultAddress,
+      label: 'Cashflow',
+      createdAt: new Date().toISOString(),
+      walletAddress: walletAddress || undefined,
+      seekerMode: seekerMode || undefined,
+    };
+    await saveVault(vaultData);
   } else {
     throw new Error('Unexpected response from create-vault: no txSignature or serializedTxs');
   }

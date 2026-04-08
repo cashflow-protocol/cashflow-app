@@ -1295,10 +1295,16 @@ router.post('/create-vault', async (req, res) => {
         ...approvalIxs,
       ];
 
+      // Derive spending limit PDA — needed as remaining account for configTransactionExecute
+      const [spendingLimitPda] = multisigLib.getSpendingLimitPda({
+        multisigPda,
+        createKey: spendingLimitCreateKey,
+      });
+
       // TX3: execute + close + Jito tip (admin pays gas)
       const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
       const tx3Instructions = [
-        multisigLib.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: primaryKey, rentPayer: adminFeePayerPubkey }),
+        multisigLib.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: primaryKey, rentPayer: adminFeePayerPubkey, spendingLimits: [spendingLimitPda] }),
         multisigLib.instructions.configTransactionAccountsClose({
           multisigPda, transactionIndex, rentCollector: vaultPda,
         }),
@@ -1388,7 +1394,11 @@ router.post('/confirm-vault', async (req, res) => {
       return;
     }
 
-    // Telegram notification is handled by the auth flow on first login ("New Squad created!")
+    telegram.notifyAdmin(
+      `🏦 New Squad created!\n\n` +
+      `Vault: <code>${result.vaultAddress?.slice(0, 6)}...${result.vaultAddress?.slice(-4)}</code>\n` +
+      `Tx: <code>${txSignature.slice(0, 8)}...</code>`,
+    );
 
     res.json({
       success: true,
