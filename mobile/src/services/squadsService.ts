@@ -23,7 +23,7 @@ import {
   signWithCloud,
   signWithDevice,
 } from './keypairStorage';
-import { createCoverInstruction } from '@heymike/send';
+import { createCoverInstruction, createCoverFromSquadInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
 import { IS_SOLANA_MOBILE, getVaultCreationFee, getAdminTxFeePayerPublicKey, ADMIN_COVER_TARGET } from '../config/constants';
 import { logError } from './analyticsService';
@@ -406,7 +406,7 @@ export async function addGasCoverSpendingLimit(
   const msg1 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx1Instructions }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
 
-  // TX2: execute + close + Jito tip
+  // TX2: execute + close + Jito tip + cover
   const tx2Instructions: TransactionInstruction[] = [
     multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: creator, rentPayer: feePayer }),
   ];
@@ -416,6 +416,17 @@ export async function addGasCoverSpendingLimit(
     }));
   }
   tx2Instructions.push(jitoTipIx(feePayer));
+  if (ctx.seekerMode) {
+    tx2Instructions.push(
+      kitIxToWeb3(createCoverInstruction(
+        kitAddress(ctx.walletPubkey!.toBase58()),
+        kitAddress(ctx.walletPubkey!.toBase58()),
+        kitAddress(adminFeePayerPubkey.toBase58()),
+        ADMIN_COVER_TARGET,
+      )),
+    );
+  }
+  // Note: no spendingLimitUse here — this function *creates* the spending limit
 
   const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx2Instructions }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
@@ -926,7 +937,7 @@ export async function addMember(
   const msg1 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx1Instructions }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
 
-  // TX2: execute + close + Jito tip
+  // TX2: execute + close + Jito tip + cover
   const tx2Instructions: TransactionInstruction[] = [
     multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: creator, rentPayer: feePayer }),
   ];
@@ -936,6 +947,27 @@ export async function addMember(
     }));
   }
   tx2Instructions.push(jitoTipIx(feePayer));
+  if (ctx.seekerMode) {
+    tx2Instructions.push(
+      kitIxToWeb3(createCoverInstruction(
+        kitAddress(ctx.walletPubkey!.toBase58()),
+        kitAddress(ctx.walletPubkey!.toBase58()),
+        kitAddress(adminFeePayerPubkey.toBase58()),
+        ADMIN_COVER_TARGET,
+      )),
+    );
+  } else {
+    const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+    tx2Instructions.push(
+      kitIxToWeb3(await createCoverFromSquadInstruction(
+        kitAddress(ctx.cloudPubkey!.toBase58()),
+        kitAddress(multisigPda.toBase58()),
+        kitAddress(spendingLimitPda.toBase58()),
+        kitAddress(adminFeePayerPubkey.toBase58()),
+        ADMIN_COVER_TARGET,
+      )),
+    );
+  }
 
   const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx2Instructions }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
@@ -974,7 +1006,7 @@ export async function removeMember(
   const msg1 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx1Instructions }).compileToV0Message(luts);
   const tx1 = new VersionedTransaction(msg1);
 
-  // TX2: execute + close + Jito tip
+  // TX2: execute + close + Jito tip + cover
   const tx2Instructions: TransactionInstruction[] = [
     multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: creator, rentPayer: feePayer }),
   ];
@@ -984,6 +1016,27 @@ export async function removeMember(
     }));
   }
   tx2Instructions.push(jitoTipIx(feePayer));
+  if (ctx.seekerMode) {
+    tx2Instructions.push(
+      kitIxToWeb3(createCoverInstruction(
+        kitAddress(ctx.walletPubkey!.toBase58()),
+        kitAddress(ctx.walletPubkey!.toBase58()),
+        kitAddress(adminFeePayerPubkey.toBase58()),
+        ADMIN_COVER_TARGET,
+      )),
+    );
+  } else {
+    const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+    tx2Instructions.push(
+      kitIxToWeb3(await createCoverFromSquadInstruction(
+        kitAddress(ctx.cloudPubkey!.toBase58()),
+        kitAddress(multisigPda.toBase58()),
+        kitAddress(spendingLimitPda.toBase58()),
+        kitAddress(adminFeePayerPubkey.toBase58()),
+        ADMIN_COVER_TARGET,
+      )),
+    );
+  }
 
   const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx2Instructions }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
@@ -1179,15 +1232,13 @@ export async function executeVaultTransaction(
     // Standard: use spending limit to transfer SOL from vault → admin
     const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
     tx4Instructions.push(
-      multisig.instructions.spendingLimitUse({
-        multisigPda,
-        member: cloudPubkey!,
-        spendingLimit: spendingLimitPda,
-        vaultIndex: 0,
-        amount: ADMIN_COVER_TARGET,
-        decimals: 9,
-        destination: adminFeePayerPubkey,
-      }),
+      kitIxToWeb3(await createCoverFromSquadInstruction(
+        kitAddress(cloudPubkey!.toBase58()),
+        kitAddress(multisigPda.toBase58()),
+        kitAddress(spendingLimitPda.toBase58()),
+        kitAddress(adminFeePayerPubkey.toBase58()),
+        ADMIN_COVER_TARGET,
+      )),
     );
   }
 
