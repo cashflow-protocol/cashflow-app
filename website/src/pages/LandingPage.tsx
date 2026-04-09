@@ -34,7 +34,7 @@ export default function LandingPage() {
         <div className="nav-inner">
           <a href="#" className="nav-logo">
             <span style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 500 }}>cashflow</span>
-            <span style={{ color: '#565656', fontFamily: "'Poppins', sans-serif", fontWeight: 300 }}>| Yield aggregator</span>
+            <span style={{ color: '#565656', fontFamily: "'Poppins', sans-serif", fontWeight: 300 }}>| Wealth Manager</span>
           </a>
           <div className="nav-links">
             <a href="#earn">Earn</a>

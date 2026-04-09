@@ -100,14 +100,6 @@ export default function UploadScreenshotSheet({
         Give us 5 stars, then upload a screenshot as proof.
       </Text>
 
-      <TouchableOpacity
-        style={[styles.storeButton, { borderColor: colors.accentBlue }]}
-        onPress={() => { logScreenshotStoreOpen(); Linking.openURL(storeUrl); }}
-        activeOpacity={0.7}
-      >
-        <Text style={[styles.storeButtonText, { color: colors.accentBlue }]}>Open dApp Store</Text>
-      </TouchableOpacity>
-
       {imageUri ? (
         <View style={styles.previewContainer}>
           <Image source={{ uri: imageUri }} style={[styles.preview, { backgroundColor: colors.inputBackground }]} resizeMode="contain" />

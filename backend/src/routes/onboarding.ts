@@ -1214,12 +1214,17 @@ router.post('/create-vault', async (req, res) => {
         },
       });
 
+      const lookupKeyStd = cloudKey || deviceKey;
+      const waitlistUserStd = await WaitlistUserModel.findOne({ publicKey: lookupKeyStd }).lean();
+
       telegram.notifyAdmin(
-        `🏦 New vault created (backend-signed)\n\n` +
+        `🏦 New Squad created!\n\n` +
+        (walletAddress ? `Wallet: <code>${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}</code>\n` : '') +
         `Vault: <code>${vaultAddress.slice(0, 6)}...${vaultAddress.slice(-4)}</code>\n` +
         `Mode: ${mode}\n` +
         `Platform: ${platform}\n` +
-        `Payment: <code>${paymentId.slice(0, 8)}...</code>`,
+        (waitlistUserStd?.inviteCode ? `Invite: <code>${waitlistUserStd.inviteCode}</code>\n` : '') +
+        `IP: <code>${req.ip}</code>`,
       );
 
       res.json({
@@ -1415,10 +1420,18 @@ router.post('/confirm-vault', async (req, res) => {
       return;
     }
 
+    // Look up invite code from waitlist (cloud key for standard, device key for seeker)
+    const lookupKey = result.cloudKey || result.deviceKey;
+    const waitlistUser = await WaitlistUserModel.findOne({ publicKey: lookupKey }).lean();
+
     telegram.notifyAdmin(
       `🏦 New Squad created!\n\n` +
+      `Wallet: <code>${result.walletAddress?.slice(0, 6)}...${result.walletAddress?.slice(-4)}</code>\n` +
       `Vault: <code>${result.vaultAddress?.slice(0, 6)}...${result.vaultAddress?.slice(-4)}</code>\n` +
-      `Tx: <code>${txSignature.slice(0, 8)}...</code>`,
+      `Mode: ${result.mode}\n` +
+      `Platform: ${result.platform}\n` +
+      (waitlistUser?.inviteCode ? `Invite: <code>${waitlistUser.inviteCode}</code>\n` : '') +
+      `IP: <code>${req.ip}</code>`,
     );
 
     res.json({

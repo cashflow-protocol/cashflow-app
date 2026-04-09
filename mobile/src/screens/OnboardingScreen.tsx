@@ -95,8 +95,8 @@ const PAGES: PageData[] = [
   {
     key: 'yield',
     icon: <YieldIcon size={100} />,
-    title: 'Maximise Your Yield',
-    description: 'Earn yield across top DeFi protocols:\nJupiter Lend, Kamino, Drift, and more.\nYour assets work for you, 24/7.',
+    title: 'Your Wealth Manager',
+    description: 'Earn yield across top DeFi protocols,\nbuy gold, tokenized stocks, and more.\nYour assets work for you, 24/7.',
   },
   {
     key: 'non-custodial',
