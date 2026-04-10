@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Animated, TouchableOpacity, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
@@ -85,41 +85,43 @@ export default function Toast({
     type === 'error' ? '#DC3545' : type === 'warning' ? '#E67E22' : '#28A745';
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          paddingTop: insets.top + 8,
-          backgroundColor: bgColor,
-          transform: [{ translateY }],
-          opacity,
-        },
-      ]}
-    >
-      <TouchableOpacity
-        style={styles.content}
-        activeOpacity={0.8}
-        onPress={dismiss}
-      >
-        <WarningIcon />
-        <View style={styles.textContainer}>
-          <Text style={styles.message}>{message}</Text>
-          {description ? (
-            <Text style={styles.description}>{description}</Text>
-          ) : null}
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
+    <Modal visible transparent animationType="none" statusBarTranslucent>
+      <View style={styles.modalOverlay} pointerEvents="box-none">
+        <Animated.View
+          style={[
+            styles.container,
+            {
+              paddingTop: insets.top + 8,
+              backgroundColor: bgColor,
+              transform: [{ translateY }],
+              opacity,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.content}
+            activeOpacity={0.8}
+            onPress={dismiss}
+          >
+            <WarningIcon />
+            <View style={styles.textContainer}>
+              <Text style={styles.message}>{message}</Text>
+              {description ? (
+                <Text style={styles.description}>{description}</Text>
+              ) : null}
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+  },
   container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 9999,
     paddingBottom: 14,
     paddingHorizontal: 16,
   },

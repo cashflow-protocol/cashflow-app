@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",
-    "@heymike/send": "^0.1.5",
+    "@heymike/send": "^0.1.7",
     "@noble/ed25519": "^3.0.0",
     "@privy-io/expo": "^0.63.10",
     "@privy-io/expo-native-extensions": "^0.0.7",
