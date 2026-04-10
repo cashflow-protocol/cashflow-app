@@ -23,7 +23,7 @@ import {
   signWithCloud,
   signWithDevice,
 } from './keypairStorage';
-import { createCoverInstruction, createCoverFromSquadInstruction } from '@heymike/send';
+import { createCoverFromSquadInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
 import { IS_SOLANA_MOBILE, getVaultCreationFee, getAdminTxFeePayerPublicKey, ADMIN_COVER_TARGET } from '../config/constants';
 import { logError } from './analyticsService';
@@ -308,7 +308,7 @@ function buildVaultExecuteIx(
 
 
 /** Convert a @solana/kit Instruction to a web3.js TransactionInstruction. */
-function kitIxToWeb3(ix: ReturnType<typeof createCoverInstruction>): TransactionInstruction {
+function kitIxToWeb3(ix: Awaited<ReturnType<typeof createCoverFromSquadInstruction>>): TransactionInstruction {
   return new TransactionInstruction({
     programId: new PublicKey(ix.programAddress as string),
     keys: (ix.accounts ?? []).map((acc: any) => ({
@@ -416,17 +416,7 @@ export async function addGasCoverSpendingLimit(
     }));
   }
   tx2Instructions.push(jitoTipIx(feePayer));
-  if (ctx.seekerMode) {
-    tx2Instructions.push(
-      kitIxToWeb3(createCoverInstruction(
-        kitAddress(ctx.walletPubkey!.toBase58()),
-        kitAddress(ctx.walletPubkey!.toBase58()),
-        kitAddress(adminFeePayerPubkey.toBase58()),
-        ADMIN_COVER_TARGET,
-      )),
-    );
-  }
-  // Note: no spendingLimitUse here — this function *creates* the spending limit
+  // No cover here — this function *creates* the spending limit, so it can't use it yet
 
   const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx2Instructions }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
@@ -947,27 +937,17 @@ export async function addMember(
     }));
   }
   tx2Instructions.push(jitoTipIx(feePayer));
-  if (ctx.seekerMode) {
-    tx2Instructions.push(
-      kitIxToWeb3(createCoverInstruction(
-        kitAddress(ctx.walletPubkey!.toBase58()),
-        kitAddress(ctx.walletPubkey!.toBase58()),
-        kitAddress(adminFeePayerPubkey.toBase58()),
-        ADMIN_COVER_TARGET,
-      )),
-    );
-  } else {
-    const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
-    tx2Instructions.push(
-      kitIxToWeb3(await createCoverFromSquadInstruction(
-        kitAddress(ctx.cloudPubkey!.toBase58()),
-        kitAddress(multisigPda.toBase58()),
-        kitAddress(spendingLimitPda.toBase58()),
-        kitAddress(adminFeePayerPubkey.toBase58()),
-        ADMIN_COVER_TARGET,
-      )),
-    );
-  }
+  const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+  const coverMember = ctx.seekerMode ? ctx.walletPubkey! : ctx.cloudPubkey!;
+  tx2Instructions.push(
+    kitIxToWeb3(await createCoverFromSquadInstruction(
+      kitAddress(coverMember.toBase58()),
+      kitAddress(multisigPda.toBase58()),
+      kitAddress(spendingLimitPda.toBase58()),
+      kitAddress(adminFeePayerPubkey.toBase58()),
+      ADMIN_COVER_TARGET,
+    )),
+  );
 
   const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx2Instructions }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
@@ -1016,27 +996,17 @@ export async function removeMember(
     }));
   }
   tx2Instructions.push(jitoTipIx(feePayer));
-  if (ctx.seekerMode) {
-    tx2Instructions.push(
-      kitIxToWeb3(createCoverInstruction(
-        kitAddress(ctx.walletPubkey!.toBase58()),
-        kitAddress(ctx.walletPubkey!.toBase58()),
-        kitAddress(adminFeePayerPubkey.toBase58()),
-        ADMIN_COVER_TARGET,
-      )),
-    );
-  } else {
-    const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
-    tx2Instructions.push(
-      kitIxToWeb3(await createCoverFromSquadInstruction(
-        kitAddress(ctx.cloudPubkey!.toBase58()),
-        kitAddress(multisigPda.toBase58()),
-        kitAddress(spendingLimitPda.toBase58()),
-        kitAddress(adminFeePayerPubkey.toBase58()),
-        ADMIN_COVER_TARGET,
-      )),
-    );
-  }
+  const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+  const coverMember = ctx.seekerMode ? ctx.walletPubkey! : ctx.cloudPubkey!;
+  tx2Instructions.push(
+    kitIxToWeb3(await createCoverFromSquadInstruction(
+      kitAddress(coverMember.toBase58()),
+      kitAddress(multisigPda.toBase58()),
+      kitAddress(spendingLimitPda.toBase58()),
+      kitAddress(adminFeePayerPubkey.toBase58()),
+      ADMIN_COVER_TARGET,
+    )),
+  );
 
   const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx2Instructions }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
@@ -1217,30 +1187,18 @@ export async function executeVaultTransaction(
     );
   }
   tx4Instructions.push(jitoTipIx(feePayer));
-  if (seekerMode) {
-    // Seeker: MWA wallet reimburses admin via createCoverInstruction
-    // signer=MWA wallet, source=MWA wallet, destination=admin fee payer
-    tx4Instructions.push(
-      kitIxToWeb3(createCoverInstruction(
-        kitAddress(walletPubkey!.toBase58()),
-        kitAddress(walletPubkey!.toBase58()),
-        kitAddress(adminFeePayerPubkey.toBase58()),
-        ADMIN_COVER_TARGET,
-      )),
-    );
-  } else {
-    // Standard: use spending limit to transfer SOL from vault → admin
-    const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
-    tx4Instructions.push(
-      kitIxToWeb3(await createCoverFromSquadInstruction(
-        kitAddress(cloudPubkey!.toBase58()),
-        kitAddress(multisigPda.toBase58()),
-        kitAddress(spendingLimitPda.toBase58()),
-        kitAddress(adminFeePayerPubkey.toBase58()),
-        ADMIN_COVER_TARGET,
-      )),
-    );
-  }
+  // Reimburse admin gas from vault via spending limit
+  const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+  const coverMember = seekerMode ? walletPubkey! : cloudPubkey!;
+  tx4Instructions.push(
+    kitIxToWeb3(await createCoverFromSquadInstruction(
+      kitAddress(coverMember.toBase58()),
+      kitAddress(multisigPda.toBase58()),
+      kitAddress(spendingLimitPda.toBase58()),
+      kitAddress(adminFeePayerPubkey.toBase58()),
+      ADMIN_COVER_TARGET,
+    )),
+  );
 
   // --- Build all transactions with one blockhash (Jito bundle) ---
   const debugLines: string[] = [];
