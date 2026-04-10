@@ -224,7 +224,7 @@ router.post('/find-vault-by-address', async (req: Request, res: Response) => {
  */
 router.post('/build-proposal-tx', async (req: Request, res: Response) => {
   try {
-    const { multisigAddress, walletAddress, members, cloudKey, addMemberActions, newRentCollector } = req.body;
+    const { multisigAddress, walletAddress, members, cloudKey, addMemberActions } = req.body;
     if (!multisigAddress || !walletAddress || !addMemberActions?.length) {
       res.status(400).json({ success: false, error: 'Missing required fields' });
       return;
@@ -265,13 +265,7 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
       },
     }));
 
-    // Set new cloud key as rent collector if provided
-    if (newRentCollector) {
-      parsedActions.push({
-        __kind: 'SetRentCollector' as const,
-        newRentCollector: new PublicKey(newRentCollector),
-      });
-    }
+    // rentCollector is always vaultPda (set at creation) — no need to update during recovery
 
     // Build TX1 instructions
     const tx1Instructions = [
