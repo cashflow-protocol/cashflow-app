@@ -951,10 +951,10 @@ export async function addMember(
   const coverMember = ctx.seekerMode ? ctx.walletPubkey! : ctx.cloudPubkey!;
   tx2Instructions.push(
     kitIxToWeb3(await createCoverFromSquadInstruction(
+      kitAddress(adminFeePayerPubkey.toBase58()),
       kitAddress(coverMember.toBase58()),
       kitAddress(multisigPda.toBase58()),
       kitAddress(spendingLimitPda.toBase58()),
-      kitAddress(adminFeePayerPubkey.toBase58()),
       ADMIN_COVER_TARGET,
     )),
   );
@@ -1010,10 +1010,10 @@ export async function removeMember(
   const coverMember = ctx.seekerMode ? ctx.walletPubkey! : ctx.cloudPubkey!;
   tx2Instructions.push(
     kitIxToWeb3(await createCoverFromSquadInstruction(
+      kitAddress(adminFeePayerPubkey.toBase58()),
       kitAddress(coverMember.toBase58()),
       kitAddress(multisigPda.toBase58()),
       kitAddress(spendingLimitPda.toBase58()),
-      kitAddress(adminFeePayerPubkey.toBase58()),
       ADMIN_COVER_TARGET,
     )),
   );
@@ -1202,10 +1202,10 @@ export async function executeVaultTransaction(
   const coverMember = seekerMode ? walletPubkey! : cloudPubkey!;
   tx4Instructions.push(
     kitIxToWeb3(await createCoverFromSquadInstruction(
+      kitAddress(adminFeePayerPubkey.toBase58()),
       kitAddress(coverMember.toBase58()),
       kitAddress(multisigPda.toBase58()),
       kitAddress(spendingLimitPda.toBase58()),
-      kitAddress(adminFeePayerPubkey.toBase58()),
       ADMIN_COVER_TARGET,
     )),
   );
