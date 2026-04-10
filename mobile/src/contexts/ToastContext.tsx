@@ -12,10 +12,15 @@ interface ToastState {
 
 interface ToastContextValue {
   showToast: (message: string, description?: string, type?: ToastType) => void;
+  /** Internal — used by BottomSheet to render toast above its Modal */
+  _toastState: ToastState;
+  _dismissToast: () => void;
 }
 
 const ToastContext = createContext<ToastContextValue>({
   showToast: () => {},
+  _toastState: { visible: false, message: '', description: '', type: 'error' },
+  _dismissToast: () => {},
 });
 
 export function useToast() {
@@ -43,7 +48,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={{ showToast, _toastState: toast, _dismissToast: handleDismiss }}>
       {children}
       <Toast
         visible={toast.visible}
