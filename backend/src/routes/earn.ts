@@ -372,12 +372,13 @@ router.post('/deposit', async (req: Request, res: Response) => {
     const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
     console.log(`DEPOSIT walletAddress: ${walletAddress}, ownerAddress: ${authority}, type: ${type}, mint: ${mint}, symbol: ${tokenInfo?.symbol}, amount (raw): ${amount}, decimals: ${tokenInfo?.decimals}, vaultAddress: ${vaultAddress}, returnInstructions: ${!!returnInstructions}`)
 
-    // Validate minimum deposit amount
+    // Validate minimum deposit amount (use > to require strictly above minimum —
+    // Kamino rounds internally so exact-minimum deposits can fail on-chain)
     const earnToken = await EarnTokenModel.findOne({ type, mint, vaultAddress, status: 'active' }).lean();
-    if (earnToken?.minDepositAmount && earnToken.minDepositAmount !== '0' && BigInt(amount) < BigInt(earnToken.minDepositAmount)) {
+    if (earnToken?.minDepositAmount && earnToken.minDepositAmount !== '0' && BigInt(amount) <= BigInt(earnToken.minDepositAmount)) {
       const decimals = tokenInfo?.decimals ?? 0;
       const minUi = (Number(earnToken.minDepositAmount) / 10 ** decimals).toString();
-      res.status(400).json({ success: false, error: `Minimum deposit is ${minUi} ${tokenInfo?.symbol ?? ''}` });
+      res.status(400).json({ success: false, error: `Minimum deposit is more than ${minUi} ${tokenInfo?.symbol ?? ''}` });
       return;
     }
 
