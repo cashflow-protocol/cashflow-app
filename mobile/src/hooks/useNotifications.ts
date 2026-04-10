@@ -6,6 +6,8 @@ import { logError } from '../services/analyticsService';
 // Module-level cache — persists across tab switches
 let cachedNotifications: AppNotification[] | null = null;
 let cachedUnreadCount: number | null = null;
+let lastFetchTime = 0;
+const FETCH_COOLDOWN_MS = 15_000; // 15 seconds between fetches
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>(cachedNotifications ?? []);
@@ -13,9 +15,13 @@ export function useNotifications() {
   const [loading, setLoading] = useState(cachedNotifications === null);
   const [hasMore, setHasMore] = useState(false);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastFetchTime < FETCH_COOLDOWN_MS) return;
+
     setLoading(true);
     try {
+      lastFetchTime = now;
       const [historyRes, count] = await Promise.all([
         apiService.getNotificationHistory({ limit: 20 }),
         apiService.getUnreadNotificationCount(),
@@ -38,7 +44,7 @@ export function useNotifications() {
     fetchData();
   }, [fetchData]);
 
-  const refresh = useCallback(() => fetchData(), [fetchData]);
+  const refresh = useCallback(() => fetchData(true), [fetchData]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || notifications.length === 0) return;
