@@ -1241,8 +1241,9 @@ router.post('/create-vault', async (req, res) => {
       const { Period } = multisigLib.types;
 
       // Use the all-tx fee payer key for spending limit (must match cover instruction destination)
-      const { getAdminTxFeePayerPublicKey } = await import('../services/adminFeePayer');
+      const { getAdminTxFeePayerPublicKey, getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
       const adminFeePayerPubkey = getAdminTxFeePayerPublicKey();
+      const adminTxFeePayerKeypair = getAdminTxFeePayerKeypair();
 
       // Deterministic createKey for spending limit PDA (must match mobile logic)
       const spendingLimitHash = crypto.createHash('sha256')
@@ -1367,9 +1368,9 @@ router.post('/create-vault', async (req, res) => {
       }).compileToV0Message(luts);
       const tx3 = new VersionedTransaction(msg3);
 
-      // Admin signs TX2 and TX3 (fee payer + rent payer)
-      tx2.sign([adminKeypair]);
-      tx3.sign([adminKeypair]);
+      // Admin tx fee payer signs TX2 and TX3 (fee payer + rent payer)
+      tx2.sign([adminTxFeePayerKeypair]);
+      tx3.sign([adminTxFeePayerKeypair]);
 
       const serializedTxs = [
         Buffer.from(tx.serialize()).toString('base64'),
