@@ -1240,7 +1240,9 @@ router.post('/create-vault', async (req, res) => {
       const { ADMIN_COVER_TARGET, GAS_COVER_SPENDING_LIMIT_SEED, JITO_TIP_LAMPORTS, JITO_TIP_ACCOUNTS } = await import('../constants/vault');
       const { Period } = multisigLib.types;
 
-      const adminFeePayerPubkey = adminKeypair.publicKey;
+      // Use the all-tx fee payer key for spending limit (must match cover instruction destination)
+      const { getAdminTxFeePayerPublicKey } = await import('../services/adminFeePayer');
+      const adminFeePayerPubkey = getAdminTxFeePayerPublicKey();
 
       // Deterministic createKey for spending limit PDA (must match mobile logic)
       const spendingLimitHash = crypto.createHash('sha256')
