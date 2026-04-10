@@ -29,8 +29,8 @@ import { backupCloudKeyToBlockStore } from '../services/keypairStorage';
 import { IS_SOLANA_MOBILE } from '../config/constants';
 import apiService from '../services/apiService';
 import walletService from '../services/walletService';
-import Toast from '../components/Toast';
 import BottomSheet from '../components/BottomSheet';
+import { useToast } from '../contexts/ToastContext';
 import { useLoginWithEmail, useEmbeddedSolanaWallet, usePrivy } from '@privy-io/expo';
 import { VersionedTransaction } from '@solana/web3.js';
 
@@ -126,6 +126,7 @@ export default function VaultRecoveryExecutionScreen({
   onBack,
 }: VaultRecoveryExecutionScreenProps) {
   const { colors } = useTheme();
+  const { showToast: showToastCtx } = useToast();
   const [step, setStep] = useState<ExecutionStep>('building');
   const [statusText, setStatusText] = useState('Preparing recovery...');
   const [proposalId, setProposalId] = useState<string | null>(null);
@@ -140,9 +141,6 @@ export default function VaultRecoveryExecutionScreen({
   }>>([]);
   const [signaturesCollected, setSignaturesCollected] = useState(0);
   const [threshold, setThreshold] = useState(0);
-  const [toastVisible, setToastVisible] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastType, setToastType] = useState<'success' | 'warning'>('warning');
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -193,10 +191,8 @@ export default function VaultRecoveryExecutionScreen({
   }, [proposalId]);
 
   const showToast = useCallback((msg: string, type: 'success' | 'warning' = 'warning') => {
-    setToastMessage(msg);
-    setToastType(type);
-    setToastVisible(true);
-  }, []);
+    showToastCtx(type === 'success' ? 'Success' : 'Error', msg, type);
+  }, [showToastCtx]);
 
   const startPolling = useCallback((id: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -490,13 +486,6 @@ export default function VaultRecoveryExecutionScreen({
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      <Toast
-        visible={toastVisible}
-        message={toastMessage}
-        type={toastType}
-        onDismiss={() => setToastVisible(false)}
-      />
-
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <TouchableOpacity
           style={styles.backButton}

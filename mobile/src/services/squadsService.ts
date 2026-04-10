@@ -880,6 +880,16 @@ export async function addMember(
 ): Promise<{ signature: string }> {
   const multisigPda = new PublicKey(multisigAddress);
   const newMemberPubkey = new PublicKey(newMemberAddress);
+
+  // Ensure vault has enough SOL to cover gas reimbursement
+  const minRequired = 0.01;
+  const vaultBalance = await getVaultBalance(multisigAddress);
+  if (vaultBalance < minRequired) {
+    throw new Error(
+      `Insufficient vault balance to cover transaction fees. You need at least ${minRequired} SOL in your vault (current: ${vaultBalance.toFixed(4)} SOL). Please deposit SOL and try again.`,
+    );
+  }
+
   const ctx = await getSigningContext('squads_add_member');
   const creator = ctx.primaryKey;
   const adminFeePayerPubkey = new PublicKey(getAdminTxFeePayerPublicKey());

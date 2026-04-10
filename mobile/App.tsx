@@ -37,7 +37,7 @@ import { PrivyProvider } from '@privy-io/expo';
 import { PRIVY_CONFIG } from './src/config/api';
 import { initializePushNotifications, initializeWaitlistPushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
 import { initializeRealtimeNotifications, stopRealtimeNotifications } from './src/services/realtimeNotificationService';
-import Toast from './src/components/Toast';
+import { ToastProvider, useToast } from './src/contexts/ToastContext';
 import { invalidateAssets } from './src/hooks/useAssets';
 import { invalidateEarnTokens } from './src/hooks/useEarnTokens';
 import {
@@ -68,9 +68,7 @@ function App() {
   const [pendingPin, setPendingPin] = useState<string | null>(null);
   const backgroundedAt = useRef<number | null>(null);
   const recentNotifs = useRef(new Set<string>());
-  const [toastVisible, setToastVisible] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastDescription, setToastDescription] = useState('');
+  const { showToast } = useToast();
   const [gmsBlocked, setGmsBlocked] = useState(false);
 
   useEffect(() => {
@@ -145,9 +143,7 @@ function App() {
     setTimeout(() => recentNotifs.current.delete(dedupeKey), 5000);
 
     logPushNotificationReceived(title);
-    setToastMessage(title);
-    setToastDescription(body);
-    setToastVisible(true);
+    showToast(title, body, 'success');
 
     const type = data?.type;
     if (type === 'transfer_in' || type === 'transfer_out') {
@@ -156,7 +152,7 @@ function App() {
       invalidateAssets();
       invalidateEarnTokens();
     }
-  }, []);
+  }, [showToast]);
 
   // Set up foreground push notification handler
   useEffect(() => {
@@ -431,13 +427,6 @@ function App() {
             <View style={styles.root}>
               {renderScreen()}
               <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
-              <Toast
-                visible={toastVisible}
-                message={toastMessage}
-                description={toastDescription}
-                type="success"
-                onDismiss={() => setToastVisible(false)}
-              />
             </View>
           </WalletProvider>
         </SafeAreaProvider>
@@ -452,4 +441,14 @@ const styles = StyleSheet.create({
   },
 });
 
-export default App;
+function AppWithProviders() {
+  return (
+    <SafeAreaProvider>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </SafeAreaProvider>
+  );
+}
+
+export default AppWithProviders;

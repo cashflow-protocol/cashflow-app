@@ -8,7 +8,6 @@ import {
   ScrollView,
   RefreshControl,
   Linking,
-  Alert,
   AppState,
   Modal,
 } from 'react-native';
@@ -35,6 +34,7 @@ import VerifyActionSheet from '../components/VerifyActionSheet';
 import UploadScreenshotSheet from '../components/UploadScreenshotSheet';
 import { logScreenView, logWaitlistTaskPress, logWaitlistApproved, logOnboardingHaveInviteCode, logError, logXOauthStart, logXOauthWebViewClose, logXOauthError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 
 function getCountdown(): string {
   const now = new Date();
@@ -60,6 +60,7 @@ interface WaitlistDashboardScreenProps {
 
 export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInviteCode }: WaitlistDashboardScreenProps) {
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const { connect: connectWallet } = useWallet();
   const [gradientHeight, setGradientHeight] = useState(255);
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -188,7 +189,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
             const msg = err?.message || '';
             if (!msg.includes('CancellationException')) {
               logError('waitlist_connect_wallet', msg);
-              Alert.alert('Error', msg || 'Failed to connect wallet.');
+              showToast('Error', msg || 'Failed to connect wallet.');
             }
           }
           break;
@@ -200,7 +201,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
           const xResult = await startConnectX(publicKey);
           if (!xResult?.authUrl) {
             logXOauthError('auth_url_missing');
-            Alert.alert('Not Available', 'Twitter integration is not configured yet.');
+            showToast('Not Available', 'Twitter integration is not configured yet.', 'warning');
             break;
           }
           logXOauthStart(config.xOauthMode === 'webview' ? 'webview' : 'browser');
@@ -216,7 +217,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
           if (dResult?.authUrl) {
             Linking.openURL(dResult.authUrl);
           } else {
-            Alert.alert('Not Available', 'Discord integration is not configured yet.');
+            showToast('Not Available', 'Discord integration is not configured yet.', 'warning');
           }
           break;
         }
@@ -227,7 +228,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
             setTelegramBotUrl(tResult.botUrl);
             setTelegramSheetVisible(true);
           } else {
-            Alert.alert('Not Available', 'Telegram integration is not configured yet.');
+            showToast('Not Available', 'Telegram integration is not configured yet.', 'warning');
           }
           break;
         }

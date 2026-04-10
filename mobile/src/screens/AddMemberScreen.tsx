@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -16,6 +15,7 @@ import { addMember } from '../services/squadsService';
 import { getVault } from '../services/vaultStorage';
 import { logScreenView, logError, logAddMemberSubmit, logAddMemberSuccess, logAddMemberError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 
 
 interface AddMemberScreenProps {
@@ -33,6 +33,7 @@ const PERMISSION_OPTIONS: Array<{ value: PermissionType; label: string; descript
 
 export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenProps) {
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const [memberAddress, setMemberAddress] = useState('');
   const [permissionType, setPermissionType] = useState<PermissionType>('all');
   const [submitting, setSubmitting] = useState(false);
@@ -42,13 +43,13 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
 
   const handleAddMember = async () => {
     if (!memberAddress.trim()) {
-      Alert.alert('Error', 'Please enter a wallet address');
+      showToast('Error', 'Please enter a wallet address');
       return;
     }
 
     // Basic validation: Solana addresses are 32-44 chars base58
     if (memberAddress.trim().length < 32 || memberAddress.trim().length > 44) {
-      Alert.alert('Error', 'Invalid Solana wallet address');
+      showToast('Error', 'Invalid Solana wallet address');
       return;
     }
 
@@ -57,7 +58,7 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
     try {
       const vaultData = await getVault();
       if (!vaultData) {
-        Alert.alert('Error', 'No vault found. Please create a vault first.');
+        showToast('Error', 'No vault found. Please create a vault first.');
         return;
       }
 
@@ -69,16 +70,13 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
       );
 
       logAddMemberSuccess();
-      Alert.alert(
-        'Member Added',
-        `Successfully added ${memberAddress.trim().slice(0, 8)}... to your vault.`,
-        [{ text: 'OK', onPress: () => onNavigate('squads') }],
-      );
+      showToast('Member Added', `Successfully added ${memberAddress.trim().slice(0, 8)}... to your vault.`, 'success');
+      onNavigate('squads');
     } catch (err: any) {
       logAddMemberError(err?.message || 'unknown');
       logError('add_member', err?.message || 'unknown');
       console.error('Failed to add member:', err);
-      Alert.alert('Error', err?.message || 'Failed to add member. Please try again.');
+      showToast('Error', err?.message || 'Failed to add member. Please try again.');
     } finally {
       setSubmitting(false);
       setStep('');

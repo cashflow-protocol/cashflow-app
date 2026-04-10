@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -22,6 +21,7 @@ import {
   logAddRecoveryKeyError,
 } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 
 interface AddRecoveryKeyScreenProps {
   onNavigate: (screen: string) => void;
@@ -32,6 +32,7 @@ type RecoveryMethod = 'crypto_wallet' | 'email';
 
 export default function AddRecoveryKeyScreen({ onNavigate, onBack }: AddRecoveryKeyScreenProps) {
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const [method, setMethod] = useState<RecoveryMethod>('crypto_wallet');
   const [walletAddress, setWalletAddress] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -41,12 +42,12 @@ export default function AddRecoveryKeyScreen({ onNavigate, onBack }: AddRecovery
 
   const handleAddCryptoWallet = async () => {
     if (!walletAddress.trim()) {
-      Alert.alert('Error', 'Please enter a wallet address');
+      showToast('Error', 'Please enter a wallet address');
       return;
     }
 
     if (walletAddress.trim().length < 32 || walletAddress.trim().length > 44) {
-      Alert.alert('Error', 'Invalid Solana wallet address');
+      showToast('Error', 'Invalid Solana wallet address');
       return;
     }
 
@@ -55,7 +56,7 @@ export default function AddRecoveryKeyScreen({ onNavigate, onBack }: AddRecovery
     try {
       const vaultData = await getVault();
       if (!vaultData) {
-        Alert.alert('Error', 'No vault found. Please create a vault first.');
+        showToast('Error', 'No vault found. Please create a vault first.');
         return;
       }
 
@@ -67,15 +68,12 @@ export default function AddRecoveryKeyScreen({ onNavigate, onBack }: AddRecovery
       );
 
       logAddRecoveryKeySuccess();
-      Alert.alert(
-        'Recovery Key Added',
-        `Successfully added ${walletAddress.trim().slice(0, 8)}... as a recovery key.`,
-        [{ text: 'OK', onPress: () => onNavigate('keys-recovery') }],
-      );
+      showToast('Recovery Key Added', `Successfully added ${walletAddress.trim().slice(0, 8)}... as a recovery key.`, 'success');
+      onNavigate('keys-recovery');
     } catch (err: any) {
       logAddRecoveryKeyError(err?.message || 'unknown');
       console.error('Failed to add recovery key:', err);
-      Alert.alert('Error', err?.message || 'Failed to add recovery key. Please try again.');
+      showToast('Error', err?.message || 'Failed to add recovery key. Please try again.');
     } finally {
       setSubmitting(false);
       setStep('');

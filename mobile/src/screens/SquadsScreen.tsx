@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Clipboard,
-  Alert,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +22,7 @@ import { useWallet } from '../hooks/useWallet';
 import type { VaultData } from '../services/vaultStorage';
 import { logScreenView, logSquadsCreateVaultPress, logSquadsCreateVaultSuccess, logSquadsCreateVaultError, logSquadsCopyAddress, logSquadsAddMemberPress } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 
 const squadAvatar = require('../assets/squad-avatar.webp');
 
@@ -38,6 +38,7 @@ function truncateAddress(addr: string): string {
 
 export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) {
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const { wallet } = useWallet();
   const walletAddress = wallet?.publicKey as string | undefined;
   const [vaultData, setVaultData] = useState<VaultData | null>(null);
@@ -112,7 +113,7 @@ export default function SquadsScreen({ onNavigate, onBack }: SquadsScreenProps) 
     } catch (err: any) {
       logSquadsCreateVaultError(err?.message || 'unknown');
       console.error('Failed to create vault:', err);
-      Alert.alert('Error', err?.message || 'Failed to create vault. Please try again.');
+      showToast('Error', err?.message || 'Failed to create vault. Please try again.');
     } finally {
       setCreating(false);
     }
