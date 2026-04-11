@@ -15,7 +15,7 @@ let _adminTxFeePayerPublicKey: string | null = null;
 /** Target balance for admin tx fee payer after cover (0.05 SOL) */
 export const ADMIN_COVER_TARGET = 50_000_000;
 
-export const SQUAD_SPENDING_LIMIT = 1_000_000_000;
+export const SQUAD_SPENDING_LIMIT = 250_000_000;
 
 /** SOL reserve held back when user taps MAX on send (0.01 SOL) */
 export const SEND_MAX_RESERVE = 10_000_000;

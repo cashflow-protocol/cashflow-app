@@ -444,6 +444,191 @@ export async function ensureGasCoverSpendingLimit(multisigAddress: string): Prom
   await addGasCoverSpendingLimit(multisigAddress);
 }
 
+export interface SpendingLimitInfo {
+  exists: boolean;
+  /** Configured limit in lamports */
+  amount: number;
+  /** Remaining amount in lamports (resets each period) */
+  remainingAmount: number;
+  /** Period enum value (0=OneTime, 1=Day, 2=Week, 3=Month) */
+  period: number;
+}
+
+/**
+ * Fetch the gas cover spending limit account for a multisig.
+ * Returns current amount, remaining amount, and period.
+ */
+export async function getSpendingLimitInfo(multisigAddress: string): Promise<SpendingLimitInfo> {
+  const multisigPda = new PublicKey(multisigAddress);
+  const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+
+  try {
+    const sl = await multisig.accounts.SpendingLimit.fromAccountAddress(connection, spendingLimitPda);
+    return {
+      exists: true,
+      amount: Number(sl.amount),
+      remainingAmount: Number(sl.remainingAmount),
+      period: sl.period,
+    };
+  } catch {
+    return { exists: false, amount: 0, remainingAmount: 0, period: 1 };
+  }
+}
+
+/**
+ * Update the gas cover spending limit by removing the old one and adding a new one.
+ * Squads V4 has no "edit" instruction — must remove + re-add via two config transactions.
+ */
+export async function updateSpendingLimit(
+  multisigAddress: string,
+  newAmountLamports: number,
+): Promise<{ signature: string }> {
+  const multisigPda = new PublicKey(multisigAddress);
+  const ctx = await getSigningContext('squads_update_spending_limit');
+  const creator = ctx.primaryKey;
+  const adminFeePayerPubkey = new PublicKey(getAdminTxFeePayerPublicKey());
+  const feePayer = adminFeePayerPubkey;
+
+  const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
+  const baseTxIndex = BigInt(multisigAccount.transactionIndex.toString()) + 1n;
+
+  const createKey = getGasCoverSpendingLimitCreateKey(multisigPda);
+  const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+  const luts = await getLuts(connection);
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+  const { Period } = multisig.types;
+
+  const removeTxIndex = baseTxIndex;
+  const addTxIndex = baseTxIndex + 1n;
+
+  const spendingLimitMembers = ctx.seekerMode
+    ? [ctx.walletPubkey!]
+    : ctx.cloudPubkey ? [ctx.cloudPubkey] : [];
+
+  // ── TX1: Create remove config tx + proposal + approve ──
+  const tx1Ixs: TransactionInstruction[] = [
+    multisig.instructions.configTransactionCreate({
+      multisigPda,
+      transactionIndex: removeTxIndex,
+      creator,
+      rentPayer: feePayer,
+      actions: [{
+        __kind: 'RemoveSpendingLimit' as const,
+        spendingLimit: spendingLimitPda,
+      }],
+    }),
+    multisig.instructions.proposalCreate({ multisigPda, transactionIndex: removeTxIndex, creator, rentPayer: feePayer }),
+    ...buildApprovalIxs(ctx, multisigPda, removeTxIndex),
+  ];
+  const tx1 = new VersionedTransaction(
+    new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx1Ixs }).compileToV0Message(luts),
+  );
+
+  // ── TX2: Execute remove ──
+  const tx2Ixs: TransactionInstruction[] = [
+    multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex: removeTxIndex, member: creator, rentPayer: feePayer, spendingLimits: [spendingLimitPda] }),
+  ];
+  const tx2 = new VersionedTransaction(
+    new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx2Ixs }).compileToV0Message(luts),
+  );
+
+  // ── TX3: Create add config tx + proposal + approve ──
+  const tx3Ixs: TransactionInstruction[] = [
+    multisig.instructions.configTransactionCreate({
+      multisigPda,
+      transactionIndex: addTxIndex,
+      creator,
+      rentPayer: feePayer,
+      actions: [{
+        __kind: 'AddSpendingLimit' as const,
+        createKey,
+        vaultIndex: 0,
+        mint: PublicKey.default,
+        amount: newAmountLamports,
+        period: Period.Day,
+        members: spendingLimitMembers,
+        destinations: [adminFeePayerPubkey],
+      }],
+    }),
+    multisig.instructions.proposalCreate({ multisigPda, transactionIndex: addTxIndex, creator, rentPayer: feePayer }),
+    ...buildApprovalIxs(ctx, multisigPda, addTxIndex),
+  ];
+  const tx3 = new VersionedTransaction(
+    new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx3Ixs }).compileToV0Message(luts),
+  );
+
+  // ── TX4: Execute add + close + cover + Jito tip ──
+  const coverMember = ctx.seekerMode ? ctx.walletPubkey! : ctx.cloudPubkey!;
+  const tx4Ixs: TransactionInstruction[] = [
+    multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex: addTxIndex, member: creator, rentPayer: feePayer, spendingLimits: [spendingLimitPda] }),
+  ];
+  if (multisigAccount.rentCollector) {
+    tx4Ixs.push(multisig.instructions.configTransactionAccountsClose({
+      multisigPda, transactionIndex: removeTxIndex, rentCollector: new PublicKey(multisigAccount.rentCollector),
+    }));
+    tx4Ixs.push(multisig.instructions.configTransactionAccountsClose({
+      multisigPda, transactionIndex: addTxIndex, rentCollector: new PublicKey(multisigAccount.rentCollector),
+    }));
+  }
+  tx4Ixs.push(jitoTipIx(feePayer));
+  // Reimburse admin gas from vault via the newly created spending limit
+  tx4Ixs.push(
+    kitIxToWeb3(await createCoverFromSquadInstruction(
+      kitAddress(adminFeePayerPubkey.toBase58()),
+      kitAddress(coverMember.toBase58()),
+      kitAddress(multisigPda.toBase58()),
+      kitAddress(spendingLimitPda.toBase58()),
+      ADMIN_COVER_TARGET,
+    )),
+  );
+  const tx4 = new VersionedTransaction(
+    new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx4Ixs }).compileToV0Message(luts),
+  );
+
+  // ── Sign all 4 txs in one session, send as single Jito bundle ──
+  if (ctx.seekerMode) {
+    const serialized = [tx1, tx2, tx3, tx4].map(tx => new Uint8Array(tx.serialize()));
+    const signedBytes = await walletService.signTransactions(serialized);
+
+    const signed = signedBytes.map((b: Uint8Array) => VersionedTransaction.deserialize(b));
+    // TX1 and TX3 need device co-signature (propose+approve txs)
+    for (const tx of [signed[0], signed[2]]) {
+      await signTransactionNatively(tx, [
+        { pubkey: ctx.devicePubkey, signFn: signWithDevice },
+      ]);
+    }
+
+    const bundle = signed.map((tx: VersionedTransaction) => Buffer.from(tx.serialize()).toString('base64'));
+    await apiService.sendBundle(bundle);
+    const signature = bs58.encode(signed[3].signatures[0]);
+    console.log('[updateSpendingLimit] done, signature:', signature);
+    return { signature };
+  } else {
+    // TX1 + TX3: cloud + device sign (propose+approve txs)
+    for (const tx of [tx1, tx3]) {
+      await signTransactionNatively(tx, [
+        { pubkey: ctx.cloudPubkey!, signFn: signWithCloud },
+        { pubkey: ctx.devicePubkey, signFn: signWithDevice },
+      ]);
+    }
+    // TX2 + TX4: cloud signs (execute txs)
+    for (const tx of [tx2, tx4]) {
+      await signTransactionNatively(tx, [
+        { pubkey: ctx.cloudPubkey!, signFn: signWithCloud },
+      ]);
+    }
+    if (IS_SOLANA_MOBILE && ctx.walletPubkey) {
+      await signTransactionsWithWallet([tx1, tx2, tx3, tx4], [0, 2], ctx.walletPubkey);
+    }
+  }
+
+  const bundle = [tx1, tx2, tx3, tx4].map(tx => Buffer.from(tx.serialize()).toString('base64'));
+  await apiService.sendBundle(bundle);
+  const signature = bs58.encode(tx4.signatures[0]);
+  console.log('[updateSpendingLimit] done, signature:', signature);
+  return { signature };
+}
+
 /**
  * Sign a VersionedTransaction using the native signing module.
  * Finds the signature slots for the given public keys and writes

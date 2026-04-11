@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
-import { KeyRound, Lock, Recycle, Trash2, DatabaseZap, ShieldOff, MessageCircle } from 'lucide-react-native';
+import { KeyRound, Lock, Recycle, Trash2, DatabaseZap, ShieldOff, MessageCircle, Gauge } from 'lucide-react-native';
 import { getVault, clearVault, type VaultData } from '../services/vaultStorage';
 import { getDevicePublicKey, deleteAllKeypairs, deleteDeviceKeypair } from '../services/keypairStorage';
 import { reclaimRent } from '../services/squadsService';
@@ -165,6 +165,24 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
               <View style={styles.menuInfo}>
                 <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Keys & Recovery</Text>
                 <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>Manage signing keys and backup</Text>
+              </View>
+              <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>{'>'}</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Spending Limits */}
+          {vault && (
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}
+              onPress={() => { logMoreNavigate('spending-limits'); onNavigate?.('spending-limits'); }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.menuIconCircle, { backgroundColor: '#E67E22' }]}>
+                <Gauge size={22} color="#fff" />
+              </View>
+              <View style={styles.menuInfo}>
+                <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Spending Limits</Text>
+                <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>Manage vault transaction fee allowance</Text>
               </View>
               <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>{'>'}</Text>
             </TouchableOpacity>

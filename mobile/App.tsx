@@ -22,6 +22,7 @@ import AddMemberScreen from './src/screens/AddMemberScreen';
 import KeysRecoveryScreen from './src/screens/KeysRecoveryScreen';
 import AddRecoveryKeyScreen from './src/screens/AddRecoveryKeyScreen';
 import ChangePinScreen from './src/screens/ChangePinScreen';
+import SpendingLimitsScreen from './src/screens/SpendingLimitsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import VaultRecoveryScreen from './src/screens/VaultRecoveryScreen';
 import BiometricLockScreen from './src/components/BiometricLockScreen';
@@ -52,7 +53,7 @@ import {
 
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | 'keys-recovery' | 'add-recovery-key' | null;
+type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | 'keys-recovery' | 'add-recovery-key' | 'spending-limits' | null;
 type OnboardingStep = 'carousel' | 'invite-code' | 'pin-setup' | 'vault-setup' | 'waitlist' | 'vault-recovery' | null;
 
 function App() {
@@ -239,6 +240,8 @@ function App() {
           return <SquadsScreen onNavigate={handleNavigate} onBack={handleBack} />;
         case 'add-member':
           return <AddMemberScreen onNavigate={handleNavigate} onBack={handleBack} />;
+        case 'spending-limits':
+          return <SpendingLimitsScreen onNavigate={handleNavigate} onBack={handleBack} />;
         case 'change-pin':
           // Handled as full-screen overlay below
           break;
