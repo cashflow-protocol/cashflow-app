@@ -121,20 +121,29 @@ export async function updateCostBasisOnConfirm(transactionId: string): Promise<v
 
   if (!vaultAddress) return;
 
+  // Fields are stored as strings (BigInt-safe), so use read-modify-write instead of $inc
+  const costBasis = await UserCostBasisModel.findOne({ vaultAddress, mint }).lean();
+
   if (action === TransactionAction.DEPOSIT) {
+    const prev = BigInt(costBasis?.totalDeposited ?? '0');
+    const newVal = (prev + BigInt(amount)).toString();
     await UserCostBasisModel.findOneAndUpdate(
       { vaultAddress, mint },
-      { $inc: { totalDeposited: Number(amount) } },
+      { $set: { totalDeposited: newVal } },
       { upsert: true },
     );
   } else if (action === TransactionAction.WITHDRAW) {
-    const incFields: Record<string, number> = { totalWithdrawn: Number(amount) };
+    const prevWithdrawn = BigInt(costBasis?.totalWithdrawn ?? '0');
+    const setFields: Record<string, string> = {
+      totalWithdrawn: (prevWithdrawn + BigInt(amount)).toString(),
+    };
     if (feeAmount) {
-      incFields.totalFeesCollected = Number(feeAmount);
+      const prevFees = BigInt(costBasis?.totalFeesCollected ?? '0');
+      setFields.totalFeesCollected = (prevFees + BigInt(feeAmount)).toString();
     }
     await UserCostBasisModel.findOneAndUpdate(
       { vaultAddress, mint },
-      { $inc: incFields },
+      { $set: setFields },
       { upsert: true },
     );
 
