@@ -258,6 +258,20 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
     }
 
 
+    // Extract real transaction IDs (first signature of each fully-signed tx) and
+    // store them BEFORE sending to Jito, so the Helius webhook can match them
+    // as soon as the bundle lands on-chain — no race condition.
+    if (transactionId) {
+      const { VersionedTransaction: VTx } = await import('@solana/web3.js');
+      const { default: bs58 } = await import('bs58');
+      const txSignatures = transactions.map((txBase64: string) => {
+        const tx = VTx.deserialize(Buffer.from(txBase64, 'base64'));
+        return bs58.encode(tx.signatures[0]);
+      });
+      await dbManager.submitBundleTransaction(transactionId, txSignatures);
+      console.log(`Bundle signatures pre-stored for ${transactionId}: ${txSignatures.map((s: string) => s.slice(0, 8)).join(', ')}`);
+    }
+
     // Send bundle via Jito
     const bundleId = await jitoManager.sendBundle(transactions);
     console.log(`Jito bundle sent: ${bundleId} (${transactions.length} txs)`);
@@ -284,18 +298,12 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
       return;
     }
 
-    // Store real Jito signatures on the transaction record before responding
-    const realSignatures = status?.transactions ?? [];
-    if (transactionId && realSignatures.length > 0) {
-      await dbManager.submitBundleTransaction(transactionId, realSignatures);
-    }
-
     res.json({
       success: true,
       bundleId,
       status: status?.confirmation_status ?? 'pending',
       slot: status?.slot ?? null,
-      transactions: realSignatures,
+      transactions: status?.transactions ?? [],
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
