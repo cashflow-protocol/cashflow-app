@@ -124,13 +124,13 @@ export async function updateCostBasisOnConfirm(transactionId: string): Promise<v
   if (action === TransactionAction.DEPOSIT) {
     await UserCostBasisModel.findOneAndUpdate(
       { vaultAddress, mint },
-      { $inc: { totalDeposited: amount } },
+      { $inc: { totalDeposited: Number(amount) } },
       { upsert: true },
     );
   } else if (action === TransactionAction.WITHDRAW) {
-    const incFields: Record<string, string> = { totalWithdrawn: amount };
+    const incFields: Record<string, number> = { totalWithdrawn: Number(amount) };
     if (feeAmount) {
-      incFields.totalFeesCollected = feeAmount;
+      incFields.totalFeesCollected = Number(feeAmount);
     }
     await UserCostBasisModel.findOneAndUpdate(
       { vaultAddress, mint },
