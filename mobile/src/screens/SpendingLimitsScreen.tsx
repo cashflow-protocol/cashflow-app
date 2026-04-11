@@ -70,7 +70,7 @@ export default function SpendingLimitsScreen({ onNavigate, onBack }: SpendingLim
       const vault = await getVault();
       if (!vault) throw new Error('No vault found');
       await updateSpendingLimit(vault.multisigAddress, selectedAmount);
-      showToast('Spending limit updated', 'success');
+      showToast('Spending limit updated', undefined, 'success');
       setSheetVisible(false);
       setSelectedAmount(null);
       setLoading(true);
