@@ -263,10 +263,11 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
     // as soon as the bundle lands on-chain — no race condition.
     if (transactionId) {
       const { VersionedTransaction: VTx } = await import('@solana/web3.js');
-      const { default: bs58 } = await import('bs58');
+      const { getBase58Decoder } = await import('@solana/kit');
+      const b58 = getBase58Decoder();
       const txSignatures = transactions.map((txBase64: string) => {
         const tx = VTx.deserialize(Buffer.from(txBase64, 'base64'));
-        return bs58.encode(tx.signatures[0]);
+        return b58.decode(tx.signatures[0]);
       });
       await dbManager.submitBundleTransaction(transactionId, txSignatures);
       console.log(`Bundle signatures pre-stored for ${transactionId}: ${txSignatures.map((s: string) => s.slice(0, 8)).join(', ')}`);
