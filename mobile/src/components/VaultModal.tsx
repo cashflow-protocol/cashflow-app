@@ -236,13 +236,9 @@ export default function VaultModal({
           vaultData.multisigAddress,
           res.instructions,
           res.extraLookupTables,
+          res.transactionId,
         );
         signature = result.signature;
-
-        // Submit bundle signatures so backend can match Helius webhook notifications
-        apiService.submitBundleSignatures(res.transactionId, result.bundleSignatures).catch((err) => {
-          console.error('Failed to submit bundle signatures:', err);
-        });
       } else {
         // Legacy flow: get full unsigned transaction, sign with MWA
         const params = {

@@ -1220,6 +1220,7 @@ export async function executeVaultTransaction(
   multisigAddress: string,
   instructions: Array<{ programId: string; accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; data: string }>,
   extraLookupTables?: string[],
+  transactionId?: string,
 ): Promise<{ signature: string; bundleSignatures: string[] }> {
   const multisigPda = new PublicKey(multisigAddress);
   const vaultData = await getVault();
@@ -1491,7 +1492,7 @@ export async function executeVaultTransaction(
       console.log(`[VaultTx] sizes: TX1=${tx1Base64.length}, TX2=${tx2Base64.length}, TX3=${tx3Base64.length}, TX4=${tx4Base64.length}`);
 
       console.log('[VaultTx] sending bundle...');
-      const bundleResult = await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64]);
+      const bundleResult = await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64], transactionId);
       console.log(`[VaultTx] bundle result: id=${bundleResult.bundleId}, status=${bundleResult.status}`);
 
       // Use real transaction signatures from Jito (local tx.signatures[0] may be zeros)
@@ -1537,7 +1538,7 @@ export async function executeVaultTransaction(
     console.log(`[VaultTx] sizes: TX1=${tx1Base64.length}, TX2=${tx2Base64.length}, TX3=${tx3Base64.length}, TX4=${tx4Base64.length}`);
 
     console.log('[VaultTx] sending bundle...');
-    const bundleResult = await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64]);
+    const bundleResult = await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64], transactionId);
     console.log(`[VaultTx] bundle result: id=${bundleResult.bundleId}, status=${bundleResult.status}`);
 
     // Use real transaction signatures from Jito (local tx.signatures[0] may be zeros)

@@ -131,7 +131,7 @@ router.post('/send', async (req: Request, res: Response) => {
 // If admin tx fee payer pubkey is a required signer, auto-signs with the admin key.
 router.post('/send-bundle', async (req: Request, res: Response) => {
   try {
-    let { transactions } = req.body;
+    let { transactions, transactionId } = req.body;
 
     if (!Array.isArray(transactions) || transactions.length === 0 || transactions.length > 5) {
       res.status(400).json({
@@ -261,12 +261,18 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
       return;
     }
 
+    // Store real Jito signatures on the transaction record before responding
+    const realSignatures = status?.transactions ?? [];
+    if (transactionId && realSignatures.length > 0) {
+      await dbManager.submitBundleTransaction(transactionId, realSignatures);
+    }
+
     res.json({
       success: true,
       bundleId,
       status: status?.confirmation_status ?? 'pending',
       slot: status?.slot ?? null,
-      transactions: status?.transactions ?? [],
+      transactions: realSignatures,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

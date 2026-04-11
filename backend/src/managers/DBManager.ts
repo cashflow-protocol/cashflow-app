@@ -155,18 +155,6 @@ export class DBManager {
   }
 
   /**
-   * Find the most recent CREATED transaction for a wallet address.
-   * Used as a fallback when the Helius webhook arrives before bundle signatures are stored.
-   */
-  async findRecentCreatedTransaction(walletAddress: string) {
-    return TransactionModel.findOne({
-      walletAddress,
-      status: TransactionStatus.CREATED,
-      action: { $in: ['deposit', 'withdraw'] },
-    }).sort({ _id: -1 }).lean();
-  }
-
-  /**
    * Check if a signature belongs to any known bundle (any status)
    */
   async isSignatureInBundle(signature: string): Promise<boolean> {
@@ -188,10 +176,8 @@ export class DBManager {
   /**
    * Update transaction status to confirmed or failed
    */
-  async confirmTransaction(transactionId: string, status: TransactionStatus.CONFIRMED | TransactionStatus.FAILED, signature?: string) {
-    const update: Record<string, any> = { status };
-    if (signature) update.signature = signature;
-    return TransactionModel.findByIdAndUpdate(transactionId, update);
+  async confirmTransaction(transactionId: string, status: TransactionStatus.CONFIRMED | TransactionStatus.FAILED) {
+    return TransactionModel.findByIdAndUpdate(transactionId, { status });
   }
 
   /**

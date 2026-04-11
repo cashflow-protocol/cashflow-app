@@ -20,23 +20,13 @@ const PROTOCOL_LABELS: Record<string, string> = {
 };
 
 /**
- * Try to match a transaction against a known deposit/withdraw in MongoDB.
- * First tries by signature/bundle, then falls back to the most recent CREATED
- * transaction for this wallet (handles the race where the Helius webhook arrives
- * before bundle signatures are stored).
+ * Try to match a transaction signature against a known deposit/withdraw in MongoDB.
+ * Returns a rich notification title based on stored data, or null if no match.
  */
 async function tryMatchStoredTransaction(
   tx: HeliusEnhancedTransaction,
-  walletAddress?: string,
 ): Promise<{ title: string; type: NotificationType; transactionId: string } | null> {
-  let record = await dbManager.findTransactionBySignature(tx.signature);
-
-  // Fallback: webhook arrived before bundle signatures were submitted.
-  // Look for a recent CREATED record for this user's wallet.
-  if (!record && walletAddress) {
-    record = await dbManager.findRecentCreatedTransaction(walletAddress);
-  }
-
+  const record = await dbManager.findTransactionBySignature(tx.signature);
   if (!record) return null;
 
   const token = SUPPORTED_TOKENS_BY_MINT[record.mint];
@@ -58,8 +48,8 @@ async function tryMatchStoredTransaction(
     return null;
   }
 
-  // Mark the transaction as confirmed (also store signature if it was a fallback match)
-  await dbManager.confirmTransaction(String(record._id), TransactionStatus.CONFIRMED, tx.signature);
+  // Mark the transaction as confirmed and update cost basis
+  await dbManager.confirmTransaction(String(record._id), TransactionStatus.CONFIRMED);
   await updateCostBasisOnConfirm(String(record._id));
 
   return { title, type: notifType, transactionId: String(record._id) };
@@ -73,7 +63,7 @@ export async function dispatchOnchainNotification(
   if (!user) return;
 
   // Try to match against a stored deposit/withdraw first
-  const matched = await tryMatchStoredTransaction(tx, (user as any).publicKey);
+  const matched = await tryMatchStoredTransaction(tx);
 
   let title: string;
   let body: string | undefined;

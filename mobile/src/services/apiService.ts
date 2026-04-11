@@ -373,13 +373,13 @@ class ApiService {
     return { signature: res.signature };
   }
 
-  async sendBundle(transactions: string[]): Promise<{ bundleId: string; status: string; transactions: string[] }> {
+  async sendBundle(transactions: string[], transactionId?: string): Promise<{ bundleId: string; status: string; transactions: string[] }> {
     const res = await this.signedPost<{
       success: boolean;
       bundleId: string;
       status: string;
       transactions: string[];
-    }>('/solana/v2/send-bundle', { transactions });
+    }>('/solana/v2/send-bundle', { transactions, transactionId });
     return { bundleId: res.bundleId, status: res.status, transactions: res.transactions ?? [] };
   }
 
