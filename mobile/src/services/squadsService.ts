@@ -1494,13 +1494,11 @@ export async function executeVaultTransaction(
       const bundleResult = await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64]);
       console.log(`[VaultTx] bundle result: id=${bundleResult.bundleId}, status=${bundleResult.status}`);
 
-      const signature = bs58.encode(signedTx3.signatures[0]);
-      const bundleSignatures = [
-        bs58.encode(signedTx1.signatures[0]),
-        bs58.encode(signedTx2.signatures[0]),
-        bs58.encode(signedTx3.signatures[0]),
-        bs58.encode(signedTx4.signatures[0]),
-      ];
+      // Use real transaction signatures from Jito (local tx.signatures[0] may be zeros)
+      const bundleSignatures = bundleResult.transactions.length > 0
+        ? bundleResult.transactions
+        : [bs58.encode(signedTx1.signatures[0]), bs58.encode(signedTx2.signatures[0]), bs58.encode(signedTx3.signatures[0]), bs58.encode(signedTx4.signatures[0])];
+      const signature = bundleSignatures[2] ?? bs58.encode(signedTx3.signatures[0]);
       console.log(`[VaultTx] signature: ${signature}`);
       return { signature, bundleSignatures };
     } else {
@@ -1542,13 +1540,11 @@ export async function executeVaultTransaction(
     const bundleResult = await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64]);
     console.log(`[VaultTx] bundle result: id=${bundleResult.bundleId}, status=${bundleResult.status}`);
 
-    const signature = bs58.encode(tx3.signatures[0]);
-    const bundleSignatures = [
-      bs58.encode(tx1.signatures[0]),
-      bs58.encode(tx2.signatures[0]),
-      bs58.encode(tx3.signatures[0]),
-      bs58.encode(tx4.signatures[0]),
-    ];
+    // Use real transaction signatures from Jito (local tx.signatures[0] may be zeros)
+    const bundleSignatures = bundleResult.transactions.length > 0
+      ? bundleResult.transactions
+      : [bs58.encode(tx1.signatures[0]), bs58.encode(tx2.signatures[0]), bs58.encode(tx3.signatures[0]), bs58.encode(tx4.signatures[0])];
+    const signature = bundleSignatures[2] ?? bs58.encode(tx3.signatures[0]);
     console.log(`[VaultTx] signature: ${signature}`);
     return { signature, bundleSignatures };
   } catch (err: any) {

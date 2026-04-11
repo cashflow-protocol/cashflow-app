@@ -266,6 +266,7 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
       bundleId,
       status: status?.confirmation_status ?? 'pending',
       slot: status?.slot ?? null,
+      transactions: status?.transactions ?? [],
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
