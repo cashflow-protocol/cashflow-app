@@ -41,9 +41,9 @@ class ApiService {
     lookupTableAddress: string | null;
     solanaRpcUrl: string | null;
     treasuryWallet: string | null;
-    targetCloudBalance: number | null;
     vaultCreationFee: number | null;
     supportUrl: string | null;
+    adminTxFeePayerPublicKey: string | null;
   }> {
     // Config is needed during vault creation (before auth is available) — bypass auth
     const r = await fetch(`${this.baseUrl}/config/v1`);
@@ -80,6 +80,7 @@ class ApiService {
     vaultAddress: string;
     txSignature?: string;
     serializedTx?: string;
+    serializedTxs?: string[];
   }> {
     const r = await fetch(`${this.baseUrl}/onboarding/v1/create-vault`, {
       method: 'POST',
@@ -372,13 +373,14 @@ class ApiService {
     return { signature: res.signature };
   }
 
-  async sendBundle(transactions: string[]): Promise<{ bundleId: string; status: string }> {
+  async sendBundle(transactions: string[], transactionId?: string): Promise<{ bundleId: string; status: string; transactions: string[] }> {
     const res = await this.signedPost<{
       success: boolean;
       bundleId: string;
       status: string;
-    }>('/solana/v2/send-bundle', { transactions });
-    return { bundleId: res.bundleId, status: res.status };
+      transactions: string[];
+    }>('/solana/v2/send-bundle', { transactions, transactionId });
+    return { bundleId: res.bundleId, status: res.status, transactions: res.transactions ?? [] };
   }
 
   async submitBundleSignatures(transactionId: string, signatures: string[]): Promise<void> {
@@ -467,7 +469,6 @@ class ApiService {
     members: Array<{ address: string; permissions: any }>;
     cloudKey?: string;
     addMemberActions: Array<{ memberAddress: string; permissions: string }>;
-    newRentCollector?: string;
   }): Promise<{
     tx1Base64: string;
     tx2Base64: string;
@@ -624,19 +625,6 @@ class ApiService {
     return res.data;
   }
 
-  async sendRecoveryBundle(proposalId: string, transactions: string[]): Promise<{ bundleId: string; status: string }> {
-    const r = await fetch(`${this.baseUrl}/vault-recovery/v1/proposal/${proposalId}/send-bundle`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transactions }),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({ error: 'Failed' }));
-      throw new Error(err.error || `API error: ${r.status}`);
-    }
-    const res = await r.json();
-    return { bundleId: res.bundleId, status: res.status };
-  }
 
 }
 

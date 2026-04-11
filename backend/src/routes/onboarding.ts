@@ -1049,16 +1049,15 @@ router.post('/create-vault', async (req, res) => {
 
     // ── Lazy-import Squads SDK + web3.js ──
     const multisigLib = await import('@sqds/multisig');
-    const { Connection, PublicKey, Keypair, TransactionMessage, VersionedTransaction, SystemProgram } = await import('@solana/web3.js');
+    const { Connection, PublicKey, Keypair, TransactionMessage, VersionedTransaction, SystemProgram, TransactionInstruction } = await import('@solana/web3.js');
     const { Permissions } = multisigLib.types;
 
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
     const conn = new Connection(rpcUrl, 'confirmed');
 
-    // ── Determine members, threshold, rentCollector ──
+    // ── Determine members, threshold ──
     let members: Array<{ key: InstanceType<typeof PublicKey>; permissions: ReturnType<typeof Permissions.all> }>;
     let threshold: number;
-    let rentCollectorKey: InstanceType<typeof PublicKey>;
 
     const devicePubkey = new PublicKey(deviceKey);
 
@@ -1069,7 +1068,6 @@ router.post('/create-vault', async (req, res) => {
         { key: devicePubkey, permissions: Permissions.all() },
       ];
       threshold = 2;
-      rentCollectorKey = walletPubkey;
     } else if (mode === VaultMode.ANDROID_GMS) {
       const cloudPubkey = new PublicKey(cloudKey);
       const walletPubkey = new PublicKey(walletAddress);
@@ -1079,7 +1077,6 @@ router.post('/create-vault', async (req, res) => {
         { key: walletPubkey, permissions: Permissions.all() },
       ];
       threshold = 3;
-      rentCollectorKey = cloudPubkey;
     } else {
       // standard (iOS / web)
       const cloudPubkey = new PublicKey(cloudKey);
@@ -1088,23 +1085,23 @@ router.post('/create-vault', async (req, res) => {
         { key: devicePubkey, permissions: Permissions.all() },
       ];
       threshold = 2;
-      rentCollectorKey = cloudPubkey;
     }
+
+    // ── Load admin keypair (needed for all modes: gas payer for standard, spending limit fee payer for MWA) ──
+    if (!process.env.ADMIN_FEE_PAYER_PRIVATE_KEY) {
+      res.status(503).json({ success: false, error: 'Admin wallet not configured' });
+      return;
+    }
+    const { getBase58Encoder } = await import('@solana/kit');
+    const adminKeypair = Keypair.fromSecretKey(
+      new Uint8Array(getBase58Encoder().encode(process.env.ADMIN_FEE_PAYER_PRIVATE_KEY)),
+    );
 
     // ── Determine fee payer ──
     const isAdminPays = mode === VaultMode.STANDARD;
     let feePayer: InstanceType<typeof PublicKey>;
-    let adminKeypair: InstanceType<typeof Keypair> | null = null;
 
     if (isAdminPays) {
-      if (!process.env.ADMIN_FEE_PAYER_PRIVATE_KEY) {
-        res.status(503).json({ success: false, error: 'Admin wallet not configured' });
-        return;
-      }
-      // Decode base58 admin private key to Keypair
-      const { getBase58Encoder } = await import('@solana/kit');
-      const secretKey = new Uint8Array(getBase58Encoder().encode(process.env.ADMIN_FEE_PAYER_PRIVATE_KEY));
-      adminKeypair = Keypair.fromSecretKey(secretKey);
       feePayer = adminKeypair.publicKey;
 
       // Check admin balance
@@ -1115,8 +1112,24 @@ router.post('/create-vault', async (req, res) => {
         res.status(503).json({ success: false, error: 'Service temporarily unavailable' });
         return;
       }
+      else if (adminBalance < 50_000_000) { // 0.05 SOL
+        console.error('[create-vault] Admin wallet balance is too low (but still can proceed):', adminBalance);
+        telegram.notifyAdmin(`⚠️ Admin wallet (for fee creation) balance is low: ${(adminBalance / 1e9).toFixed(4)} SOL. Admin wallet address: ${feePayer}`);
+      }
     } else {
       feePayer = new PublicKey(walletAddress);
+
+      // Check user wallet balance — needs rent (~0.015 SOL) + creation fee (0.05 SOL) + tx fee
+      const { VAULT_CREATION_FEE } = await import('../constants/vault');
+      const minRequired = VAULT_CREATION_FEE + 20_000_000; // fee + rent + buffer
+      const userBalance = await conn.getBalance(feePayer);
+      if (userBalance < minRequired) {
+        res.status(400).json({
+          success: false,
+          error: `Insufficient balance. You need at least ${(minRequired / 1e9).toFixed(3)} SOL to create a vault. Current balance: ${(userBalance / 1e9).toFixed(4)} SOL`,
+        });
+        return;
+      }
     }
 
     // ── Build multisigCreateV2 transaction ──
@@ -1141,16 +1154,40 @@ router.post('/create-vault', async (req, res) => {
       threshold,
       members,
       timeLock: 0,
-      rentCollector: rentCollectorKey,
-      memo: 'Cashflow',
+      rentCollector: vaultPda,
+      memo: 'cashflow',
     });
 
-    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+
+    const { HeliusSender } = await import('../managers/HeliusSender');
+
+    const txInstructions = [createMultisigIx];
+
+    // Add vault creation fee (0.05 SOL → treasury wallet) for all modes
+    const { VAULT_CREATION_FEE } = await import('../constants/vault');
+    if (VAULT_CREATION_FEE > 0 && !isAdminPays) {
+      const treasuryWallet = process.env.TREASURY_WALLET_ADDRESS;
+      if (!treasuryWallet) {
+        res.status(503).json({ success: false, error: 'Treasury wallet not configured' });
+        return;
+      }
+      txInstructions.push(SystemProgram.transfer({
+        fromPubkey: feePayer,
+        toPubkey: new PublicKey(treasuryWallet),
+        lamports: VAULT_CREATION_FEE,
+      }));
+    }
+
+    // Add Helius SWQoS tip for standard mode (admin pays)
+    if (isAdminPays) {
+      txInstructions.push(HeliusSender.createTipIx(feePayer));
+    }
 
     const msg = new TransactionMessage({
       payerKey: feePayer,
       recentBlockhash: blockhash,
-      instructions: [createMultisigIx],
+      instructions: txInstructions,
     }).compileToV0Message();
 
     const tx = new VersionedTransaction(msg);
@@ -1162,16 +1199,11 @@ router.post('/create-vault', async (req, res) => {
     const vaultAddress = vaultPda.toBase58();
 
     if (isAdminPays) {
-      // ── Standard mode: admin signs + sends ──
-      tx.sign([adminKeypair!]);
+      // ── Standard mode: admin signs + sends via Helius SWQoS ──
+      tx.sign([adminKeypair]);
 
-      const signature = await conn.sendTransaction(tx, {
-        skipPreflight: false,
-        preflightCommitment: 'confirmed',
-      });
-
-      // Wait for confirmation
-      await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+      const base64Tx = Buffer.from(tx.serialize()).toString('base64');
+      const signature = await HeliusSender.sendAndConfirm(base64Tx);
 
       await VaultPaymentModel.findByIdAndUpdate(paymentRecord._id, {
         $set: {
@@ -1182,12 +1214,17 @@ router.post('/create-vault', async (req, res) => {
         },
       });
 
+      const lookupKeyStd = cloudKey || deviceKey;
+      const waitlistUserStd = await WaitlistUserModel.findOne({ publicKey: lookupKeyStd }).lean();
+
       telegram.notifyAdmin(
-        `🏦 New vault created (backend-signed)\n\n` +
+        `🏦 New Squad created!\n\n` +
+        (walletAddress ? `Wallet: <code>${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}</code>\n` : '') +
         `Vault: <code>${vaultAddress.slice(0, 6)}...${vaultAddress.slice(-4)}</code>\n` +
         `Mode: ${mode}\n` +
         `Platform: ${platform}\n` +
-        `Payment: <code>${paymentId.slice(0, 8)}...</code>`,
+        (waitlistUserStd?.inviteCode ? `Invite: <code>${waitlistUserStd.inviteCode}</code>\n` : '') +
+        `IP: <code>${req.ip}</code>`,
       );
 
       res.json({
@@ -1196,8 +1233,150 @@ router.post('/create-vault', async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } else {
-      // ── Seeker / android_gms: return partially-signed tx ──
-      const serializedTx = Buffer.from(tx.serialize()).toString('base64');
+      // ── Seeker / android_gms: build all txs (vault creation + spending limit) ──
+      // so mobile can sign everything in a single MWA prompt and send as one Jito bundle.
+
+      const crypto = await import('crypto');
+      const { ADMIN_COVER_TARGET, GAS_COVER_SPENDING_LIMIT_SEED, JITO_TIP_LAMPORTS, JITO_TIP_ACCOUNTS } = await import('../constants/vault');
+      const { Period } = multisigLib.types;
+
+      // Use the all-tx fee payer key for spending limit (must match cover instruction destination)
+      const { getAdminTxFeePayerPublicKey, getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
+      const adminFeePayerPubkey = getAdminTxFeePayerPublicKey();
+      const adminTxFeePayerKeypair = getAdminTxFeePayerKeypair();
+
+      // Deterministic createKey for spending limit PDA (must match mobile logic)
+      const spendingLimitHash = crypto.createHash('sha256')
+        .update(GAS_COVER_SPENDING_LIMIT_SEED)
+        .update(multisigPda.toBytes())
+        .digest();
+      const spendingLimitCreateKey = new PublicKey(spendingLimitHash.slice(0, 32));
+
+      // For a newly created multisig, transactionIndex starts at 0, so first config tx = 1
+      const transactionIndex = 1n;
+
+      // Primary key (creator for config txs)
+      const primaryKey = mode === VaultMode.SEEKER
+        ? new PublicKey(walletAddress)
+        : new PublicKey(cloudKey);
+
+      // Spending limit members
+      const spendingLimitMembers = mode === VaultMode.SEEKER
+        ? [new PublicKey(walletAddress)]
+        : [new PublicKey(cloudKey)];
+
+      // Build approval instructions
+      const approvalIxs: ReturnType<typeof multisigLib.instructions.proposalApprove>[] = [];
+      if (mode === VaultMode.SEEKER) {
+        approvalIxs.push(
+          multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: new PublicKey(walletAddress) }),
+          multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: devicePubkey }),
+        );
+      } else {
+        // android_gms: cloud + device + wallet approve
+        approvalIxs.push(
+          multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: new PublicKey(cloudKey) }),
+          multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: devicePubkey }),
+          multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: new PublicKey(walletAddress) }),
+        );
+      }
+
+      // TX2: config tx create + proposal + approvals (admin pays gas)
+      const tx2Instructions = [
+        multisigLib.instructions.configTransactionCreate({
+          multisigPda,
+          transactionIndex,
+          creator: primaryKey,
+          rentPayer: adminFeePayerPubkey,
+          actions: [{
+            __kind: 'AddSpendingLimit' as const,
+            createKey: spendingLimitCreateKey,
+            vaultIndex: 0,
+            mint: PublicKey.default, // native SOL
+            amount: ADMIN_COVER_TARGET,
+            period: Period.Day,
+            members: spendingLimitMembers,
+            destinations: [adminFeePayerPubkey],
+          }],
+        }),
+        multisigLib.instructions.proposalCreate({ multisigPda, transactionIndex, creator: primaryKey, rentPayer: adminFeePayerPubkey }),
+        ...approvalIxs,
+      ];
+
+      // Derive spending limit PDA — needed as remaining account for configTransactionExecute
+      const [spendingLimitPda] = multisigLib.getSpendingLimitPda({
+        multisigPda,
+        createKey: spendingLimitCreateKey,
+      });
+
+      // TX3: execute + close + Jito tip + cover (admin pays gas, MWA wallet reimburses)
+      const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
+
+      // Build cover instruction: MWA wallet tops up admin fee payer to ADMIN_COVER_TARGET
+      const { createCoverInstruction } = await import('@heymike/send');
+      const { address: kitAddress, AccountRole } = await import('@solana/kit');
+      const coverKitIx = createCoverInstruction(
+        kitAddress(walletAddress),
+        kitAddress(walletAddress),
+        kitAddress(adminFeePayerPubkey.toBase58()),
+        ADMIN_COVER_TARGET,
+      );
+      const coverIx = new TransactionInstruction({
+        programId: new PublicKey(coverKitIx.programAddress as string),
+        keys: (coverKitIx.accounts ?? []).map((acc: any) => ({
+          pubkey: new PublicKey(acc.address as string),
+          isSigner: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.READONLY_SIGNER,
+          isWritable: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.WRITABLE,
+        })),
+        data: Buffer.from(coverKitIx.data as Uint8Array),
+      });
+
+      const tx3Instructions = [
+        multisigLib.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: primaryKey, rentPayer: adminFeePayerPubkey, spendingLimits: [spendingLimitPda] }),
+        multisigLib.instructions.configTransactionAccountsClose({
+          multisigPda, transactionIndex, rentCollector: vaultPda,
+        }),
+        SystemProgram.transfer({
+          fromPubkey: adminFeePayerPubkey,
+          toPubkey: new PublicKey(tipAccount),
+          lamports: JITO_TIP_LAMPORTS,
+        }),
+        coverIx,
+      ];
+
+      // Fetch LUT for tx compression
+      let luts: any[] = [];
+      const { LookupManager } = await import('../managers/LookupManager');
+      if (LookupManager.lookupTableAddress) {
+        const lutAccount = await conn.getAddressLookupTable(new PublicKey(LookupManager.lookupTableAddress as string));
+        if (lutAccount.value) {
+          luts = [lutAccount.value];
+        }
+      }
+
+      const msg2 = new TransactionMessage({
+        payerKey: adminFeePayerPubkey,
+        recentBlockhash: blockhash,
+        instructions: tx2Instructions,
+      }).compileToV0Message(luts);
+      const tx2 = new VersionedTransaction(msg2);
+
+      const msg3 = new TransactionMessage({
+        payerKey: adminFeePayerPubkey,
+        recentBlockhash: blockhash,
+        instructions: tx3Instructions,
+      }).compileToV0Message(luts);
+      const tx3 = new VersionedTransaction(msg3);
+
+      // Admin tx fee payer signs TX2 and TX3 (fee payer + rent payer)
+      tx2.sign([adminTxFeePayerKeypair]);
+      tx3.sign([adminTxFeePayerKeypair]);
+
+      const serializedTxs = [
+        Buffer.from(tx.serialize()).toString('base64'),
+        Buffer.from(tx2.serialize()).toString('base64'),
+        Buffer.from(tx3.serialize()).toString('base64'),
+      ];
 
       await VaultPaymentModel.findByIdAndUpdate(paymentRecord._id, {
         $set: { multisigAddress, vaultAddress },
@@ -1205,7 +1384,7 @@ router.post('/create-vault', async (req, res) => {
 
       res.json({
         success: true,
-        data: { multisigAddress, vaultAddress, serializedTx },
+        data: { multisigAddress, vaultAddress, serializedTxs },
         timestamp: new Date().toISOString(),
       });
     }
@@ -1244,12 +1423,18 @@ router.post('/confirm-vault', async (req, res) => {
       return;
     }
 
+    // Look up invite code from waitlist (cloud key for standard, device key for seeker)
+    const lookupKey = result.cloudKey || result.deviceKey;
+    const waitlistUser = await WaitlistUserModel.findOne({ publicKey: lookupKey }).lean();
+
     telegram.notifyAdmin(
-      `🏦 New vault created (MWA-signed)\n\n` +
+      `🏦 New Squad created!\n\n` +
+      `Wallet: <code>${result.walletAddress?.slice(0, 6)}...${result.walletAddress?.slice(-4)}</code>\n` +
       `Vault: <code>${result.vaultAddress?.slice(0, 6)}...${result.vaultAddress?.slice(-4)}</code>\n` +
       `Mode: ${result.mode}\n` +
       `Platform: ${result.platform}\n` +
-      `Tx: <code>${txSignature.slice(0, 8)}...</code>`,
+      (waitlistUser?.inviteCode ? `Invite: <code>${waitlistUser.inviteCode}</code>\n` : '') +
+      `IP: <code>${req.ip}</code>`,
     );
 
     res.json({

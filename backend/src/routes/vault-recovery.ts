@@ -4,7 +4,6 @@ import { RecoveryProposalModel, RecoveryProposalStatus } from '../models/Recover
 import { UserModel } from '../models';
 import { signTransactionWithPrivy } from '../services/privyService';
 import { HeliusSender } from '../managers';
-import { TARGET_CLOUD_BALANCE } from '../constants';
 
 const router = Router();
 
@@ -225,7 +224,7 @@ router.post('/find-vault-by-address', async (req: Request, res: Response) => {
  */
 router.post('/build-proposal-tx', async (req: Request, res: Response) => {
   try {
-    const { multisigAddress, walletAddress, members, cloudKey, addMemberActions, newRentCollector } = req.body;
+    const { multisigAddress, walletAddress, members, cloudKey, addMemberActions } = req.body;
     if (!multisigAddress || !walletAddress || !addMemberActions?.length) {
       res.status(400).json({ success: false, error: 'Missing required fields' });
       return;
@@ -266,13 +265,7 @@ router.post('/build-proposal-tx', async (req: Request, res: Response) => {
       },
     }));
 
-    // Set new cloud key as rent collector if provided
-    if (newRentCollector) {
-      parsedActions.push({
-        __kind: 'SetRentCollector' as const,
-        newRentCollector: new PublicKey(newRentCollector),
-      });
-    }
+    // rentCollector is always vaultPda (set at creation) — no need to update during recovery
 
     // Build TX1 instructions
     const tx1Instructions = [
@@ -1038,54 +1031,6 @@ router.post('/proposal/:proposalId/mark-executed', async (req: Request, res: Res
 });
 
 /**
- * POST /proposal/:proposalId/send-bundle
- * Send the recovery transaction bundle via Jito.
- * No auth required — tied to a specific proposal.
- */
-router.post('/proposal/:proposalId/send-bundle', async (req: Request, res: Response) => {
-  try {
-    const { transactions } = req.body;
-
-    if (!Array.isArray(transactions) || transactions.length === 0 || transactions.length > 5) {
-      res.status(400).json({ success: false, error: 'transactions must be 1-5 base64 transactions' });
-      return;
-    }
-
-    const proposal = await RecoveryProposalModel.findById(req.params.proposalId);
-    if (!proposal) {
-      res.status(404).json({ success: false, error: 'Proposal not found' });
-      return;
-    }
-
-    if (proposal.status === RecoveryProposalStatus.EXECUTED) {
-      res.status(400).json({ success: false, error: 'Already executed' });
-      return;
-    }
-
-    // Send each transaction via HeliusSender SWQoS
-    const signatures: string[] = [];
-    for (const tx of transactions) {
-      const sig = await HeliusSender.sendAndConfirm(tx);
-      signatures.push(sig);
-    }
-
-    // Mark proposal as executed
-    proposal.status = RecoveryProposalStatus.EXECUTED;
-    proposal.executionSignature = signatures[0];
-    await proposal.save();
-
-    res.json({
-      success: true,
-      signatures,
-      status: 'confirmed',
-    });
-  } catch (error: any) {
-    console.error('Error sending recovery bundle:', error);
-    res.status(500).json({ success: false, error: error?.message || 'Failed to send bundle' });
-  }
-});
-
-/**
  * GET /proposal/:proposalId/build-execute-tx
  * Build a fresh execute transaction with a current blockhash.
  * TX1 (create + propose + approvals) is already onchain.
@@ -1126,10 +1071,9 @@ router.get('/proposal/:proposalId/build-execute-tx', async (req: Request, res: R
     // Check for rent collector
     const multisigAccount = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
 
-    // Check MWA wallet has enough balance for fees + cloud key funding
+    // Check MWA wallet has enough balance for fees
     const ESTIMATED_FEE = 10_000_000; // ~0.01 SOL for tx fees + priority + tip
-    const cloudFundAmount = proposal.newCloudKey ? TARGET_CLOUD_BALANCE : 0;
-    const requiredBalance = cloudFundAmount + ESTIMATED_FEE;
+    const requiredBalance = ESTIMATED_FEE;
 
     const walletBalance = await conn.getBalance(memberPubkey);
     if (walletBalance < requiredBalance) {
@@ -1161,15 +1105,6 @@ router.get('/proposal/:proposalId/build-execute-tx', async (req: Request, res: R
         multisigPda,
         transactionIndex,
         rentCollector: new PublicKey(rentCollectorAddr),
-      }));
-    }
-
-    // Fund new cloud key so it can pay for tx fees
-    if (proposal.newCloudKey) {
-      instructions.push(SystemProgram.transfer({
-        fromPubkey: memberPubkey,
-        toPubkey: new PublicKey(proposal.newCloudKey),
-        lamports: TARGET_CLOUD_BALANCE,
       }));
     }
 

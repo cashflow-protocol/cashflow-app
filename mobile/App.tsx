@@ -22,6 +22,7 @@ import AddMemberScreen from './src/screens/AddMemberScreen';
 import KeysRecoveryScreen from './src/screens/KeysRecoveryScreen';
 import AddRecoveryKeyScreen from './src/screens/AddRecoveryKeyScreen';
 import ChangePinScreen from './src/screens/ChangePinScreen';
+import SpendingLimitsScreen from './src/screens/SpendingLimitsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import VaultRecoveryScreen from './src/screens/VaultRecoveryScreen';
 import BiometricLockScreen from './src/components/BiometricLockScreen';
@@ -37,7 +38,7 @@ import { PrivyProvider } from '@privy-io/expo';
 import { PRIVY_CONFIG } from './src/config/api';
 import { initializePushNotifications, initializeWaitlistPushNotifications, setupForegroundHandler } from './src/services/pushNotificationService';
 import { initializeRealtimeNotifications, stopRealtimeNotifications } from './src/services/realtimeNotificationService';
-import Toast from './src/components/Toast';
+import { ToastProvider, useToast } from './src/contexts/ToastContext';
 import { invalidateAssets } from './src/hooks/useAssets';
 import { invalidateEarnTokens } from './src/hooks/useEarnTokens';
 import {
@@ -52,7 +53,7 @@ import {
 
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | 'keys-recovery' | 'add-recovery-key' | null;
+type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | 'keys-recovery' | 'add-recovery-key' | 'spending-limits' | null;
 type OnboardingStep = 'carousel' | 'invite-code' | 'pin-setup' | 'vault-setup' | 'waitlist' | 'vault-recovery' | null;
 
 function App() {
@@ -68,9 +69,7 @@ function App() {
   const [pendingPin, setPendingPin] = useState<string | null>(null);
   const backgroundedAt = useRef<number | null>(null);
   const recentNotifs = useRef(new Set<string>());
-  const [toastVisible, setToastVisible] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastDescription, setToastDescription] = useState('');
+  const { showToast } = useToast();
   const [gmsBlocked, setGmsBlocked] = useState(false);
 
   useEffect(() => {
@@ -95,7 +94,7 @@ function App() {
         if (config.solanaRpcUrl) setSolanaRpcEndpoint(config.solanaRpcUrl);
         applyRemoteConfig(config);
       }
-      const hasVault = vault !== null;
+      const hasVault = vault !== null && vault.isInitialized !== false;
       setOnboardingDone(hasVault);
       // Existing user with no PIN → prompt to create one
       setNeedsPinSetup(hasVault && !pinExists);
@@ -145,9 +144,7 @@ function App() {
     setTimeout(() => recentNotifs.current.delete(dedupeKey), 5000);
 
     logPushNotificationReceived(title);
-    setToastMessage(title);
-    setToastDescription(body);
-    setToastVisible(true);
+    showToast(title, body, 'success');
 
     const type = data?.type;
     if (type === 'transfer_in' || type === 'transfer_out') {
@@ -156,7 +153,7 @@ function App() {
       invalidateAssets();
       invalidateEarnTokens();
     }
-  }, []);
+  }, [showToast]);
 
   // Set up foreground push notification handler
   useEffect(() => {
@@ -243,6 +240,8 @@ function App() {
           return <SquadsScreen onNavigate={handleNavigate} onBack={handleBack} />;
         case 'add-member':
           return <AddMemberScreen onNavigate={handleNavigate} onBack={handleBack} />;
+        case 'spending-limits':
+          return <SpendingLimitsScreen onNavigate={handleNavigate} onBack={handleBack} />;
         case 'change-pin':
           // Handled as full-screen overlay below
           break;
@@ -431,13 +430,6 @@ function App() {
             <View style={styles.root}>
               {renderScreen()}
               <TabBar activeTab={activeTab} onTabPress={handleTabPress} />
-              <Toast
-                visible={toastVisible}
-                message={toastMessage}
-                description={toastDescription}
-                type="success"
-                onDismiss={() => setToastVisible(false)}
-              />
             </View>
           </WalletProvider>
         </SafeAreaProvider>
@@ -452,4 +444,14 @@ const styles = StyleSheet.create({
   },
 });
 
-export default App;
+function AppWithProviders() {
+  return (
+    <SafeAreaProvider>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </SafeAreaProvider>
+  );
+}
+
+export default AppWithProviders;

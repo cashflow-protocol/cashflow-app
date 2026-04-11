@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { BlurView } from '@react-native-community/blur';
 import { LinearGradient } from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../theme/ThemeContext';
@@ -51,6 +52,8 @@ const TAB_ORDER: TabName[] = ['home', 'earn', 'assets', 'more'];
 export default function TabBar({ activeTab, onTabPress }: TabBarProps) {
   const { colors } = useTheme();
 
+  const isDark = colors.tabBarBackground === '#1E293B';
+
   return (
     <View style={styles.tabBarContainer}>
       <LinearGradient
@@ -58,9 +61,22 @@ export default function TabBar({ activeTab, onTabPress }: TabBarProps) {
         style={styles.tabBarGlow}
       />
       <View style={[styles.tabBar, {
-        backgroundColor: colors.tabBarBackground,
-        borderColor: colors.tabBarBorder,
+        borderColor: isDark
+          ? 'rgba(255, 255, 255, 0.12)'
+          : 'rgba(0, 0, 0, 0.08)',
+        overflow: 'hidden',
       }]}>
+        <BlurView
+          style={StyleSheet.absoluteFill}
+          blurType={isDark ? 'dark' : 'xlight'}
+          blurAmount={20}
+          reducedTransparencyFallbackColor={colors.tabBarBackground}
+        />
+        <View style={[StyleSheet.absoluteFill, {
+          backgroundColor: isDark
+            ? 'rgba(30, 41, 59, 0.35)'
+            : 'rgba(255, 255, 255, 0.25)',
+        }]} />
         {TAB_ORDER.map((tab) => {
           const isActive = activeTab === tab;
           const color = isActive ? colors.tabActiveColor : colors.tabInactiveColor;

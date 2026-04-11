@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import walletService from '../services/walletService';
 import { getVault } from '../services/vaultStorage';
 import { useWallet } from '../hooks/useWallet';
 import type { WalletAsset } from '../types/earn';
-import { logFundWalletModalOpen, logFundWalletConnect, logFundWalletTokenSelect, logFundWalletMaxPress, logFundWalletSubmit, logFundWalletSuccess, logFundWalletError } from '../services/analyticsService';
+import { logFundWalletModalOpen, logFundWalletConnect, logFundWalletTokenSelect, logFundWalletMaxPress, logFundWalletSubmit, logFundWalletSuccess, logFundWalletError, logFundWalletValidationError, logFundWalletConnectError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -87,9 +87,13 @@ export default function FundWalletModal({ visible, onClose, onSuccess }: FundWal
 
   const handleConnect = async () => {
     logFundWalletConnect();
-    const account = await connect();
-    if (account) {
-      // Assets will be fetched by the useEffect above
+    try {
+      const account = await connect();
+      if (account) {
+        // Assets will be fetched by the useEffect above
+      }
+    } catch (err: any) {
+      logFundWalletConnectError(err?.message || 'unknown');
     }
   };
 
@@ -164,6 +168,16 @@ export default function FundWalletModal({ visible, onClose, onSuccess }: FundWal
     : 0n;
   const exceedsBalance = selectedToken && isValidAmount && parsedRaw > maxSendable;
   const canSubmit = isValidAmount && !exceedsBalance && !loading && vaultAddress !== null;
+
+  const fundValidationLogged = useRef(false);
+  useEffect(() => {
+    if (exceedsBalance && !fundValidationLogged.current && selectedToken) {
+      logFundWalletValidationError(selectedToken.symbol);
+      fundValidationLogged.current = true;
+    } else if (!exceedsBalance) {
+      fundValidationLogged.current = false;
+    }
+  }, [exceedsBalance, selectedToken]);
 
   const handleSubmit = async () => {
     if (!canSubmit || !selectedToken || !vaultAddress || !wallet?.publicKey) return;

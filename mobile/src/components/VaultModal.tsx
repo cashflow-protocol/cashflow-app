@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,7 @@ import { useWallet } from '../hooks/useWallet';
 import { getCloudPublicKey } from '../services/keypairStorage';
 import { Buffer } from 'buffer';
 import bs58 from 'bs58';
-import { logVaultModalOpen, logVaultModeSwitch, logVaultMaxPress, logVaultSubmit, logVaultSuccess, logVaultError } from '../services/analyticsService';
+import { logVaultModalOpen, logVaultModeSwitch, logVaultMaxPress, logVaultSubmit, logVaultSuccess, logVaultError, logVaultValidationError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
 const PROTOCOL_LABELS: Record<EarnTokenType, string> = {
@@ -171,6 +171,19 @@ export default function VaultModal({
   const belowMinimum = isValidAmount && minAmountRaw > 0n && parsedRaw < minAmountRaw;
   const canSubmit = isValidAmount && !exceedsBalance && !belowMinimum && !loading;
 
+  const validationLogged = useRef<string | null>(null);
+  useEffect(() => {
+    if (exceedsBalance && validationLogged.current !== 'exceeds_balance') {
+      logVaultValidationError(mode, symbol, 'exceeds_balance');
+      validationLogged.current = 'exceeds_balance';
+    } else if (belowMinimum && validationLogged.current !== 'below_minimum') {
+      logVaultValidationError(mode, symbol, 'below_minimum');
+      validationLogged.current = 'below_minimum';
+    } else if (!exceedsBalance && !belowMinimum) {
+      validationLogged.current = null;
+    }
+  }, [exceedsBalance, belowMinimum, mode, symbol]);
+
   const handleMaxPress = () => {
     logVaultMaxPress(mode, symbol);
     if (mode === 'withdraw' && hasPosition) {
@@ -223,13 +236,9 @@ export default function VaultModal({
           vaultData.multisigAddress,
           res.instructions,
           res.extraLookupTables,
+          res.transactionId,
         );
         signature = result.signature;
-
-        // Submit bundle signatures so backend can match Helius webhook notifications
-        apiService.submitBundleSignatures(res.transactionId, result.bundleSignatures).catch((err) => {
-          console.error('Failed to submit bundle signatures:', err);
-        });
       } else {
         // Legacy flow: get full unsigned transaction, sign with MWA
         const params = {
@@ -261,11 +270,16 @@ export default function VaultModal({
         onSuccess();
       }, 1500);
     } catch (err) {
-      logVaultError(mode, symbol, (err as Error).message || 'unknown');
-      console.error(`[VaultModal] ${mode} error:`, (err as Error).message);
+      const errMsg = (err as Error).message || 'unknown';
+      logVaultError(mode, symbol, errMsg);
+      console.error(`[VaultModal] ${mode} error:`, errMsg);
+
+      const isSpendingLimit = errMsg.toLowerCase().includes('spending limit exceeded');
       setResult({
         success: false,
-        message: (err as Error).message || 'Something went wrong',
+        message: isSpendingLimit
+          ? 'Daily spending limit exceeded. You can increase your spending limit in Settings.'
+          : errMsg || 'Something went wrong',
       });
     } finally {
       setLoading(false);

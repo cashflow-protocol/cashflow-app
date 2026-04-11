@@ -11,6 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
+import Toast from './Toast';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -28,6 +30,7 @@ export default function BottomSheet({
   avoidKeyboard = false,
 }: BottomSheetProps) {
   const { colors } = useTheme();
+  const { _toastState, _dismissToast } = useToast();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const keyboardOffset = useRef(new Animated.Value(0)).current;
@@ -145,6 +148,15 @@ export default function BottomSheet({
         >
           {sheetContent}
         </Animated.View>
+
+        {/* Toast rendered inside Modal so it appears above the sheet */}
+        <Toast
+          visible={_toastState.visible}
+          message={_toastState.message}
+          description={_toastState.description}
+          type={_toastState.type}
+          onDismiss={_dismissToast}
+        />
       </View>
     </Modal>
   );

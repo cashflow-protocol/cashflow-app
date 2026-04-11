@@ -8,7 +8,6 @@ import {
   ScrollView,
   RefreshControl,
   Linking,
-  Alert,
   AppState,
   Modal,
 } from 'react-native';
@@ -33,8 +32,9 @@ import ConnectEmailSheet from '../components/ConnectEmailSheet';
 import ConnectTelegramSheet from '../components/ConnectTelegramSheet';
 import VerifyActionSheet from '../components/VerifyActionSheet';
 import UploadScreenshotSheet from '../components/UploadScreenshotSheet';
-import { logScreenView, logWaitlistTaskPress, logWaitlistApproved, logOnboardingHaveInviteCode, logError } from '../services/analyticsService';
+import { logScreenView, logWaitlistTaskPress, logWaitlistApproved, logOnboardingHaveInviteCode, logError, logXOauthStart, logXOauthWebViewClose, logXOauthError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 
 function getCountdown(): string {
   const now = new Date();
@@ -60,6 +60,7 @@ interface WaitlistDashboardScreenProps {
 
 export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInviteCode }: WaitlistDashboardScreenProps) {
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const { connect: connectWallet } = useWallet();
   const [gradientHeight, setGradientHeight] = useState(255);
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -188,7 +189,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
             const msg = err?.message || '';
             if (!msg.includes('CancellationException')) {
               logError('waitlist_connect_wallet', msg);
-              Alert.alert('Error', msg || 'Failed to connect wallet.');
+              showToast('Error', msg || 'Failed to connect wallet.');
             }
           }
           break;
@@ -199,9 +200,11 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
         case 'x': {
           const xResult = await startConnectX(publicKey);
           if (!xResult?.authUrl) {
-            Alert.alert('Not Available', 'Twitter integration is not configured yet.');
+            logXOauthError('auth_url_missing');
+            showToast('Not Available', 'Twitter integration is not configured yet.', 'warning');
             break;
           }
+          logXOauthStart(config.xOauthMode === 'webview' ? 'webview' : 'browser');
           if (config.xOauthMode === 'webview') {
             setOauthWebViewUrl(xResult.authUrl);
           } else {
@@ -214,7 +217,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
           if (dResult?.authUrl) {
             Linking.openURL(dResult.authUrl);
           } else {
-            Alert.alert('Not Available', 'Discord integration is not configured yet.');
+            showToast('Not Available', 'Discord integration is not configured yet.', 'warning');
           }
           break;
         }
@@ -225,7 +228,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
             setTelegramBotUrl(tResult.botUrl);
             setTelegramSheetVisible(true);
           } else {
-            Alert.alert('Not Available', 'Telegram integration is not configured yet.');
+            showToast('Not Available', 'Telegram integration is not configured yet.', 'warning');
           }
           break;
         }
@@ -472,7 +475,7 @@ export default function WaitlistDashboardScreen({ onApproved, onBack, onHaveInvi
       <Modal visible={!!oauthWebViewUrl} animationType="slide" onRequestClose={() => setOauthWebViewUrl(null)}>
         <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
           <View style={styles.webViewHeader}>
-            <TouchableOpacity onPress={() => setOauthWebViewUrl(null)} style={styles.webViewClose}>
+            <TouchableOpacity onPress={() => { logXOauthWebViewClose(); setOauthWebViewUrl(null); }} style={styles.webViewClose}>
               <ArrowLeft size={24} color={colors.textPrimary} />
             </TouchableOpacity>
             <Text style={[styles.webViewTitle, { color: colors.textPrimary }]}>Sign in with X</Text>

@@ -16,7 +16,7 @@ import EarnTokenItem from '../components/EarnTokenItem';
 import VaultModal from '../components/VaultModal';
 import { LifetimeEarnedIcon, Last7DIcon, AvgApyIcon } from '../assets/stat-icons';
 import type { EarnTokenWithPosition } from '../hooks/useEarnTokens';
-import { logScreenView, logEarnFilterSelect, logEarnVaultPress, logEarnRetry } from '../services/analyticsService';
+import { logScreenView, logEarnFilterSelect, logEarnVaultPress, logEarnRetry, logEarnRefresh } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
 const ALL_FILTER = 'All';
@@ -194,7 +194,7 @@ export default function EarnScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#fff" colors={['#fff']} />
+                <RefreshControl refreshing={refreshing} onRefresh={() => { logEarnRefresh(); refresh(); }} tintColor="#fff" colors={['#fff']} />
               }
               renderItem={({ item }) => (
                 <EarnTokenItem

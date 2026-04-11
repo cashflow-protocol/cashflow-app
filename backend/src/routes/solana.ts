@@ -86,11 +86,20 @@ router.post('/send', async (req: Request, res: Response) => {
         const errJson = JSON.stringify(simResult.value.err, bigIntReplacer);
         console.error('Simulation error:', errJson);
         console.error('Simulation logs:', simResult.value.logs);
+
+        const simLogs: string[] = (simResult.value.logs as string[]) ?? [];
+        const spendingLimitExceeded = simLogs.some((log: string) =>
+          log.includes('SpendingLimitExceeded'),
+        );
+
         res.status(400).json({
           success: false,
-          error: 'Transaction simulation failed',
+          error: spendingLimitExceeded
+            ? 'Spending limit exceeded'
+            : 'Transaction simulation failed',
+          errorCode: spendingLimitExceeded ? 'SPENDING_LIMIT_EXCEEDED' : undefined,
           simulationError: JSON.parse(errJson),
-          logs: simResult.value.logs,
+          logs: simLogs,
           unitsConsumed: Number(simResult.value.unitsConsumed ?? 0),
           timestamp: new Date().toISOString(),
         });
@@ -128,9 +137,10 @@ router.post('/send', async (req: Request, res: Response) => {
 });
 
 // POST /solana/v1/send-bundle - Send multiple signed transactions as a Jito bundle
+// If admin tx fee payer pubkey is a required signer, auto-signs with the admin key.
 router.post('/send-bundle', async (req: Request, res: Response) => {
   try {
-    const { transactions } = req.body;
+    let { transactions, transactionId } = req.body;
 
     if (!Array.isArray(transactions) || transactions.length === 0 || transactions.length > 5) {
       res.status(400).json({
@@ -138,6 +148,31 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
         error: 'transactions must be an array of 1-5 base64-encoded signed transactions',
       });
       return;
+    }
+
+    // ── Admin co-signing ──
+    // If ADMIN_ALL_TX_FEE_PAYER_PRIVATE_KEY is configured, deserialize each tx,
+    // check if the admin pubkey is a required signer, and sign if so.
+    if (process.env.ADMIN_ALL_TX_FEE_PAYER_PRIVATE_KEY) {
+      const { VersionedTransaction } = await import('@solana/web3.js');
+      const { getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
+      const adminKeypair = getAdminTxFeePayerKeypair();
+      const adminPubkeyStr = adminKeypair.publicKey.toBase58();
+
+      transactions = transactions.map((txBase64: string) => {
+        const txBytes = Buffer.from(txBase64, 'base64');
+        const tx = VersionedTransaction.deserialize(txBytes);
+        const staticKeys = tx.message.staticAccountKeys.map((k: any) => k.toBase58());
+        const numRequiredSignatures = tx.message.header.numRequiredSignatures;
+
+        // Check if admin key is among the required signers (first N static keys)
+        const adminIndex = staticKeys.slice(0, numRequiredSignatures).indexOf(adminPubkeyStr);
+        if (adminIndex >= 0) {
+          tx.sign([adminKeypair]);
+          return Buffer.from(tx.serialize()).toString('base64');
+        }
+        return txBase64;
+      });
     }
 
     console.log('Should simulate:', kShouldSimulate);
@@ -195,11 +230,25 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
         if (failedTxIndex === -1) {
           console.log('No individual tx errors found despite summary — proceeding with bundle');
         } else {
+          // Check ALL transaction logs for known Anchor errors (the spending-limit
+          // failure may be in a later tx than the first one flagged as failed).
+          const allBundleLogs: string[] = (simValue?.transactionResults ?? []).flatMap(
+            (r: any) => r?.logs ?? [],
+          );
+          const spendingLimitExceeded = allBundleLogs.some((log: string) =>
+            log.includes('SpendingLimitExceeded'),
+          );
+
+          const failedLogs: string[] = failedResult?.logs ?? [];
+
           res.status(400).json({
             success: false,
-            error: `Bundle simulation failed at transaction ${failedTxIndex}`,
+            error: spendingLimitExceeded
+              ? 'Spending limit exceeded'
+              : `Bundle simulation failed at transaction ${failedTxIndex}`,
+            errorCode: spendingLimitExceeded ? 'SPENDING_LIMIT_EXCEEDED' : undefined,
             simulationError: typeof simValue?.summary === 'object' ? simValue.summary : { summary: simValue?.summary },
-            logs: failedResult?.logs ?? [],
+            logs: failedLogs,
             failedTransactionIndex: failedTxIndex,
             timestamp: new Date().toISOString(),
           });
@@ -208,6 +257,21 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
       }
     }
 
+
+    // Extract real transaction IDs (first signature of each fully-signed tx) and
+    // store them BEFORE sending to Jito, so the Helius webhook can match them
+    // as soon as the bundle lands on-chain — no race condition.
+    if (transactionId) {
+      const { VersionedTransaction: VTx } = await import('@solana/web3.js');
+      const { getBase58Decoder } = await import('@solana/kit');
+      const b58 = getBase58Decoder();
+      const txSignatures = transactions.map((txBase64: string) => {
+        const tx = VTx.deserialize(Buffer.from(txBase64, 'base64'));
+        return b58.decode(tx.signatures[0]);
+      });
+      await dbManager.submitBundleTransaction(transactionId, txSignatures);
+      console.log(`Bundle signatures pre-stored for ${transactionId}: ${txSignatures.map((s: string) => s.slice(0, 8)).join(', ')}`);
+    }
 
     // Send bundle via Jito
     const bundleId = await jitoManager.sendBundle(transactions);
@@ -240,6 +304,7 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
       bundleId,
       status: status?.confirmation_status ?? 'pending',
       slot: status?.slot ?? null,
+      transactions: status?.transactions ?? [],
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

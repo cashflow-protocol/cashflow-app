@@ -14,9 +14,9 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { ArrowLeft } from 'lucide-react-native';
 import { validateInviteCode, redeemInviteCode } from '../services/onboardingService';
 import { getCloudPublicKey, generateAndStoreCloudKeypair } from '../services/keypairStorage';
-import Toast from '../components/Toast';
 import { logScreenView, logInviteCodeSubmit, logInviteCodeSuccess, logInviteCodeError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 
 interface InviteCodeScreenProps {
   onValidCode: (code: string) => void;
@@ -25,9 +25,9 @@ interface InviteCodeScreenProps {
 
 export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScreenProps) {
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [toastVisible, setToastVisible] = useState(false);
 
   React.useEffect(() => { logScreenView('InviteCodeScreen'); }, []);
 
@@ -41,7 +41,7 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
       const valid = await validateInviteCode(trimmed);
       if (!valid) {
         logInviteCodeError('invalid');
-        setToastVisible(true);
+        showToast('Invalid Invite Code', 'This code is invalid or has already been used.', 'warning');
         return;
       }
 
@@ -57,11 +57,11 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
         onValidCode(trimmed);
       } else {
         logInviteCodeError('redeem_failed');
-        setToastVisible(true);
+        showToast('Invalid Invite Code', 'This code is invalid or has already been used.', 'warning');
       }
     } catch {
       logInviteCodeError('exception');
-      setToastVisible(true);
+      showToast('Invalid Invite Code', 'This code is invalid or has already been used.', 'warning');
     } finally {
       setLoading(false);
     }
@@ -75,14 +75,6 @@ export default function InviteCodeScreen({ onValidCode, onBack }: InviteCodeScre
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
       />
-      <Toast
-        visible={toastVisible}
-        message="Invalid Invite Code"
-        description="This code is invalid or has already been used."
-        type="warning"
-        onDismiss={() => setToastVisible(false)}
-      />
-
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
           style={styles.keyboardView}

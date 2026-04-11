@@ -101,7 +101,6 @@ export async function buildAndSubmitRecoveryProposal(
     members,
     cloudKey: cloudKeyIsMember ? existingCloudKey! : undefined,
     addMemberActions: actions,
-    newRentCollector: IS_SOLANA_MOBILE ? walletAddress : (newCloudKey || undefined),
   });
 
   const { tx2Base64, transactionIndex, blockhash } = buildResult;

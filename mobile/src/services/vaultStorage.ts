@@ -15,6 +15,8 @@ export interface VaultData {
   createdAt: string;
   walletAddress?: string;
   seekerMode?: boolean;
+  /** false while vault creation tx is in-flight; true once landed on-chain */
+  isInitialized?: boolean;
 }
 
 let cachedVault: VaultData | null | undefined = undefined; // undefined = not yet loaded

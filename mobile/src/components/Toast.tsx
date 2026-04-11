@@ -120,6 +120,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 9999,
+    elevation: 9999,
     paddingBottom: 14,
     paddingHorizontal: 16,
   },

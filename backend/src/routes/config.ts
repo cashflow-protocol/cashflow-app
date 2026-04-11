@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { LookupManager } from '../managers/LookupManager';
 import { createVaultCreationFeeRecord } from '../services/feeService';
-import { TARGET_CLOUD_BALANCE, VAULT_CREATION_FEE } from '../constants';
+import { VAULT_CREATION_FEE } from '../constants';
+import { getAdminTxFeePayerPublicKeyBase58 } from '../services/adminFeePayer';
 
 const router = Router();
 
@@ -13,9 +14,9 @@ router.get('/', (req: Request, res: Response) => {
       lookupTableAddress: LookupManager.lookupTableAddress ?? null,
       solanaRpcUrl: process.env.MOBILE_SOLANA_RPC ?? null,
       treasuryWallet: process.env.TREASURY_WALLET_ADDRESS ?? null,
-      targetCloudBalance: TARGET_CLOUD_BALANCE,
       vaultCreationFee: VAULT_CREATION_FEE,
       supportUrl: process.env.SUPPORT_URL ?? 'https://t.me/heymike777',
+      adminTxFeePayerPublicKey: getAdminTxFeePayerPublicKeyBase58(),
     },
   });
 });

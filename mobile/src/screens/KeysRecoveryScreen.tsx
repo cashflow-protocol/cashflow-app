@@ -10,6 +10,7 @@ import {
   Linking,
   TextInput,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
@@ -22,6 +23,7 @@ import { getVault, getRecoveryEmails, saveRecoveryEmail } from '../services/vaul
 import apiService from '../services/apiService';
 import { logScreenView, logAddRecoveryKeySubmit, logAddRecoveryKeySuccess, logAddRecoveryKeyError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 
 interface KeysRecoveryScreenProps {
   onNavigate: (screen: string) => void;
@@ -140,6 +142,7 @@ function OtpInput({ value, onChange, disabled, colors, onComplete }: {
 
 export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryScreenProps) {
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [multisigInfo, setMultisigInfo] = useState<MultisigInfo | null>(null);
@@ -275,15 +278,15 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
   const handleAddRecoverySubmit = async () => {
     if (!newWalletAddress.trim()) {
-      Alert.alert('Error', 'Please enter a wallet address');
+      showToast('Error', 'Please enter a wallet address');
       return;
     }
     if (newWalletAddress.trim().length < 32 || newWalletAddress.trim().length > 44) {
-      Alert.alert('Error', 'Invalid Solana wallet address');
+      showToast('Error', 'Invalid Solana wallet address');
       return;
     }
     if (multisigInfo?.members.some(m => m.address === newWalletAddress.trim())) {
-      Alert.alert('Already Added', 'This wallet is already a member of your vault.');
+      showToast('Already Added', 'This wallet is already a member of your vault.', 'warning');
       return;
     }
 
@@ -292,7 +295,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     try {
       const vaultData = await getVault();
       if (!vaultData) {
-        Alert.alert('Error', 'No vault found.');
+        showToast('Error', 'No vault found.');
         return;
       }
       setAddingStep('Creating proposal & approving...');
@@ -305,10 +308,10 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       setMultisigInfo(info);
       fetchDomains(info.members.map(m => m.address));
 
-      Alert.alert('Recovery Key Added', `Successfully added ${newWalletAddress.trim().slice(0, 8)}... as a recovery key.`);
+      showToast('Recovery Key Added', `Successfully added ${newWalletAddress.trim().slice(0, 8)}... as a recovery key.`, 'success');
     } catch (err: any) {
       logAddRecoveryKeyError(err?.message || 'unknown');
-      Alert.alert('Error', err?.message || 'Failed to add recovery key.');
+      showToast('Error', err?.message || 'Failed to add recovery key.');
     } finally {
       setAddingKey(false);
       setAddingStep('');
@@ -318,12 +321,12 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
   const handleSendEmailCode = async () => {
     const trimmed = recoveryEmail.trim();
     if (!trimmed || !trimmed.includes('@')) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      showToast('Error', 'Please enter a valid email address');
       return;
     }
     const existingEmail = Object.values(emailMap).find(e => e.toLowerCase() === trimmed.toLowerCase());
     if (existingEmail) {
-      Alert.alert('Already Added', 'This email is already a recovery key for your vault.');
+      showToast('Already Added', 'This email is already a recovery key for your vault.', 'warning');
       return;
     }
     setSendingCode(true);
@@ -333,7 +336,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       await sendCode({ email: trimmed });
       setAddRecoveryStep('email-verify');
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to send code');
+      showToast('Error', err?.message || 'Failed to send code');
     } finally {
       setSendingCode(false);
     }
@@ -341,7 +344,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
   const handleVerifyEmailCode = async () => {
     if (emailCode.length !== 6) {
-      Alert.alert('Error', 'Please enter the 6-digit code');
+      showToast('Error', 'Please enter the 6-digit code');
       return;
     }
     setAddingKey(true);
@@ -392,7 +395,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
       const vaultData = await getVault();
       if (!vaultData) {
-        Alert.alert('Error', 'No vault found.');
+        showToast('Error', 'No vault found.');
         return;
       }
       await addMember(vaultData.multisigAddress, solanaAddress, 'vote');
@@ -408,10 +411,10 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
       setMultisigInfo(info);
       fetchDomains(info.members.map(m => m.address));
 
-      Alert.alert('Recovery Key Added', `Email recovery key for ${recoveryEmail.trim()} has been added.`);
+      showToast('Recovery Key Added', `Email recovery key for ${recoveryEmail.trim()} has been added.`, 'success');
     } catch (err: any) {
       logAddRecoveryKeyError(err?.message || 'unknown');
-      Alert.alert('Error', err?.message || 'Failed to add recovery key.');
+      showToast('Error', err?.message || 'Failed to add recovery key.');
     } finally {
       setAddingKey(false);
       setAddingStep('');
@@ -461,7 +464,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
                 setMultisigInfo(info);
                 fetchDomains(info.members.map(m => m.address));
               } catch (err: any) {
-                Alert.alert('Error', err?.message || 'Failed to remove recovery key.');
+                showToast('Error', err?.message || 'Failed to remove recovery key.');
               } finally {
                 setDeletingKey(false);
               }
@@ -556,7 +559,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient
         colors={colors.earnGradient as [string, string]}
-        style={styles.headerGradient}
+        style={[styles.headerGradient, Platform.OS === 'android' && { paddingBottom: 16 }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
       >
@@ -564,7 +567,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
           <ArrowLeft size={24} color="#fff" />
         </TouchableOpacity>
         <SafeAreaView edges={['top']} style={styles.header}>
-          <View style={styles.headerContent}>
+          <View style={[styles.headerContent, Platform.OS === 'android' && { paddingTop: 4, paddingBottom: 4 }]}>
             <Text style={styles.title}>Keys & Recovery</Text>
             <Text style={styles.subtitle}>
               Manage the keys that control your wallet.

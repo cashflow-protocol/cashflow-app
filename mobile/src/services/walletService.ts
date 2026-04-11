@@ -4,17 +4,19 @@ import { SOLANA_CONFIG } from '../config/solana';
 import { IS_SOLANA_MOBILE } from '../config/constants';
 import { logError } from './analyticsService';
 
-// Lazy-load MWA to avoid crashing on iOS (native module doesn't exist there)
+// Use require() instead of dynamic import() to avoid Metro lazy-bundle loading,
+// which fails on physical devices (tries to fetch from localhost:8081).
+// Guard behind IS_SOLANA_MOBILE to avoid crashing on iOS where the native module doesn't exist.
 let _transact: typeof import('@solana-mobile/mobile-wallet-adapter-protocol').transact | null = null;
-async function getTransact() {
+function getTransact() {
   if (!IS_SOLANA_MOBILE) {
     throw new Error('MWA is not available on this platform');
   }
   if (!_transact) {
-    const mwa = await import('@solana-mobile/mobile-wallet-adapter-protocol');
+    const mwa = require('@solana-mobile/mobile-wallet-adapter-protocol');
     _transact = mwa.transact;
   }
-  return _transact;
+  return _transact!;
 }
 
 export interface WalletAccount {
@@ -38,7 +40,7 @@ class WalletService {
 
   async connect(): Promise<WalletAccount | null> {
     try {
-      const result = await (await getTransact())(async (wallet: any) => {
+      const result = await getTransact()(async (wallet: any) => {
         const authResult = await wallet.authorize({
           cluster: SOLANA_CONFIG.cluster,
           identity: IDENTITY,
@@ -72,7 +74,7 @@ class WalletService {
     );
 
     console.log('[MWA] starting transact for signing...');
-    return (await getTransact())(async (wallet: any) => {
+    return getTransact()(async (wallet: any) => {
       // Reauthorize silently if we have a token, otherwise full authorize
       if (this.authToken) {
         console.log('[MWA] reauthorizing with existing token...');
@@ -111,7 +113,7 @@ class WalletService {
     );
 
     console.log('[MWA] starting transact for sign-only...');
-    return (await getTransact())(async (wallet: any) => {
+    return getTransact()(async (wallet: any) => {
       if (this.authToken) {
         console.log('[MWA] reauthorizing with existing token...');
         const auth = await wallet.reauthorize({ auth_token: this.authToken, identity: IDENTITY });
@@ -147,7 +149,7 @@ class WalletService {
 
   async disconnect(): Promise<void> {
     try {
-      await (await getTransact())(async (wallet: any) => {
+      await getTransact()(async (wallet: any) => {
         if (this.authToken) {
           await wallet.deauthorize({ auth_token: this.authToken });
         }

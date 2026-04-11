@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
 } from 'react-native';
@@ -19,10 +18,10 @@ import { useWallet } from '../hooks/useWallet';
 import { ArrowLeft } from 'lucide-react-native';
 import authService from '../services/authService';
 import { deleteAllKeypairs, backupCloudKeyToBlockStore } from '../services/keypairStorage';
-import Toast from '../components/Toast';
 import { IS_SOLANA_MOBILE } from '../config/constants';
-import { logScreenView, logVaultSetupStart, logVaultSetupWalletConnected, logVaultSetupSuccess, logVaultSetupError } from '../services/analyticsService';
+import { logScreenView, logVaultSetupStart, logVaultSetupWalletConnected, logVaultSetupSuccess, logVaultSetupError, logVaultSetupMode } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 
 interface VaultSetupScreenProps {
   inviteCode: string;
@@ -36,12 +35,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function VaultSetupScreen({ inviteCode, pin, onComplete, onBack, onRecovery }: VaultSetupScreenProps) {
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const { connect: connectWallet } = useWallet();
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
-  const [toastVisible, setToastVisible] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastDescription, setToastDescription] = useState('');
 
   // Animations
   const emojiScale = useRef(new Animated.Value(0)).current;
@@ -94,6 +91,8 @@ export default function VaultSetupScreen({ inviteCode, pin, onComplete, onBack, 
       const paymentId = `${Platform.OS}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
       const seekerMode = IS_SOLANA_MOBILE;
+      const setupMode = seekerMode ? 'seeker' : 'standard';
+      logVaultSetupMode(setupMode);
       let walletAddr: string | undefined;
 
       if (seekerMode) {
@@ -121,7 +120,7 @@ export default function VaultSetupScreen({ inviteCode, pin, onComplete, onBack, 
       const msg = err?.message || '';
       if (!msg.includes('CancellationException')) {
         logVaultSetupError(msg);
-        Alert.alert('Error', msg || 'Something went wrong. Please try again.');
+        showToast('Error', msg || 'Something went wrong. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -137,14 +136,6 @@ export default function VaultSetupScreen({ inviteCode, pin, onComplete, onBack, 
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      <Toast
-        visible={toastVisible}
-        message={toastMessage}
-        description={toastDescription}
-        type="warning"
-        onDismiss={() => setToastVisible(false)}
-      />
-
       <ConfettiCannon
         ref={confettiRef}
         count={80}

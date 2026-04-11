@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
  * 10 requests per minute per IP.
  */
 export const authLimiter = rateLimit({
-  windowMs: 60 * 1000,
+  windowMs: 30 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
@@ -14,11 +14,11 @@ export const authLimiter = rateLimit({
 
 /**
  * Moderate rate limiter for general API endpoints.
- * 60 requests per minute per IP.
+ * 30 requests per 10 seconds per IP.
  */
 export const apiLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 90,
+  windowMs: 10 * 1000,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many requests, please try again later' },
@@ -41,7 +41,7 @@ export const adminLimiter = rateLimit({
  * 5 requests per minute per IP.
  */
 export const onboardingLimiter = rateLimit({
-  windowMs: 60 * 1000,
+  windowMs: 30 * 1000,
   max: 50,
   standardHeaders: true,
   legacyHeaders: false,
@@ -53,8 +53,8 @@ export const onboardingLimiter = rateLimit({
  * 10 requests per minute per IP.
  */
 export const debugLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
+  windowMs: 30 * 1000,
+  max: 50,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many requests' },

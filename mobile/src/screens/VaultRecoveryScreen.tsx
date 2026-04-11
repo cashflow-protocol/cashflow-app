@@ -17,8 +17,8 @@ import { Platform } from 'react-native';
 import { getCloudPublicKey, hasBlockStoreBackup, restoreCloudKeyFromBlockStore } from '../services/keypairStorage';
 import PinPad from '../components/PinPad';
 import apiService from '../services/apiService';
-import Toast from '../components/Toast';
 import { useTheme } from '../theme/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 import BottomSheet from '../components/BottomSheet';
 import VaultRecoveryExecutionScreen from './VaultRecoveryExecutionScreen';
 
@@ -47,14 +47,13 @@ function truncateAddress(addr: string): string {
 
 export default function VaultRecoveryScreen({ pin, onComplete, onBack }: VaultRecoveryScreenProps) {
   const { colors } = useTheme();
+  const { showToast: showToastCtx } = useToast();
   const { connect: connectWallet } = useWallet();
   const [step, setStep] = useState<RecoveryStep>('connect');
   const [walletAddress, setWalletAddress] = useState('');
   const [vaults, setVaults] = useState<MultisigResult[]>([]);
   const [selectedVault, setSelectedVault] = useState<MultisigResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [toastVisible, setToastVisible] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
   const [manualModalVisible, setManualModalVisible] = useState(false);
   const [manualAddress, setManualAddress] = useState('');
   const [manualLoading, setManualLoading] = useState(false);
@@ -72,9 +71,8 @@ export default function VaultRecoveryScreen({ pin, onComplete, onBack }: VaultRe
   }, []);
 
   const showToast = useCallback((msg: string) => {
-    setToastMessage(msg);
-    setToastVisible(true);
-  }, []);
+    showToastCtx('Error', msg);
+  }, [showToastCtx]);
 
   const handleConnect = useCallback(async () => {
 
@@ -468,13 +466,6 @@ export default function VaultRecoveryScreen({ pin, onComplete, onBack }: VaultRe
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      <Toast
-        visible={toastVisible}
-        message={toastMessage}
-        type="warning"
-        onDismiss={() => setToastVisible(false)}
-      />
-
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7} disabled={loading}>
           <ArrowLeft size={24} color={colors.onboardingText} />
