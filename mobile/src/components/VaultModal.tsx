@@ -270,11 +270,16 @@ export default function VaultModal({
         onSuccess();
       }, 1500);
     } catch (err) {
-      logVaultError(mode, symbol, (err as Error).message || 'unknown');
-      console.error(`[VaultModal] ${mode} error:`, (err as Error).message);
+      const errMsg = (err as Error).message || 'unknown';
+      logVaultError(mode, symbol, errMsg);
+      console.error(`[VaultModal] ${mode} error:`, errMsg);
+
+      const isSpendingLimit = errMsg.toLowerCase().includes('spending limit exceeded');
       setResult({
         success: false,
-        message: (err as Error).message || 'Something went wrong',
+        message: isSpendingLimit
+          ? 'Daily spending limit exceeded. You can increase your spending limit in Settings.'
+          : errMsg || 'Something went wrong',
       });
     } finally {
       setLoading(false);

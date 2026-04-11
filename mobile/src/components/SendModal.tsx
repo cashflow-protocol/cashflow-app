@@ -173,10 +173,15 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
       onSuccess();
       onClose();
     } catch (err) {
-      logSendError(selectedToken.symbol, (err as Error).message || 'unknown');
+      const errMsg = (err as Error).message || 'unknown';
+      logSendError(selectedToken.symbol, errMsg);
+
+      const isSpendingLimit = errMsg.toLowerCase().includes('spending limit exceeded');
       setResult({
         success: false,
-        message: (err as Error).message || 'Something went wrong',
+        message: isSpendingLimit
+          ? 'Daily spending limit exceeded. You can increase your spending limit in Settings.'
+          : errMsg || 'Something went wrong',
       });
     } finally {
       setLoading(false);
