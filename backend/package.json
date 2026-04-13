@@ -22,6 +22,7 @@
     "@kamino-finance/klend-sdk": "^7.3.19",
     "@onsol/tldparser": "^1.2.1",
     "@privy-io/node": "^0.11.0",
+    "@solana-name-service/sns-sdk-kit": "^0.9.0-beta",
     "@solana/kit": "^6.1.0",
     "@sqds/multisig": "^2.1.4",
     "@typegoose/typegoose": "^13.1.0",

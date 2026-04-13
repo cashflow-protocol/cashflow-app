@@ -142,7 +142,10 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
       })()
     : 0n;
   const exceedsBalance = selectedToken && isValidAmount && parsedRaw > maxSendable;
-  const isValidRecipient = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(recipient);
+  const recipientTrimmed = recipient.trim();
+  const isRecipientDomain = /^[a-zA-Z0-9-]+\.(sol|skr)$/i.test(recipientTrimmed);
+  const isRecipientAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(recipientTrimmed);
+  const isValidRecipient = isRecipientDomain || isRecipientAddress;
   const canSubmit = isValidAmount && !exceedsBalance && isValidRecipient && !loading && vaultData !== null;
 
   const handleSubmit = async () => {
@@ -153,13 +156,24 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
     setResult(null);
 
     try {
+      let destinationAddress = recipientTrimmed;
+      if (isRecipientDomain) {
+        const resolved = await apiService.resolveName(destinationAddress);
+        if (!resolved) {
+          setResult({ success: false, message: `Couldn't resolve ${destinationAddress}` });
+          setLoading(false);
+          return;
+        }
+        destinationAddress = resolved;
+      }
+
       const mint = selectedToken.mint === 'native' ? SOL_MINT : selectedToken.mint;
 
       const res = await apiService.transferInstructions({
         mint,
         amount: parsedRaw.toString(),
         ownerAddress: vaultData.vaultAddress,
-        destinationAddress: recipient,
+        destinationAddress,
         walletAddress: vaultData.vaultAddress,
         decimals: selectedToken.decimals,
       });

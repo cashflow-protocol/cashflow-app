@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { addMember } from '../services/squadsService';
+import apiService from '../services/apiService';
 import { getVault } from '../services/vaultStorage';
 import { logScreenView, logError, logAddMemberSubmit, logAddMemberSuccess, logAddMemberError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
@@ -42,13 +43,14 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
   React.useEffect(() => { logScreenView('AddMemberScreen'); }, []);
 
   const handleAddMember = async () => {
-    if (!memberAddress.trim()) {
+    const input = memberAddress.trim();
+    if (!input) {
       showToast('Error', 'Please enter a wallet address');
       return;
     }
 
-    // Basic validation: Solana addresses are 32-44 chars base58
-    if (memberAddress.trim().length < 32 || memberAddress.trim().length > 44) {
+    const isDomain = /^[a-zA-Z0-9-]+\.(sol|skr)$/i.test(input);
+    if (!isDomain && (input.length < 32 || input.length > 44)) {
       showToast('Error', 'Invalid Solana wallet address');
       return;
     }
@@ -56,6 +58,17 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
     logAddMemberSubmit(permissionType);
     setSubmitting(true);
     try {
+      let resolvedAddress = input;
+      if (isDomain) {
+        setStep('Resolving domain...');
+        const resolved = await apiService.resolveName(input);
+        if (!resolved) {
+          showToast('Error', `Couldn't resolve ${input}`);
+          return;
+        }
+        resolvedAddress = resolved;
+      }
+
       const vaultData = await getVault();
       if (!vaultData) {
         showToast('Error', 'No vault found. Please create a vault first.');
@@ -65,12 +78,12 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
       setStep('Creating proposal & approving...');
       const { signature } = await addMember(
         vaultData.multisigAddress,
-        memberAddress.trim(),
+        resolvedAddress,
         permissionType,
       );
 
       logAddMemberSuccess();
-      showToast('Member Added', `Successfully added ${memberAddress.trim().slice(0, 8)}... to your vault.`, 'success');
+      showToast('Member Added', `Successfully added ${resolvedAddress.slice(0, 8)}... to your vault.`, 'success');
       onNavigate('squads');
     } catch (err: any) {
       logAddMemberError(err?.message || 'unknown');
