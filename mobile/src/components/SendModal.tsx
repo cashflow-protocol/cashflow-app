@@ -17,6 +17,7 @@ import apiService from '../services/apiService';
 import { getVault, type VaultData } from '../services/vaultStorage';
 import { executeVaultTransaction } from '../services/squadsService';
 import { useAssets } from '../hooks/useAssets';
+import { useDomainResolution } from '../hooks/useDomainResolution';
 import type { WalletAsset } from '../types/earn';
 import { logSendTokenSelect, logSendMaxPress, logSendPasteAddress, logSendSubmit, logSendSuccess, logSendError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
@@ -24,6 +25,11 @@ import { useTheme } from '../theme/ThemeContext';
 import { SEND_MAX_RESERVE } from '../config/constants';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
+
+function truncateAddress(addr: string): string {
+  if (addr.length <= 12) return addr;
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
 
 type Step = 'select' | 'amount';
 
@@ -143,9 +149,9 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
     : 0n;
   const exceedsBalance = selectedToken && isValidAmount && parsedRaw > maxSendable;
   const recipientTrimmed = recipient.trim();
-  const isRecipientDomain = /^[a-zA-Z0-9-]+\.(sol|skr)$/i.test(recipientTrimmed);
+  const { isDomain: isRecipientDomain, resolving: resolvingDomain, resolvedAddress, error: domainError } = useDomainResolution(recipient);
   const isRecipientAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(recipientTrimmed);
-  const isValidRecipient = isRecipientDomain || isRecipientAddress;
+  const isValidRecipient = isRecipientAddress || (isRecipientDomain && !!resolvedAddress && !resolvingDomain && !domainError);
   const canSubmit = isValidAmount && !exceedsBalance && isValidRecipient && !loading && vaultData !== null;
 
   const handleSubmit = async () => {
@@ -156,16 +162,7 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
     setResult(null);
 
     try {
-      let destinationAddress = recipientTrimmed;
-      if (isRecipientDomain) {
-        const resolved = await apiService.resolveName(destinationAddress);
-        if (!resolved) {
-          setResult({ success: false, message: `Couldn't resolve ${destinationAddress}` });
-          setLoading(false);
-          return;
-        }
-        destinationAddress = resolved;
-      }
+      const destinationAddress = isRecipientDomain && resolvedAddress ? resolvedAddress : recipientTrimmed;
 
       const mint = selectedToken.mint === 'native' ? SOL_MINT : selectedToken.mint;
 
@@ -311,13 +308,31 @@ export default function SendModal({ visible, onClose, onSuccess }: SendModalProp
             </TouchableOpacity>
           </View>
 
+          {/* Domain resolution helper */}
+          {isRecipientDomain && resolvingDomain && (
+            <View style={styles.helperRow}>
+              <ActivityIndicator size="small" color={colors.textSecondary} />
+              <Text style={[styles.helperText, { color: colors.textSecondary }]}>Resolving {recipientTrimmed}...</Text>
+            </View>
+          )}
+          {isRecipientDomain && resolvedAddress && !resolvingDomain && (
+            <TouchableOpacity onPress={() => { Clipboard.setString(resolvedAddress); }} activeOpacity={0.7}>
+              <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+                → {truncateAddress(resolvedAddress)} (tap to copy)
+              </Text>
+            </TouchableOpacity>
+          )}
+          {isRecipientDomain && domainError && !resolvingDomain && (
+            <Text style={[styles.validationError, { color: colors.errorText }]}>{domainError}</Text>
+          )}
+
           {/* Validation errors */}
           {exceedsBalance && selectedToken && (
             <Text style={[styles.validationError, { color: colors.errorText }]}>
               Max you can send is {toUiAmount(maxSendable, selectedToken.decimals)} {selectedToken.symbol}
             </Text>
           )}
-          {recipient.length > 0 && !isValidRecipient && (
+          {recipient.length > 0 && !isValidRecipient && !isRecipientDomain && !recipientTrimmed.includes('.') && (
             <Text style={[styles.validationError, { color: colors.errorText }]}>Invalid Solana address</Text>
           )}
 
@@ -477,6 +492,15 @@ const styles = StyleSheet.create({
   validationError: {
     fontSize: 13,
     marginTop: -4,
+  },
+  helperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: -4,
+  },
+  helperText: {
+    fontSize: 13,
   },
   resultBanner: {
     borderRadius: 10,
