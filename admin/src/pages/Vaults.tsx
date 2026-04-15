@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { getEarnTokens, updateEarnTokenStatus, updateEarnTokenConfig } from '../api';
 
 interface EarnToken {
@@ -43,6 +43,14 @@ function solscanToken(mint: string) {
   return `https://solscan.io/token/${mint}`;
 }
 
+const selectStyle: CSSProperties = {
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: '1px solid #ddd',
+  background: '#fff',
+  fontSize: 14,
+};
+
 function formatCompact(num: number): string {
   if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + 'B';
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + 'M';
@@ -52,11 +60,16 @@ function formatCompact(num: number): string {
 
 export default function VaultsPage() {
   const [tokens, setTokens] = useState<EarnToken[]>([]);
+  const [coins, setCoins] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [coinFilter, setCoinFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [minPoolSize, setMinPoolSize] = useState('');
+  const [maxPoolSize, setMaxPoolSize] = useState('');
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
@@ -69,11 +82,18 @@ export default function VaultsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getEarnTokens(page, search, typeFilter);
+      const data = await getEarnTokens(page, search, {
+        type: typeFilter,
+        coin: coinFilter,
+        status: statusFilter,
+        minPoolSizeUsd: minPoolSize,
+        maxPoolSizeUsd: maxPoolSize,
+      });
       const sorted = (data.tokens || []).sort(
         (a: EarnToken, b: EarnToken) => (b.poolSizeUsd ?? 0) - (a.poolSizeUsd ?? 0),
       );
       setTokens(sorted);
+      if (Array.isArray(data.coins)) setCoins(data.coins);
       setTotal(data.total || 0);
       setPages(data.pages || 1);
     } catch (err) {
@@ -81,7 +101,7 @@ export default function VaultsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, typeFilter]);
+  }, [page, search, typeFilter, coinFilter, statusFilter, minPoolSize, maxPoolSize]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -134,28 +154,77 @@ export default function VaultsPage() {
         <h2>Vaults ({total})</h2>
       </div>
 
-      <div className="search-bar" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+      <div
+        className="search-bar"
+        style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}
+      >
         <input
           placeholder="Search by symbol, vault address, title, or mint..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          style={{ flex: '1 1 240px', minWidth: 220 }}
         />
         <select
           value={typeFilter}
           onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            border: '1px solid #ddd',
-            background: '#fff',
-            fontSize: 14,
-          }}
+          style={selectStyle}
         >
           <option value="">All Types</option>
           <option value="jupiter">Jupiter</option>
           <option value="kamino">Kamino</option>
           <option value="drift">Drift</option>
         </select>
+        <select
+          value={coinFilter}
+          onChange={(e) => { setCoinFilter(e.target.value); setPage(1); }}
+          style={selectStyle}
+        >
+          <option value="">All Coins</option>
+          {coins.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          style={selectStyle}
+        >
+          <option value="">All Statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <input
+          type="number"
+          inputMode="decimal"
+          placeholder="Min pool $"
+          value={minPoolSize}
+          onChange={(e) => { setMinPoolSize(e.target.value); setPage(1); }}
+          style={{ ...selectStyle, width: 120 }}
+        />
+        <input
+          type="number"
+          inputMode="decimal"
+          placeholder="Max pool $"
+          value={maxPoolSize}
+          onChange={(e) => { setMaxPoolSize(e.target.value); setPage(1); }}
+          style={{ ...selectStyle, width: 120 }}
+        />
+        {(typeFilter || coinFilter || statusFilter || minPoolSize || maxPoolSize || search) && (
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setSearch('');
+              setTypeFilter('');
+              setCoinFilter('');
+              setStatusFilter('');
+              setMinPoolSize('');
+              setMaxPoolSize('');
+              setPage(1);
+            }}
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       <div className="table-container">

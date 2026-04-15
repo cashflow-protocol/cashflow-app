@@ -192,10 +192,22 @@ export async function broadcastNotification(title: string, body?: string) {
 }
 
 // Earn tokens (vaults)
-export async function getEarnTokens(page = 1, search = '', type = '') {
+export interface EarnTokenFilters {
+  type?: string;
+  coin?: string;
+  status?: string;
+  minPoolSizeUsd?: string;
+  maxPoolSizeUsd?: string;
+}
+
+export async function getEarnTokens(page = 1, search = '', filters: EarnTokenFilters = {}) {
   const params = new URLSearchParams({ page: String(page), limit: '50' });
   if (search) params.set('search', search);
-  if (type) params.set('type', type);
+  if (filters.type) params.set('type', filters.type);
+  if (filters.coin) params.set('coin', filters.coin);
+  if (filters.status) params.set('status', filters.status);
+  if (filters.minPoolSizeUsd) params.set('minPoolSizeUsd', filters.minPoolSizeUsd);
+  if (filters.maxPoolSizeUsd) params.set('maxPoolSizeUsd', filters.maxPoolSizeUsd);
   return apiFetch(`/earn-tokens?${params}`);
 }
 
