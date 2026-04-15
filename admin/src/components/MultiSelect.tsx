@@ -119,6 +119,7 @@ export default function MultiSelect({
                   type="checkbox"
                   checked={selected.includes(opt)}
                   onChange={() => toggle(opt)}
+                  style={{ width: 'auto', padding: 0, margin: 0 }}
                 />
                 <span>{formatOption ? formatOption(opt) : opt}</span>
               </label>
