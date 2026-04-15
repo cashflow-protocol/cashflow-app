@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { getEarnTokens, updateEarnTokenStatus, updateEarnTokenConfig } from '../api';
+import MultiSelect from '../components/MultiSelect';
+
+const VAULT_TYPES = ['jupiter', 'kamino', 'drift'];
 
 interface EarnToken {
   id: string;
@@ -65,8 +68,8 @@ export default function VaultsPage() {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [coinFilter, setCoinFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [coinFilter, setCoinFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [minPoolSize, setMinPoolSize] = useState('');
   const [maxPoolSize, setMaxPoolSize] = useState('');
@@ -83,8 +86,8 @@ export default function VaultsPage() {
     setLoading(true);
     try {
       const data = await getEarnTokens(page, search, {
-        type: typeFilter,
-        coin: coinFilter,
+        types: typeFilter,
+        coins: coinFilter,
         status: statusFilter,
         minPoolSizeUsd: minPoolSize,
         maxPoolSizeUsd: maxPoolSize,
@@ -164,26 +167,19 @@ export default function VaultsPage() {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           style={{ flex: '1 1 240px', minWidth: 220 }}
         />
-        <select
-          value={typeFilter}
-          onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-          style={selectStyle}
-        >
-          <option value="">All Types</option>
-          <option value="jupiter">Jupiter</option>
-          <option value="kamino">Kamino</option>
-          <option value="drift">Drift</option>
-        </select>
-        <select
-          value={coinFilter}
-          onChange={(e) => { setCoinFilter(e.target.value); setPage(1); }}
-          style={selectStyle}
-        >
-          <option value="">All Coins</option>
-          {coins.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
+        <MultiSelect
+          label="Types"
+          options={VAULT_TYPES}
+          selected={typeFilter}
+          onChange={(next) => { setTypeFilter(next); setPage(1); }}
+          formatOption={(v) => v.charAt(0).toUpperCase() + v.slice(1)}
+        />
+        <MultiSelect
+          label="Coins"
+          options={coins}
+          selected={coinFilter}
+          onChange={(next) => { setCoinFilter(next); setPage(1); }}
+        />
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
@@ -209,13 +205,13 @@ export default function VaultsPage() {
           onChange={(e) => { setMaxPoolSize(e.target.value); setPage(1); }}
           style={{ ...selectStyle, width: 120 }}
         />
-        {(typeFilter || coinFilter || statusFilter || minPoolSize || maxPoolSize || search) && (
+        {(typeFilter.length || coinFilter.length || statusFilter || minPoolSize || maxPoolSize || search) ? (
           <button
             className="btn-secondary"
             onClick={() => {
               setSearch('');
-              setTypeFilter('');
-              setCoinFilter('');
+              setTypeFilter([]);
+              setCoinFilter([]);
               setStatusFilter('');
               setMinPoolSize('');
               setMaxPoolSize('');
@@ -224,7 +220,7 @@ export default function VaultsPage() {
           >
             Clear
           </button>
-        )}
+        ) : null}
       </div>
 
       <div className="table-container">

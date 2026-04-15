@@ -692,8 +692,12 @@ router.get('/earn-tokens', async (req, res) => {
         { mint: { $regex: search, $options: 'i' } },
       ];
     }
-    if (type) filter.type = type;
-    if (coin) filter.symbol = coin;
+    const typeList = type.split(',').map((s) => s.trim()).filter(Boolean);
+    const coinList = coin.split(',').map((s) => s.trim()).filter(Boolean);
+    if (typeList.length === 1) filter.type = typeList[0];
+    else if (typeList.length > 1) filter.type = { $in: typeList };
+    if (coinList.length === 1) filter.symbol = coinList[0];
+    else if (coinList.length > 1) filter.symbol = { $in: coinList };
     if (status) filter.status = status;
 
     const [rawTokens, allCoins] = await Promise.all([
