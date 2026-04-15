@@ -193,8 +193,8 @@ export async function broadcastNotification(title: string, body?: string) {
 
 // Earn tokens (vaults)
 export interface EarnTokenFilters {
-  type?: string;
-  coin?: string;
+  types?: string[];
+  coins?: string[];
   status?: string;
   minPoolSizeUsd?: string;
   maxPoolSizeUsd?: string;
@@ -203,8 +203,8 @@ export interface EarnTokenFilters {
 export async function getEarnTokens(page = 1, search = '', filters: EarnTokenFilters = {}) {
   const params = new URLSearchParams({ page: String(page), limit: '50' });
   if (search) params.set('search', search);
-  if (filters.type) params.set('type', filters.type);
-  if (filters.coin) params.set('coin', filters.coin);
+  if (filters.types?.length) params.set('type', filters.types.join(','));
+  if (filters.coins?.length) params.set('coin', filters.coins.join(','));
   if (filters.status) params.set('status', filters.status);
   if (filters.minPoolSizeUsd) params.set('minPoolSizeUsd', filters.minPoolSizeUsd);
   if (filters.maxPoolSizeUsd) params.set('maxPoolSizeUsd', filters.maxPoolSizeUsd);
