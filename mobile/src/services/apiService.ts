@@ -439,6 +439,18 @@ class ApiService {
     return res.data;
   }
 
+  async resolveName(name: string): Promise<string | null> {
+    try {
+      const res = await this.post<{ success: boolean; data: { address: string } }>(
+        '/solana/v2/resolve-name',
+        { name },
+      );
+      return res.data?.address ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async findVaultsByMember(
     memberAddress: string,
     cloudKey?: string,

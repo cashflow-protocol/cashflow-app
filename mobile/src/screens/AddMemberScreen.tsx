@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { addMember } from '../services/squadsService';
 import { getVault } from '../services/vaultStorage';
+import { useDomainResolution } from '../hooks/useDomainResolution';
 import { logScreenView, logError, logAddMemberSubmit, logAddMemberSuccess, logAddMemberError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
@@ -21,6 +22,11 @@ import { useToast } from '../contexts/ToastContext';
 interface AddMemberScreenProps {
   onNavigate: (screen: string) => void;
   onBack: () => void;
+}
+
+function truncateAddress(addr: string): string {
+  if (addr.length <= 12) return addr;
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
 type PermissionType = 'all' | 'vote' | 'execute';
@@ -38,17 +44,27 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
   const [permissionType, setPermissionType] = useState<PermissionType>('all');
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState('');
+  const { isDomain, resolving: resolvingDomain, resolvedAddress, error: domainError } = useDomainResolution(memberAddress);
 
   React.useEffect(() => { logScreenView('AddMemberScreen'); }, []);
 
   const handleAddMember = async () => {
-    if (!memberAddress.trim()) {
+    const input = memberAddress.trim();
+    if (!input) {
       showToast('Error', 'Please enter a wallet address');
       return;
     }
 
-    // Basic validation: Solana addresses are 32-44 chars base58
-    if (memberAddress.trim().length < 32 || memberAddress.trim().length > 44) {
+    if (isDomain) {
+      if (resolvingDomain) {
+        showToast('Please wait', 'Resolving domain...');
+        return;
+      }
+      if (!resolvedAddress) {
+        showToast('Error', domainError || `Couldn't resolve ${input}`);
+        return;
+      }
+    } else if (input.length < 32 || input.length > 44) {
       showToast('Error', 'Invalid Solana wallet address');
       return;
     }
@@ -56,6 +72,8 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
     logAddMemberSubmit(permissionType);
     setSubmitting(true);
     try {
+      const finalAddress = isDomain && resolvedAddress ? resolvedAddress : input;
+
       const vaultData = await getVault();
       if (!vaultData) {
         showToast('Error', 'No vault found. Please create a vault first.');
@@ -65,12 +83,12 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
       setStep('Creating proposal & approving...');
       const { signature } = await addMember(
         vaultData.multisigAddress,
-        memberAddress.trim(),
+        finalAddress,
         permissionType,
       );
 
       logAddMemberSuccess();
-      showToast('Member Added', `Successfully added ${memberAddress.trim().slice(0, 8)}... to your vault.`, 'success');
+      showToast('Member Added', `Successfully added ${finalAddress.slice(0, 8)}... to your vault.`, 'success');
       onNavigate('squads');
     } catch (err: any) {
       logAddMemberError(err?.message || 'unknown');
@@ -110,12 +128,26 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
             style={[styles.input, { color: colors.textPrimary, borderBottomColor: colors.border }]}
             value={memberAddress}
             onChangeText={setMemberAddress}
-            placeholder="Paste Solana wallet address"
+            placeholder="Paste address or enter domain (name.sol)"
             placeholderTextColor={colors.placeholderColor}
             editable={!submitting}
             autoCapitalize="none"
             autoCorrect={false}
           />
+          {isDomain && resolvingDomain && (
+            <View style={styles.helperRow}>
+              <ActivityIndicator size="small" color={colors.textSecondary} />
+              <Text style={[styles.helperTextInline, { color: colors.textSecondary }]}>Resolving {memberAddress.trim()}...</Text>
+            </View>
+          )}
+          {isDomain && resolvedAddress && !resolvingDomain && (
+            <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+              → {truncateAddress(resolvedAddress)}
+            </Text>
+          )}
+          {isDomain && domainError && !resolvingDomain && (
+            <Text style={[styles.helperText, { color: colors.errorText }]}>{domainError}</Text>
+          )}
         </View>
 
         {/* Permission Selector */}
@@ -145,9 +177,9 @@ export default function AddMemberScreen({ onNavigate, onBack }: AddMemberScreenP
 
         {/* Submit Button */}
         <TouchableOpacity
-          style={[styles.submitButton, { backgroundColor: colors.accentGreen }, submitting && styles.submitButtonDisabled]}
+          style={[styles.submitButton, { backgroundColor: colors.accentGreen }, (submitting || resolvingDomain) && styles.submitButtonDisabled]}
           onPress={handleAddMember}
-          disabled={submitting}
+          disabled={submitting || resolvingDomain}
         >
           {submitting ? (
             <View style={styles.loadingRow}>
@@ -222,6 +254,19 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     borderBottomWidth: 1,
     paddingBottom: 8,
+  },
+  helperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  helperText: {
+    fontSize: 13,
+    marginTop: 8,
+  },
+  helperTextInline: {
+    fontSize: 13,
   },
   permissionRow: {
     flexDirection: 'row',

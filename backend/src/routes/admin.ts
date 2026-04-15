@@ -676,6 +676,12 @@ router.get('/earn-tokens', async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
     const search = (req.query.search as string) || '';
     const type = (req.query.type as string) || '';
+    const coin = (req.query.coin as string) || '';
+    const status = (req.query.status as string) || '';
+    const minPoolSizeUsdRaw = req.query.minPoolSizeUsd as string | undefined;
+    const maxPoolSizeUsdRaw = req.query.maxPoolSizeUsd as string | undefined;
+    const minPoolSizeUsd = minPoolSizeUsdRaw ? parseFloat(minPoolSizeUsdRaw) : null;
+    const maxPoolSizeUsd = maxPoolSizeUsdRaw ? parseFloat(maxPoolSizeUsdRaw) : null;
 
     const filter: any = {};
     if (search) {
@@ -686,71 +692,82 @@ router.get('/earn-tokens', async (req, res) => {
         { mint: { $regex: search, $options: 'i' } },
       ];
     }
-    if (type) {
-      filter.type = type;
+    if (type) filter.type = type;
+    if (coin) filter.symbol = coin;
+    if (status) filter.status = status;
+
+    const [rawTokens, allCoins] = await Promise.all([
+      EarnTokenModel.find(filter).lean(),
+      EarnTokenModel.distinct('symbol'),
+    ]);
+
+    const enriched = rawTokens.map((t) => {
+      let poolSizeUi: number | null = null;
+      let poolSizeUsd: number | null = null;
+      try {
+        if (t.type === 'jupiter' && t.jupiterToken?.totalAssets) {
+          const dec = SUPPORTED_TOKENS_BY_MINT[t.mint]?.decimals ?? 6;
+          poolSizeUi = Number(t.jupiterToken.totalAssets) / 10 ** dec;
+        } else if (t.type === 'kamino' && t.kaminoToken?.metrics) {
+          const avail = Number(t.kaminoToken.metrics.tokensAvailable || 0);
+          const invested = Number(t.kaminoToken.metrics.tokensInvested || 0);
+          poolSizeUi = avail + invested;
+          const usdAvail = Number(t.kaminoToken.metrics.tokensAvailableUsd || 0);
+          const usdInvested = Number(t.kaminoToken.metrics.tokensInvestedUsd || 0);
+          poolSizeUsd = usdAvail + usdInvested;
+        } else if (t.type === 'drift' && t.driftToken?.depositBalance) {
+          const bal = Number(t.driftToken.depositBalance);
+          const interest = Number(t.driftToken.cumulativeDepositInterest || 1e10);
+          poolSizeUi = (bal * interest) / 1e9 / 1e10;
+        }
+        if (poolSizeUi !== null && poolSizeUsd === null) {
+          poolSizeUsd = priceManager.getUsdValue(t.symbol, poolSizeUi);
+        }
+      } catch {
+        // Pool size unavailable
+      }
+
+      const decimals = SUPPORTED_TOKENS_BY_MINT[t.mint]?.decimals ?? 6;
+
+      return {
+        id: t._id,
+        type: t.type,
+        vaultAddress: t.vaultAddress,
+        vaultTitle: t.vaultTitle,
+        mint: t.mint,
+        symbol: t.symbol,
+        rewardsRate: t.rewardsRate,
+        status: t.status,
+        minDepositAmount: t.minDepositAmount || '0',
+        minWithdrawAmount: t.minWithdrawAmount || '0',
+        poolSizeUi,
+        poolSizeUsd,
+        decimals,
+        createdAt: (t as any).createdAt,
+        updatedAt: (t as any).updatedAt,
+      };
+    });
+
+    let sizeFiltered = enriched;
+    if (minPoolSizeUsd !== null && !Number.isNaN(minPoolSizeUsd)) {
+      sizeFiltered = sizeFiltered.filter((t) => (t.poolSizeUsd ?? 0) >= minPoolSizeUsd);
+    }
+    if (maxPoolSizeUsd !== null && !Number.isNaN(maxPoolSizeUsd)) {
+      sizeFiltered = sizeFiltered.filter((t) => (t.poolSizeUsd ?? 0) <= maxPoolSizeUsd);
     }
 
-    const [tokens, total] = await Promise.all([
-      EarnTokenModel.find(filter)
-        .sort({ type: 1, rewardsRate: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean(),
-      EarnTokenModel.countDocuments(filter),
-    ]);
+    sizeFiltered.sort((a, b) => (b.poolSizeUsd ?? 0) - (a.poolSizeUsd ?? 0));
+
+    const total = sizeFiltered.length;
+    const paginated = sizeFiltered.slice((page - 1) * limit, page * limit);
 
     res.json({
       success: true,
-      tokens: tokens.map((t) => {
-        // Extract pool size (UI amount) and USD value
-        let poolSizeUi: number | null = null;
-        let poolSizeUsd: number | null = null;
-        try {
-          if (t.type === 'jupiter' && t.jupiterToken?.totalAssets) {
-            const dec = SUPPORTED_TOKENS_BY_MINT[t.mint]?.decimals ?? 6;
-            poolSizeUi = Number(t.jupiterToken.totalAssets) / 10 ** dec;
-          } else if (t.type === 'kamino' && t.kaminoToken?.metrics) {
-            const avail = Number(t.kaminoToken.metrics.tokensAvailable || 0);
-            const invested = Number(t.kaminoToken.metrics.tokensInvested || 0);
-            poolSizeUi = avail + invested;
-            const usdAvail = Number(t.kaminoToken.metrics.tokensAvailableUsd || 0);
-            const usdInvested = Number(t.kaminoToken.metrics.tokensInvestedUsd || 0);
-            poolSizeUsd = usdAvail + usdInvested;
-          } else if (t.type === 'drift' && t.driftToken?.depositBalance) {
-            const bal = Number(t.driftToken.depositBalance);
-            const interest = Number(t.driftToken.cumulativeDepositInterest || 1e10);
-            poolSizeUi = (bal * interest) / 1e9 / 1e10;
-          }
-          if (poolSizeUi !== null && poolSizeUsd === null) {
-            poolSizeUsd = priceManager.getUsdValue(t.symbol, poolSizeUi);
-          }
-        } catch {
-          // Pool size unavailable
-        }
-
-        const decimals = SUPPORTED_TOKENS_BY_MINT[t.mint]?.decimals ?? 6;
-
-        return {
-          id: t._id,
-          type: t.type,
-          vaultAddress: t.vaultAddress,
-          vaultTitle: t.vaultTitle,
-          mint: t.mint,
-          symbol: t.symbol,
-          rewardsRate: t.rewardsRate,
-          status: t.status,
-          minDepositAmount: t.minDepositAmount || '0',
-          minWithdrawAmount: t.minWithdrawAmount || '0',
-          poolSizeUi,
-          poolSizeUsd,
-          decimals,
-          createdAt: (t as any).createdAt,
-          updatedAt: (t as any).updatedAt,
-        };
-      }),
+      tokens: paginated,
+      coins: allCoins.sort(),
       total,
       page,
-      pages: Math.ceil(total / limit),
+      pages: Math.max(1, Math.ceil(total / limit)),
     });
   } catch (error) {
     console.error('Admin list earn tokens error:', error);

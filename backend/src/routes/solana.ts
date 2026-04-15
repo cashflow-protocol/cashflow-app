@@ -12,7 +12,7 @@ import {
   AccountRole,
 } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from '@solana/kit';
-import { DBManager, JitoManager, PriceManager, TokenManager, TransferManager } from '../managers';
+import { DBManager, JitoManager, PriceManager, SolanaDomainManager, TokenManager, TransferManager } from '../managers';
 import { TransactionAction } from '../models/Transaction';
 import { EarnTokenModel } from '../models';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
@@ -665,7 +665,7 @@ router.get('/sol-price', (_req: Request, res: Response) => {
   res.json({ success: true, data: { price } });
 });
 
-// POST /solana/v1/resolve-domains - Resolve Solana wallet addresses to domain names via AllDomains
+// POST /solana/v1/resolve-domains - Resolve Solana wallet addresses to primary domain names
 router.post('/resolve-domains', async (req: Request, res: Response) => {
   try {
     const { addresses } = req.body;
@@ -673,44 +673,30 @@ router.post('/resolve-domains', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'addresses array required' });
     }
 
-    // Lazy-import to avoid top-level @solana/web3.js Connection
-    const { TldParser } = await import('@onsol/tldparser');
-    const { Connection, PublicKey } = await import('@solana/web3.js');
-    const conn = new Connection(rpcUrl);
-    const parser = new TldParser(conn);
-
-    const domains: Record<string, string> = {};
-    const addressList = addresses.slice(0, 10);
-
-    // Batch resolve main domains (efficient single call)
-    try {
-      const mainDomains = await parser.getMainDomains(addressList);
-      for (let i = 0; i < addressList.length; i++) {
-        if (mainDomains[i]) {
-          domains[addressList[i]] = mainDomains[i]!;
-        }
-      }
-    } catch {}
-
-    // For addresses without a main domain, try getAllUserDomains as fallback
-    const missing = addressList.filter(addr => !domains[addr]);
-    if (missing.length > 0) {
-      await Promise.all(
-        missing.map(async (addr: string) => {
-          try {
-            const allDomains = await parser.getParsedAllUserDomains(new PublicKey(addr));
-            if (allDomains && allDomains.length > 0 && allDomains[0].domain) {
-              domains[addr] = allDomains[0].domain;
-            }
-          } catch {}
-        }),
-      );
-    }
-
+    const domains = await SolanaDomainManager.lookup(addresses);
     res.json({ success: true, data: domains });
   } catch (error) {
     console.error('Error resolving domains:', error);
     res.status(500).json({ success: false, error: 'Failed to resolve domains' });
+  }
+});
+
+// POST /solana/v1/resolve-name - Resolve a domain (e.g. mike.sol, mike.skr) to a wallet address
+router.post('/resolve-name', async (req: Request, res: Response) => {
+  try {
+    const { name } = req.body;
+    if (typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'name required' });
+    }
+
+    const resolved = await SolanaDomainManager.resolve(name);
+    if (!resolved) {
+      return res.status(404).json({ success: false, error: 'Domain not found' });
+    }
+    res.json({ success: true, data: { address: resolved } });
+  } catch (error) {
+    console.error('Error resolving name:', error);
+    res.status(500).json({ success: false, error: 'Failed to resolve name' });
   }
 });
 
