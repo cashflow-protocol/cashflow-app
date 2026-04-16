@@ -1,5 +1,5 @@
-/** Vault creation fee in lamports (0.05 SOL) */
-export const VAULT_CREATION_FEE = 50_000_000;
+/** Vault creation fee in lamports (0.0005 SOL) */
+export const VAULT_CREATION_FEE = 500_000;
 
 /** Target balance for admin tx fee payer after gas cover (0.05 SOL) */
 export const ADMIN_COVER_TARGET = 50_000_000;
