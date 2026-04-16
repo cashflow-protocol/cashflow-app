@@ -95,7 +95,7 @@ const PAGES: PageData[] = [
   {
     key: 'yield',
     icon: <YieldIcon size={100} />,
-    title: 'Wealth OS',
+    title: 'Wealth Engine',
     description: 'Earn yield across top DeFi protocols,\nbuy gold, tokenized stocks, and more.\nYour assets work for you, 24/7.',
   },
   {
