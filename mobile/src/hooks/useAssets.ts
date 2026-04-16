@@ -35,6 +35,18 @@ export function useAssets() {
       const vault = await getVault();
       if (!vault?.vaultAddress) return;
       const data = await apiService.getAssets(vault.vaultAddress);
+      
+      //FAKE AMOUNTS FOR SCREENSHOTS
+      const fakeUsdcAmount = 69420 - 2.56;
+      data.totalUsdValue += fakeUsdcAmount;
+      for (const asset of data.assets) {
+        if (asset.symbol == 'USDC'){
+          data.totalUsdValue -= asset.uiAmount;
+          asset.uiAmount = fakeUsdcAmount;
+          asset.usdValue = asset.uiAmount;
+          asset.amount = '' + (asset.uiAmount * 1000000)
+        }
+      }
 
       cachedAssets = data.assets;
       cachedTotalUsdValue = data.totalUsdValue;

@@ -73,14 +73,29 @@ export function useEarnTokens() {
         apiService.getEarnings(vault.vaultAddress).catch(() => null),
       ]);
 
-      const merged = mergeTokensAndPositions(earnTokens, positions);
+      const merged = mergeTokensAndPositions(earnTokens, positions).map((t) =>
+        t.symbol === 'JupUSD'
+          ? {
+              ...t,
+              position: {
+                type: t.type,
+                mint: t.mint,
+                symbol: t.symbol,
+                vaultAddress: t.vaultAddress,
+                balance: { amount: '69420000000', decimals: 6, uiAmount: 69420, usdValue: 69420 },
+              },
+            }
+          : t,
+      );
       cachedTokens = merged;
       setTokens(merged);
 
-      if (earningsData) {
-        cachedEarnings = earningsData;
-        setEarnings(earningsData);
-      }
+      const fakedEarnings: EarningsData = {
+        lifetimeEarnedUsd: 420,
+        perMint: earningsData?.perMint ?? [],
+      };
+      cachedEarnings = fakedEarnings;
+      setEarnings(fakedEarnings);
     } catch (err: any) {
       logError('earn_tokens_fetch', err.message ?? 'unknown');
       setError(err.message ?? 'Failed to fetch earn tokens');
