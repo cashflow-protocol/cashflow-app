@@ -22,10 +22,11 @@ import { useTheme } from '../theme/ThemeContext';
 const ALL_FILTER = 'All';
 const STABLES_FILTER = 'Stables';
 const YIELD_STABLES_FILTER = 'Yield Stables';
-const STABLECOIN_SYMBOLS = new Set(['USDC', 'USDT', 'JupUSD', 'USDG', 'USDS', 'PYUSD', 'USD*', 'sUSDv']);
+const STABLECOIN_SYMBOLS = new Set(['USDC', 'USDT', 'JupUSD', 'USDG', 'USDS', 'PYUSD', 'USD*', 'sUSDv', 'ONyc']);
 const YIELD_STABLECOIN_MINTS = new Set([
   'star9agSpjiFe3M49B3RniVU4CMBBEK3Qnaqn3RGiFM', // USD*
   'pTA4St7D5WshfLUPBXoaxn5m8e3k2ort2DVt3gUTa17', // sUSDv
+  '5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5', // ONyc
 ]);
 const PINNED_FILTERS = [ALL_FILTER, STABLES_FILTER, YIELD_STABLES_FILTER, 'SOL', 'USDC'];
 

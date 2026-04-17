@@ -16,6 +16,7 @@ const PROTOCOL_LABELS: Record<string, string> = {
   drift: 'Drift',
   perena: 'Perena',
   solomon: 'Solomon',
+  onre: 'Onre',
 };
 
 /** Get the display icon for a protocol. Falls back to remote URL for unknown protocols. */

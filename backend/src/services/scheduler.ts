@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import cron from 'node-cron';
 import { createSolanaRpc } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
-import { JupiterManager, KaminoManager, DriftManager, PerenaManager, SolomonManager, DBManager, PriceManager, TokenManager } from '../managers';
+import { JupiterManager, KaminoManager, DriftManager, PerenaManager, SolomonManager, OnreManager, DBManager, PriceManager, TokenManager } from '../managers';
 import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from '../models';
 import { NotificationType } from '../models';
 import { dispatchSystemNotification } from './notificationService';
@@ -13,6 +13,7 @@ const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
 const perenaManager = new PerenaManager();
 const solomonManager = new SolomonManager();
+const onreManager = new OnreManager();
 const dbManager = new DBManager();
 const priceManager = new PriceManager();
 const tokenManager = new TokenManager();
@@ -91,6 +92,19 @@ async function updateSolomonEarnTokens() {
     console.log('✅ [Cron] Solomon Earn tokens update completed');
   } catch (error) {
     console.error('❌ [Cron] Failed to update Solomon Earn tokens:', error);
+  }
+}
+
+/**
+ * Fetch and update Onre Earn tokens
+ */
+async function updateOnreEarnTokens() {
+  try {
+    console.log('🔄 [Cron] Starting Onre Earn tokens update...');
+    await onreManager.getEarnTokens();
+    console.log('✅ [Cron] Onre Earn tokens update completed');
+  } catch (error) {
+    console.error('❌ [Cron] Failed to update Onre Earn tokens:', error);
   }
 }
 
@@ -257,6 +271,11 @@ export async function initializeScheduler() {
     timezone: 'UTC',
   });
 
+  // Fetch Onre Earn tokens every hour
+  cron.schedule('0 * * * *', updateOnreEarnTokens, {
+    timezone: 'UTC',
+  });
+
   // Fetch Drift Earn tokens every minute
   // if (driftManager) {
   //   cron.schedule('* * * * *', updateDriftEarnTokens, {
@@ -291,6 +310,7 @@ export async function initializeScheduler() {
   console.log('  - Kamino Earn tokens: Every minute');
   console.log('  - Perena Earn tokens: Every minute');
   console.log('  - Solomon Earn tokens: Every hour');
+  console.log('  - Onre Earn tokens: Every hour');
   if (driftManager) {
     console.log('  - Drift Earn tokens: Every minute');
   }
@@ -305,6 +325,7 @@ export async function initializeScheduler() {
   updateKaminoEarnTokens();
   updatePerenaEarnTokens();
   updateSolomonEarnTokens();
+  updateOnreEarnTokens();
   // if (driftManager) {
   //   updateDriftEarnTokens();
   // }

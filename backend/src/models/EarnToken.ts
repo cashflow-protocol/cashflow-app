@@ -8,7 +8,7 @@ import { EarnTokenType } from '../types';
     collection: 'earn_tokens',
     toJSON: {
       transform: (_doc, ret) => {
-        const { _id, __v, jupiterToken, kaminoToken, driftToken, perenaToken, solomonToken, createdAt, updatedAt, ...fields } = ret;
+        const { _id, __v, jupiterToken, kaminoToken, driftToken, perenaToken, solomonToken, onreToken, createdAt, updatedAt, ...fields } = ret;
         const { logoUrl, ...tokenInfo } = SUPPORTED_TOKENS_BY_MINT[fields.mint] ?? {};
         return { ...fields, ...tokenInfo };
       },
@@ -64,6 +64,9 @@ export class EarnToken {
 
   @prop({ type: () => Object })
   public solomonToken?: Record<string, any>;
+
+  @prop({ type: () => Object })
+  public onreToken?: Record<string, any>;
 
   @prop()
   public protocolName?: string;

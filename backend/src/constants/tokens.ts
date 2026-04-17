@@ -77,6 +77,13 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     decimals: 6,
     logoUrl: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/susdv.png',
   },
+  {
+    mint: '5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5',
+    symbol: 'ONyc',
+    name: 'ONyc',
+    decimals: 6,
+    logoUrl: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/onyc.png',
+  },
 
 ];
 
