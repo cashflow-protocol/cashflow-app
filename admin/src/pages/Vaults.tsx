@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { getEarnTokens, updateEarnTokenStatus, updateEarnTokenConfig } from '../api';
 import MultiSelect from '../components/MultiSelect';
 
-const VAULT_TYPES = ['jupiter', 'kamino', 'drift'];
+const VAULT_TYPES = ['jupiter', 'kamino', 'drift', 'perena'];
 
 interface EarnToken {
   id: string;
-  type: 'jupiter' | 'kamino' | 'drift';
+  type: 'jupiter' | 'kamino' | 'drift' | 'perena';
   vaultAddress: string;
   vaultTitle: string;
   mint: string;
@@ -26,12 +26,14 @@ const TYPE_ICONS: Record<string, string> = {
   jupiter: '\u2643',   // ♃
   kamino: '\u25C6',    // ◆
   drift: '\u2248',     // ≈
+  perena: '\u25CF',    // ●
 };
 
 const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   jupiter: { bg: '#e8f5e9', color: '#2e7d32' },
   kamino: { bg: '#e3f2fd', color: '#1565c0' },
   drift: { bg: '#fff3e0', color: '#e65100' },
+  perena: { bg: '#f3e5f5', color: '#7b1fa2' },
 };
 
 function shortenAddress(addr: string) {

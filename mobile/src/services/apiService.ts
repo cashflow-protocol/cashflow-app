@@ -1,5 +1,5 @@
 import { API_CONFIG } from '../config/api';
-import { APP_VERSION } from '../config/version';
+import { BUILD_NUMBER } from '../config/version';
 import type { EarnToken, EarnPosition, WalletAsset, Suggestion } from '../types/earn';
 import type { AppNotification } from '../types/notification';
 import authService from './authService';
@@ -118,7 +118,7 @@ class ApiService {
   }
 
   async getEarnTokens(): Promise<EarnToken[]> {
-    const res = await this.get<{ success: boolean; data: EarnToken[] }>('/earn/v2/tokens', { appVersion: APP_VERSION });
+    const res = await this.get<{ success: boolean; data: EarnToken[] }>('/earn/v2/tokens', { buildNumber: BUILD_NUMBER });
     return res.data;
   }
 

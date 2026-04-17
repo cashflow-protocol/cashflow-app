@@ -8,11 +8,11 @@ import { EarnTokenType, type IBalance } from '../types';
 import { notifyAdmin } from '../services/telegramManager';
 import { calculateFee, buildFeeTransferInstructions, createFeeRecord } from '../services/feeService';
 import type { AuthenticatedRequest } from '../middleware/auth';
-import { isValidSolanaAddress, isVersionOlder } from '../utils/validation';
+import { isValidSolanaAddress } from '../utils/validation';
 
-/** Protocols that require app version 1.2+ (view-only / coming soon protocols) */
+/** Protocols that require a minimum build number (view-only / coming soon protocols) */
 const VIEW_ONLY_PROTOCOLS = new Set<string>([EarnTokenType.PERENA]);
-const MIN_VERSION_FOR_VIEW_ONLY = '1.2';
+const MIN_BUILD_FOR_VIEW_ONLY = 20;
 
 /**
  * Verify that the given walletAddress belongs to the authenticated user.
@@ -42,12 +42,13 @@ const priceManager = new PriceManager();
 // GET /earn/v1/tokens - Get earn tokens from MongoDB
 router.get('/tokens', async (req: Request, res: Response) => {
   try {
-    const { type, appVersion } = req.query;
+    const { type, buildNumber } = req.query;
     const typeFilter = type && typeof type === 'string' ? { type } : undefined;
     let tokens = await dbManager.getTokens(typeFilter);
 
-    // Hide view-only protocols from older app versions
-    if (!appVersion || typeof appVersion !== 'string' || isVersionOlder(appVersion, MIN_VERSION_FOR_VIEW_ONLY)) {
+    // Hide view-only protocols from older app builds
+    const build = typeof buildNumber === 'string' ? parseInt(buildNumber, 10) : 0;
+    if (!build || build < MIN_BUILD_FOR_VIEW_ONLY) {
       tokens = tokens.filter((t: any) => !VIEW_ONLY_PROTOCOLS.has(t.type));
     }
 
