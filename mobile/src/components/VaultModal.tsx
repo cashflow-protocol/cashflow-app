@@ -7,11 +7,11 @@ import {
   TextInput,
   ActivityIndicator,
   Image,
-  ImageSourcePropType,
 } from 'react-native';
 import BottomSheet from './BottomSheet';
 import type { EarnTokenType, EarnPosition } from '../types/earn';
 import { getTokenIcon } from '../assets/token-icons';
+import { getProtocolIcon, getProtocolLabel, isProtocolSupported } from '../constants/protocols';
 import apiService from '../services/apiService';
 import walletService from '../services/walletService';
 import { getVault, type VaultData } from '../services/vaultStorage';
@@ -22,17 +22,6 @@ import { Buffer } from 'buffer';
 import bs58 from 'bs58';
 import { logVaultModalOpen, logVaultModeSwitch, logVaultMaxPress, logVaultSubmit, logVaultSuccess, logVaultError, logVaultValidationError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
-
-const PROTOCOL_LABELS: Record<EarnTokenType, string> = {
-  jupiter: 'Jupiter',
-  kamino: 'Kamino',
-  drift: 'Drift',
-};
-const PROTOCOL_ICONS: Record<EarnTokenType, ImageSourcePropType> = {
-  jupiter: require('../assets/protocol-icons/jupiter.png'),
-  kamino: require('../assets/protocol-icons/kamino.png'),
-  drift: require('../assets/protocol-icons/drift.png'),
-};
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const SOL_RENT_RESERVE = BigInt(10_000_000); // 0.01 SOL in lamports
 
@@ -58,6 +47,8 @@ interface VaultModalProps {
   position?: EarnPosition;
   minDepositAmount?: string;
   minWithdrawAmount?: string;
+  protocolName?: string;
+  protocolIconUrl?: string;
 }
 
 type Mode = 'deposit' | 'withdraw';
@@ -77,6 +68,8 @@ export default function VaultModal({
   position,
   minDepositAmount,
   minWithdrawAmount,
+  protocolName,
+  protocolIconUrl,
 }: VaultModalProps) {
   const { colors } = useTheme();
   const { wallet, connect, isConnecting } = useWallet();
@@ -137,6 +130,9 @@ export default function VaultModal({
 
   const apyPercent = (rewardsRate / 100).toFixed(2);
   const localIcon = getTokenIcon(mint);
+  const protocolIcon = getProtocolIcon(type, protocolIconUrl);
+  const protocolLabel = getProtocolLabel(type, protocolName);
+  const supported = isProtocolSupported(type);
   const hasPosition = position != null && position.balance.uiAmount > 0;
 
   const sanitizeAmount = (text: string) => {
@@ -296,14 +292,35 @@ export default function VaultModal({
                     <Image source={localIcon ?? { uri: logoUrl }} style={styles.tokenIcon} />
                   </View>
                   <View style={[styles.protocolBadge, { backgroundColor: colors.sheetBackground, borderColor: colors.border }]}>
-                    <Image source={PROTOCOL_ICONS[type]} style={styles.protocolIcon} />
+                    {protocolIcon ? (
+                      <Image source={protocolIcon} style={styles.protocolIcon} />
+                    ) : (
+                      <Text style={styles.protocolIconFallback}>{protocolLabel.charAt(0)}</Text>
+                    )}
                   </View>
                 </View>
                 <View style={styles.vaultInfo}>
-                  <Text style={[styles.vaultTitle, { color: colors.textPrimary }]} numberOfLines={1}>{vaultTitle || `${PROTOCOL_LABELS[type]} - ${symbol}`}</Text>
+                  <Text style={[styles.vaultTitle, { color: colors.textPrimary }]} numberOfLines={1}>{vaultTitle || `${protocolLabel} - ${symbol}`}</Text>
                   <Text style={[styles.vaultApy, { color: colors.accentGreenDark }]}>{apyPercent}% APY</Text>
                 </View>
               </View>
+
+              {/* Coming soon for unsupported protocols */}
+              {!supported ? (
+                <View style={styles.comingSoonContainer}>
+                  <Text style={[styles.comingSoonText, { color: colors.textSecondary }]}>
+                    Deposits for {protocolLabel} will be available soon
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.submitButton, { backgroundColor: colors.primaryButton }]}
+                    onPress={onClose}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.submitText, { color: colors.primaryButtonText }]}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+              <>
 
               {/* Mode toggle */}
               <View style={styles.modeToggle}>
@@ -401,6 +418,9 @@ export default function VaultModal({
                   </Text>
                 )}
               </TouchableOpacity>
+
+              </>
+              )}
     </BottomSheet>
   );
 }
@@ -444,6 +464,21 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
+  },
+  protocolIconFallback: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#666',
+  },
+  comingSoonContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 20,
+  },
+  comingSoonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   vaultInfo: {
     flex: 1,

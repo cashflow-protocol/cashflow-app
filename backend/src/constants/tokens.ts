@@ -63,6 +63,13 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     decimals: 6,
     logoUrl: 'https://assets.coingecko.com/coins/images/31212/standard/PYUSD_Token_Logo_2x.png?1765987788',
   },
+  {
+    mint: 'star9agSpjiFe3M49B3RniVU4CMBBEK3Qnaqn3RGiFM',
+    symbol: 'USD*',
+    name: 'USD*',
+    decimals: 6,
+    logoUrl: 'https://app.perena.org/tokens/usdstar.svg',
+  },
 
 ];
 

@@ -1,20 +1,9 @@
 import React from 'react';
-import { View, Text, Image, ImageSourcePropType, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import type { EarnTokenType } from '../types/earn';
 import { getTokenIcon } from '../assets/token-icons';
-
-const PROTOCOL_ICONS: Record<EarnTokenType, ImageSourcePropType> = {
-  jupiter: require('../assets/protocol-icons/jupiter.png'),
-  kamino: require('../assets/protocol-icons/kamino.png'),
-  drift: require('../assets/protocol-icons/drift.png'),
-};
-
-const PROTOCOL_LABELS: Record<EarnTokenType, string> = {
-  jupiter: 'Jupiter',
-  kamino: 'Kamino',
-  drift: 'Drift',
-};
+import { getProtocolIcon, getProtocolLabel } from '../constants/protocols';
 
 interface EarnTokenItemProps {
   type: EarnTokenType;
@@ -28,6 +17,8 @@ interface EarnTokenItemProps {
   /** When true, shows deposit amount instead of APY, hides position bar, removes shadow. */
   compact?: boolean;
   onPress?: () => void;
+  protocolName?: string;
+  protocolIconUrl?: string;
 }
 
 function formatUsd(value: number): string {
@@ -52,11 +43,13 @@ export default function EarnTokenItem({
   positionUsdValue,
   compact,
   onPress,
+  protocolName,
+  protocolIconUrl,
 }: EarnTokenItemProps) {
   const { colors } = useTheme();
   const apyPercent = (rewardsRate / 100).toFixed(2);
-  const protocolIcon = PROTOCOL_ICONS[type];
-  const protocolLabel = PROTOCOL_LABELS[type];
+  const protocolIcon = getProtocolIcon(type, protocolIconUrl);
+  const protocolLabel = getProtocolLabel(type, protocolName);
   const localIcon = getTokenIcon(mint);
   const hasPosition = positionAmount != null && positionAmount > 0;
 
@@ -69,7 +62,11 @@ export default function EarnTokenItem({
             <Image source={localIcon ?? { uri: logoUrl }} style={styles.tokenIcon} />
           </View>
           <View style={[styles.protocolBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Image source={protocolIcon} style={styles.protocolIcon} />
+            {protocolIcon ? (
+              <Image source={protocolIcon} style={styles.protocolIcon} />
+            ) : (
+              <Text style={styles.protocolIconFallback}>{protocolLabel.charAt(0)}</Text>
+            )}
           </View>
         </View>
 
@@ -154,6 +151,11 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
+  },
+  protocolIconFallback: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#666',
   },
   info: {
     flex: 1,

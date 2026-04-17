@@ -29,12 +29,15 @@ export interface EarnTokenUpsert {
   minDepositAmount?: string;
   minWithdrawAmount?: string;
   protocolData?: Record<string, any>;
+  protocolName?: string;
+  protocolIconUrl?: string;
 }
 
 const PROTOCOL_DATA_FIELD: Record<EarnTokenType, string> = {
   [EarnTokenType.JUPITER]: 'jupiterToken',
   [EarnTokenType.KAMINO]: 'kaminoToken',
   [EarnTokenType.DRIFT]: 'driftToken',
+  [EarnTokenType.PERENA]: 'perenaToken',
 };
 
 export class DBManager {
@@ -66,6 +69,8 @@ export class DBManager {
               ...(token.minDepositAmount && { minDepositAmount: token.minDepositAmount }),
               ...(token.minWithdrawAmount && { minWithdrawAmount: token.minWithdrawAmount }),
               ...(token.protocolData && { [dataField]: token.protocolData }),
+              ...(token.protocolName && { protocolName: token.protocolName }),
+              ...(token.protocolIconUrl && { protocolIconUrl: token.protocolIconUrl }),
             },
             $setOnInsert: {
               status: 'inactive' as const,
@@ -99,7 +104,7 @@ export class DBManager {
     }
 
     return EarnTokenModel.find(query)
-      .select('type mint vaultAddress vaultTitle symbol rewardsRate status minDepositAmount minWithdrawAmount')
+      .select('type mint vaultAddress vaultTitle symbol rewardsRate status minDepositAmount minWithdrawAmount protocolName protocolIconUrl')
       .sort({ rewardsRate: -1 });
   }
 

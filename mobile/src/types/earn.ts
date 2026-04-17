@@ -1,4 +1,4 @@
-export type EarnTokenType = 'jupiter' | 'kamino' | 'drift';
+export type EarnTokenType = 'jupiter' | 'kamino' | 'drift' | (string & {});
 
 export interface EarnToken {
   type: EarnTokenType;
@@ -13,6 +13,8 @@ export interface EarnToken {
   logoUrl: string;
   minDepositAmount?: string;
   minWithdrawAmount?: string;
+  protocolName?: string;
+  protocolIconUrl?: string;
 }
 
 export interface WalletAsset {

@@ -283,6 +283,8 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
                   rewardsRate={token.rewardsRate}
                   positionAmount={token.position?.balance.uiAmount}
                   positionUsdValue={token.position?.balance.usdValue}
+                  protocolName={token.protocolName}
+                  protocolIconUrl={token.protocolIconUrl}
                   compact
                 />
               ))}
