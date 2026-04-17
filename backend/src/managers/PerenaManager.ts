@@ -2,7 +2,7 @@ import axios, { AxiosInstance } from 'axios';
 import { EarnTokenType } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
-const PERENA_ICON_URL = 'https://app.perena.org/perena-logo.svg';
+const PERENA_ICON_URL = 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/perena.jpg';
 const USD_STAR_MINT = 'star9agSpjiFe3M49B3RniVU4CMBBEK3Qnaqn3RGiFM';
 
 interface PerenaApyResponse {

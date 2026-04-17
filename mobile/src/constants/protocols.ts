@@ -7,12 +7,14 @@ const PROTOCOL_ICONS: Record<string, ImageSourcePropType> = {
   jupiter: require('../assets/protocol-icons/jupiter.png'),
   kamino: require('../assets/protocol-icons/kamino.png'),
   drift: require('../assets/protocol-icons/drift.png'),
+  perena: require('../assets/protocol-icons/perena.jpg'),
 };
 
 const PROTOCOL_LABELS: Record<string, string> = {
   jupiter: 'Jupiter',
   kamino: 'Kamino',
   drift: 'Drift',
+  perena: 'Perena',
 };
 
 /** Get the display icon for a protocol. Falls back to remote URL for unknown protocols. */

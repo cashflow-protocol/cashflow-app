@@ -68,7 +68,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     symbol: 'USD*',
     name: 'USD*',
     decimals: 6,
-    logoUrl: 'https://app.perena.org/tokens/usdstar.svg',
+    logoUrl: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/perena_usd.png',
   },
 
 ];
