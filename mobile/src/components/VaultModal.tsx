@@ -312,7 +312,7 @@ export default function VaultModal({
                     Deposits for {protocolLabel} will be available soon
                   </Text>
                   <TouchableOpacity
-                    style={[styles.submitButton, { backgroundColor: colors.primaryButton }]}
+                    style={[styles.submitButton, styles.comingSoonButton, { backgroundColor: colors.primaryButton }]}
                     onPress={onClose}
                     activeOpacity={0.7}
                   >
@@ -479,6 +479,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  comingSoonButton: {
+    alignSelf: 'stretch',
   },
   vaultInfo: {
     flex: 1,
