@@ -1,18 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { isLoggedIn, login, clearPassword, getEnv, setEnv, type Env } from './api';
+import StatsPage from './pages/Stats';
 import InviteCodesPage from './pages/InviteCodes';
 import WaitlistUsersPage from './pages/WaitlistUsers';
 import WaitlistTasksPage from './pages/WaitlistTasks';
 import UsersPage from './pages/Users';
 import VaultsPage from './pages/Vaults';
 
-type Page = 'invite-codes' | 'waitlist-users' | 'waitlist-tasks' | 'users' | 'vaults';
+type Page = 'stats' | 'invite-codes' | 'waitlist-users' | 'waitlist-tasks' | 'users' | 'vaults';
 
-const PAGES: Page[] = ['invite-codes', 'waitlist-users', 'waitlist-tasks', 'users', 'vaults'];
+const PAGES: Page[] = ['stats', 'invite-codes', 'waitlist-users', 'waitlist-tasks', 'users', 'vaults'];
 
 function getPageFromPath(): Page {
   const path = window.location.pathname.replace(/^\//, '');
-  return PAGES.includes(path as Page) ? (path as Page) : 'invite-codes';
+  return PAGES.includes(path as Page) ? (path as Page) : 'stats';
 }
 
 function LoginPage({ onLogin }: { onLogin: () => void }) {
@@ -91,6 +92,12 @@ export default function App() {
 
         <nav className="sidebar-nav">
           <button
+            className={page === 'stats' ? 'active' : ''}
+            onClick={() => setPage('stats')}
+          >
+            Stats
+          </button>
+          <button
             className={page === 'invite-codes' ? 'active' : ''}
             onClick={() => setPage('invite-codes')}
           >
@@ -140,6 +147,7 @@ export default function App() {
       </aside>
 
       <main className="main-content">
+        {page === 'stats' && <StatsPage />}
         {page === 'invite-codes' && <InviteCodesPage />}
         {page === 'waitlist-users' && <WaitlistUsersPage />}
         {page === 'waitlist-tasks' && <WaitlistTasksPage />}
