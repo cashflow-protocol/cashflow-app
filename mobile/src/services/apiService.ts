@@ -254,6 +254,10 @@ class ApiService {
     });
   }
 
+  async notifyInterest(protocol: string, protocolName: string): Promise<void> {
+    await this.post<{ success: boolean }>('/earn/v2/notify-interest', { protocol, protocolName });
+  }
+
   async deposit(params: {
     type: string;
     mint: string;

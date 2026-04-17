@@ -3,7 +3,7 @@ import { DBManager, JupiterManager, KaminoManager, DriftManager, PriceManager } 
 import { LookupManager } from '../managers/LookupManager';
 import { EarnTokenModel } from '../models/EarnToken';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
-import { TransactionAction, UserCostBasisModel, UserModel } from '../models';
+import { TransactionAction, UserCostBasisModel, UserModel, NotifyInterestModel } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
 import { notifyAdmin } from '../services/telegramManager';
 import { calculateFee, buildFeeTransferInstructions, createFeeRecord } from '../services/feeService';
@@ -656,6 +656,44 @@ router.post('/withdraw', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create withdraw transaction',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// POST /earn/v1/notify-interest - Record user interest in a view-only protocol
+router.post('/notify-interest', async (req: Request, res: Response) => {
+  try {
+    const { protocol, protocolName } = req.body;
+    if (!protocol || typeof protocol !== 'string') {
+      res.status(400).json({ success: false, error: 'protocol is required' });
+      return;
+    }
+
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.userId;
+    const vaultAddress = authReq.user?.vaultAddress;
+    if (!userId || !vaultAddress) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    await NotifyInterestModel.updateOne(
+      { userId, protocol },
+      { $set: { userId, protocol, protocolName } },
+      { upsert: true },
+    );
+
+    notifyAdmin(
+      `🔔 User wants to deposit into <b>${protocolName || protocol}</b> (view-only)\n\nVault: <code>${vaultAddress}</code>`,
+    ).catch(() => {});
+
+    res.json({ success: true, timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error recording notify interest:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to record interest',
       timestamp: new Date().toISOString(),
     });
   }

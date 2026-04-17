@@ -81,6 +81,8 @@ export default function VaultModal({
   const [walletBalance, setWalletBalance] = useState<bigint | null>(null);
   const [vaultData, setVaultData] = useState<VaultData | null>(null);
   const [feePreview, setFeePreview] = useState<{ feeUiAmount: number; profitUiAmount: number } | null>(null);
+  const [notified, setNotified] = useState(false);
+  const [notifying, setNotifying] = useState(false);
 
   // Convert raw bigint amount to UI display string
   const toUiAmount = (raw: bigint, dec: number): string => {
@@ -110,6 +112,8 @@ export default function VaultModal({
       setResult(null);
       setWalletBalance(null);
       setVaultData(null);
+      setNotified(false);
+      setNotifying(false);
 
       (async () => {
         const vault = await getVault();
@@ -312,11 +316,29 @@ export default function VaultModal({
                     Deposits for {protocolLabel} will be available soon
                   </Text>
                   <TouchableOpacity
-                    style={[styles.submitButton, styles.comingSoonButton, { backgroundColor: colors.primaryButton }]}
-                    onPress={onClose}
+                    style={[styles.submitButton, styles.comingSoonButton, { backgroundColor: colors.primaryButton }, notified && { backgroundColor: colors.disabledButton }]}
+                    onPress={async () => {
+                      if (notified || notifying) return;
+                      setNotifying(true);
+                      try {
+                        await apiService.notifyInterest(type, protocolLabel);
+                        setNotified(true);
+                      } catch {}
+                      setNotifying(false);
+                    }}
                     activeOpacity={0.7}
+                    disabled={notified || notifying}
                   >
-                    <Text style={[styles.submitText, { color: colors.primaryButtonText }]}>Close</Text>
+                    {notifying ? (
+                      <ActivityIndicator color={colors.primaryButtonText} />
+                    ) : (
+                      <Text style={[styles.submitText, { color: colors.primaryButtonText }]}>
+                        {notified ? "We'll notify you!" : 'Notify Me'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
+                    <Text style={[styles.comingSoonClose, { color: colors.textSecondary }]}>Close</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -482,6 +504,11 @@ const styles = StyleSheet.create({
   },
   comingSoonButton: {
     alignSelf: 'stretch',
+  },
+  comingSoonClose: {
+    fontSize: 15,
+    fontWeight: '600',
+    paddingVertical: 8,
   },
   vaultInfo: {
     flex: 1,
