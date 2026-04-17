@@ -75,7 +75,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     symbol: 'sUSDv',
     name: 'Staked USDv',
     decimals: 6,
-    logoUrl: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/susdv.svg',
+    logoUrl: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/susdv.png',
   },
 
 ];

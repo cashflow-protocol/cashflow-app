@@ -2,7 +2,7 @@ import axios, { AxiosInstance } from 'axios';
 import { EarnTokenType } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
-const SOLOMON_ICON_URL = 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/solomon.svg';
+const SOLOMON_ICON_URL = 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/solomon.png';
 const SUSDV_MINT = 'pTA4St7D5WshfLUPBXoaxn5m8e3k2ort2DVt3gUTa17';
 
 interface VestingInfo {
