@@ -70,6 +70,13 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     decimals: 6,
     logoUrl: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/perena_usd.png',
   },
+  {
+    mint: 'pTA4St7D5WshfLUPBXoaxn5m8e3k2ort2DVt3gUTa17',
+    symbol: 'sUSDv',
+    name: 'Staked USDv',
+    decimals: 6,
+    logoUrl: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/susdv.svg',
+  },
 
 ];
 

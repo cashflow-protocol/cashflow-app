@@ -38,6 +38,7 @@ const PROTOCOL_DATA_FIELD: Record<EarnTokenType, string> = {
   [EarnTokenType.KAMINO]: 'kaminoToken',
   [EarnTokenType.DRIFT]: 'driftToken',
   [EarnTokenType.PERENA]: 'perenaToken',
+  [EarnTokenType.SOLOMON]: 'solomonToken',
 };
 
 export class DBManager {

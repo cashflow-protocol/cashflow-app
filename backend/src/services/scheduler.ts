@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import cron from 'node-cron';
 import { createSolanaRpc } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
-import { JupiterManager, KaminoManager, DriftManager, PerenaManager, DBManager, PriceManager, TokenManager } from '../managers';
+import { JupiterManager, KaminoManager, DriftManager, PerenaManager, SolomonManager, DBManager, PriceManager, TokenManager } from '../managers';
 import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from '../models';
 import { NotificationType } from '../models';
 import { dispatchSystemNotification } from './notificationService';
@@ -12,6 +12,7 @@ import { updateCostBasisOnConfirm, markFeeTransactionFailed } from './feeService
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
 const perenaManager = new PerenaManager();
+const solomonManager = new SolomonManager();
 const dbManager = new DBManager();
 const priceManager = new PriceManager();
 const tokenManager = new TokenManager();
@@ -77,6 +78,19 @@ async function updatePerenaEarnTokens() {
     console.log('✅ [Cron] Perena Earn tokens update completed');
   } catch (error) {
     console.error('❌ [Cron] Failed to update Perena Earn tokens:', error);
+  }
+}
+
+/**
+ * Fetch and update Solomon Earn tokens
+ */
+async function updateSolomonEarnTokens() {
+  try {
+    console.log('🔄 [Cron] Starting Solomon Earn tokens update...');
+    await solomonManager.getEarnTokens();
+    console.log('✅ [Cron] Solomon Earn tokens update completed');
+  } catch (error) {
+    console.error('❌ [Cron] Failed to update Solomon Earn tokens:', error);
   }
 }
 
@@ -238,6 +252,11 @@ export async function initializeScheduler() {
     timezone: 'UTC',
   });
 
+  // Fetch Solomon Earn tokens every hour
+  cron.schedule('0 * * * *', updateSolomonEarnTokens, {
+    timezone: 'UTC',
+  });
+
   // Fetch Drift Earn tokens every minute
   // if (driftManager) {
   //   cron.schedule('* * * * *', updateDriftEarnTokens, {
@@ -271,6 +290,7 @@ export async function initializeScheduler() {
   console.log('  - Jupiter Earn tokens: Every minute');
   console.log('  - Kamino Earn tokens: Every minute');
   console.log('  - Perena Earn tokens: Every minute');
+  console.log('  - Solomon Earn tokens: Every hour');
   if (driftManager) {
     console.log('  - Drift Earn tokens: Every minute');
   }
@@ -284,6 +304,7 @@ export async function initializeScheduler() {
   updateJupiterEarnTokens();
   updateKaminoEarnTokens();
   updatePerenaEarnTokens();
+  updateSolomonEarnTokens();
   // if (driftManager) {
   //   updateDriftEarnTokens();
   // }

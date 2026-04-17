@@ -11,7 +11,7 @@ import type { AuthenticatedRequest } from '../middleware/auth';
 import { isValidSolanaAddress } from '../utils/validation';
 
 /** Protocols that require a minimum build number (view-only / coming soon protocols) */
-const VIEW_ONLY_PROTOCOLS = new Set<string>([EarnTokenType.PERENA]);
+const VIEW_ONLY_PROTOCOLS = new Set<string>([EarnTokenType.PERENA, EarnTokenType.SOLOMON]);
 const MIN_BUILD_FOR_VIEW_ONLY = 20;
 
 /**

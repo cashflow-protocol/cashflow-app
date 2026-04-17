@@ -3,6 +3,7 @@ export { JupiterManager } from './JupiterManager';
 export { KaminoManager } from './KaminoManager';
 export { DriftManager } from './DriftManager';
 export { PerenaManager } from './PerenaManager';
+export { SolomonManager } from './SolomonManager';
 export { PriceManager } from './PriceManager';
 export { JitoManager } from './JitoManager';
 export { TokenManager } from './TokenManager';
