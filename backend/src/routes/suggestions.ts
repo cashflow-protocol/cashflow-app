@@ -5,6 +5,7 @@ import { JupiterManager, KaminoManager } from '../managers';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { EarnTokenType } from '../types';
 import type { Suggestion, SuggestionsRequest } from '../types';
+import { isVersionOlder } from '../utils/validation';
 
 const router = Router();
 
@@ -16,19 +17,6 @@ const kaminoManager = new KaminoManager();
 
 // Latest app version – bump when a new release is published
 const LATEST_APP_VERSION = '1.0';
-
-/** Returns true if a < b using numeric segment comparison (e.g. "1.3" < "1.11") */
-function isVersionOlder(a: string, b: string): boolean {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const na = pa[i] ?? 0;
-    const nb = pb[i] ?? 0;
-    if (na < nb) return true;
-    if (na > nb) return false;
-  }
-  return false;
-}
 
 // Minimum SOL balance (in lamports) below which we suggest funding
 const LOW_SOL_THRESHOLD = 50_000_000n; // 0.05 SOL
