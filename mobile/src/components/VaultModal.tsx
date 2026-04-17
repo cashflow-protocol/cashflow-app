@@ -316,7 +316,7 @@ export default function VaultModal({
                     Deposits for {protocolLabel} will be available soon
                   </Text>
                   <TouchableOpacity
-                    style={[styles.submitButton, styles.comingSoonButton, { backgroundColor: colors.primaryButton }, notified && { backgroundColor: colors.disabledButton }]}
+                    style={[styles.submitButton, styles.comingSoonButton, { backgroundColor: colors.accentGreen }, notified && { backgroundColor: colors.disabledButton }]}
                     onPress={async () => {
                       if (notified || notifying) return;
                       setNotifying(true);
@@ -330,9 +330,9 @@ export default function VaultModal({
                     disabled={notified || notifying}
                   >
                     {notifying ? (
-                      <ActivityIndicator color={colors.primaryButtonText} />
+                      <ActivityIndicator color="#FFFFFF" />
                     ) : (
-                      <Text style={[styles.submitText, { color: colors.primaryButtonText }]}>
+                      <Text style={[styles.submitText, { color: '#FFFFFF' }]}>
                         {notified ? "We'll notify you!" : 'Notify Me'}
                       </Text>
                     )}
