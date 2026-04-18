@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { getEarnTokens, updateEarnTokenStatus, updateEarnTokenConfig } from '../api';
 import MultiSelect from '../components/MultiSelect';
 
-const VAULT_TYPES = ['jupiter', 'kamino', 'drift', 'perena'];
+const VAULT_TYPES = ['jupiter', 'kamino', 'drift', 'perena', 'solomon', 'onre'];
 
 interface EarnToken {
   id: string;
-  type: 'jupiter' | 'kamino' | 'drift' | 'perena';
+  type: 'jupiter' | 'kamino' | 'drift' | 'perena' | 'solomon' | 'onre';
   vaultAddress: string;
   vaultTitle: string;
   mint: string;
@@ -18,15 +18,18 @@ interface EarnToken {
   poolSizeUi: number | null;
   poolSizeUsd: number | null;
   decimals: number;
+  protocolIconUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-const TYPE_ICONS: Record<string, string> = {
-  jupiter: '\u2643',   // ♃
-  kamino: '\u25C6',    // ◆
-  drift: '\u2248',     // ≈
-  perena: '\u25CF',    // ●
+const TYPE_LOGO_URLS: Record<string, string> = {
+  jupiter: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/jupiter.svg',
+  kamino: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/kamino.svg',
+  drift: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/drift.svg',
+  perena: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/perena.jpg',
+  solomon: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/solomon.png',
+  onre: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/onre.jpg',
 };
 
 const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
@@ -34,6 +37,8 @@ const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   kamino: { bg: '#e3f2fd', color: '#1565c0' },
   drift: { bg: '#fff3e0', color: '#e65100' },
   perena: { bg: '#f3e5f5', color: '#7b1fa2' },
+  solomon: { bg: '#fce4ec', color: '#c62828' },
+  onre: { bg: '#e0f2f1', color: '#00695c' },
 };
 
 function shortenAddress(addr: string) {
@@ -255,7 +260,12 @@ export default function VaultsPage() {
                       fontWeight: 600,
                     }}
                   >
-                    {TYPE_ICONS[t.type] || '?'} {t.type}
+                    <img
+                      src={t.protocolIconUrl || TYPE_LOGO_URLS[t.type]}
+                      alt={t.type}
+                      style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: 'middle', marginRight: 4 }}
+                    />
+                    {t.type}
                   </span>
                 </td>
                 <td>
@@ -352,7 +362,12 @@ export default function VaultsPage() {
                   marginRight: 8,
                 }}
               >
-                {TYPE_ICONS[editToken.type]} {editToken.type}
+                <img
+                  src={editToken.protocolIconUrl || TYPE_LOGO_URLS[editToken.type]}
+                  alt={editToken.type}
+                  style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: 'middle', marginRight: 4 }}
+                />
+                {editToken.type}
               </span>
               <strong>{editToken.symbol}</strong> &mdash; {editToken.vaultTitle}
             </p>
