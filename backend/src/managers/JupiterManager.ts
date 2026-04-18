@@ -28,6 +28,8 @@ import type { SerializedInstruction } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const PLATFORM_FEE_BPS = 10; // 0.1% swap fee
+const PLATFORM_FEE_WALLET = process.env.TREASURY_WALLET_ADDRESS;
 
 interface JupiterAsset {
   address: string;
@@ -359,9 +361,11 @@ export class JupiterManager {
 
     // Limit route complexity for Squads vault transactions — the inner message
     // and execute TX must both fit within Solana's 1232-byte transaction limit.
-    const response = await this.api.get('/swap/v1/quote', {
-      params: { inputMint, outputMint, amount, slippageBps, maxAccounts: 20 },
-    });
+    const params: Record<string, any> = { inputMint, outputMint, amount, slippageBps, maxAccounts: 20 };
+    if (PLATFORM_FEE_WALLET) {
+      params.platformFeeBps = PLATFORM_FEE_BPS;
+    }
+    const response = await this.api.get('/swap/v1/quote', { params });
 
     const quote = response.data;
     return {
@@ -399,12 +403,24 @@ export class JupiterManager {
       await this.getSwapQuote(inputMint, outputMint, amount, slippageBps);
 
     // 2. Get swap instructions from Jupiter
-    const response = await this.api.post('/swap/v1/swap-instructions', {
+    const swapParams: Record<string, any> = {
       quoteResponse,
       userPublicKey: templateSigner,
       dynamicComputeUnitLimit: true,
       dynamicSlippage: true,
-    });
+    };
+
+    // Platform fee: derive the fee account (ATA of fee wallet for the output token)
+    if (PLATFORM_FEE_WALLET) {
+      const [feeAta] = await findAssociatedTokenPda({
+        owner: address(PLATFORM_FEE_WALLET),
+        tokenProgram: TOKEN_PROGRAM_ADDRESS,
+        mint: address(outputMint === SOL_MINT ? SOL_MINT : outputMint),
+      });
+      swapParams.feeAccount = feeAta as string;
+    }
+
+    const response = await this.api.post('/swap/v1/swap-instructions', swapParams);
 
     const data = response.data;
 
