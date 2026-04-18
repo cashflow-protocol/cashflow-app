@@ -121,6 +121,7 @@ export class DBManager {
     amount: string;
     walletAddress: string;
     destinationAddress?: string;
+    outputMint?: string;
     unsignedTransaction?: string;
     feeAmount?: string;
   }) {

@@ -341,6 +341,148 @@ export class JupiterManager {
   }
 
   /**
+   * Get a swap quote from Jupiter Swap API.
+   */
+  async getSwapQuote(
+    inputMint: string,
+    outputMint: string,
+    amount: string,
+    slippageBps: number = 50,
+  ): Promise<{
+    outputAmount: string;
+    priceImpactPct: number;
+    otherAmountThreshold: string;
+    routePlan: any[];
+    quoteResponse: any;
+  }> {
+    console.log(`[JupiterManager.getSwapQuote] inputMint=${inputMint}, outputMint=${outputMint}, amount=${amount}, slippageBps=${slippageBps}`);
+
+    const response = await this.api.get('/swap/v1/quote', {
+      params: { inputMint, outputMint, amount, slippageBps },
+    });
+
+    const quote = response.data;
+    return {
+      outputAmount: quote.outAmount,
+      priceImpactPct: parseFloat(quote.priceImpactPct || '0'),
+      otherAmountThreshold: quote.otherAmountThreshold,
+      routePlan: quote.routePlan || [],
+      quoteResponse: quote,
+    };
+  }
+
+  /**
+   * Get raw swap instructions for Jupiter Swap (used by Squads vault flow).
+   * Uses templateSigner for the API call (Jupiter rejects PDAs), then replaces
+   * all occurrences of templateSigner and its derived ATAs with ownerAddress.
+   * For SOL input, prepends wSOL wrapping instructions.
+   * For SOL output, appends wSOL close instruction.
+   */
+  async getSwapInstructions(
+    inputMint: string,
+    outputMint: string,
+    amount: string,
+    ownerAddress: string,
+    templateSigner: string,
+    slippageBps: number = 50,
+  ): Promise<{
+    instructions: SerializedInstruction[];
+    extraLookupTables: string[];
+    quote: { outputAmount: string; priceImpactPct: number; otherAmountThreshold: string };
+  }> {
+    console.log(`[JupiterManager.getSwapInstructions] in=${inputMint}, out=${outputMint}, amount=${amount}, owner=${ownerAddress}, apiSigner=${templateSigner}`);
+
+    // 1. Fetch fresh quote
+    const { quoteResponse, outputAmount, priceImpactPct, otherAmountThreshold } =
+      await this.getSwapQuote(inputMint, outputMint, amount, slippageBps);
+
+    // 2. Get swap instructions from Jupiter
+    const response = await this.api.post('/swap/v1/swap-instructions', {
+      quoteResponse,
+      userPublicKey: templateSigner,
+      dynamicComputeUnitLimit: true,
+      dynamicSlippage: true,
+    });
+
+    const data = response.data;
+
+    // 3. Collect all instructions in execution order
+    const rawIxs: SerializedInstruction[] = [];
+
+    if (data.computeBudgetInstructions) {
+      for (const ix of data.computeBudgetInstructions) {
+        rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+      }
+    }
+    if (data.setupInstructions) {
+      for (const ix of data.setupInstructions) {
+        rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+      }
+    }
+    if (data.swapInstruction) {
+      const ix = data.swapInstruction;
+      rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+    }
+    if (data.cleanupInstruction) {
+      const ix = data.cleanupInstruction;
+      rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+    }
+
+    console.log(`[JupiterManager.getSwapInstructions] Jupiter returned ${rawIxs.length} raw instructions`);
+
+    // 4. Replace template signer with real owner (vault PDA)
+    const replacedIxs = (await this.replaceAuthority(rawIxs, templateSigner, ownerAddress, inputMint))
+      .map(ix => this.makeAtaIdempotent(ix));
+
+    // 5. Handle SOL wrapping/unwrapping
+    const finalIxs: SerializedInstruction[] = [];
+    const signer = this.createNoopSigner(ownerAddress);
+    const owner = address(ownerAddress);
+
+    if (inputMint === SOL_MINT) {
+      // Prepend wSOL wrapping instructions for SOL input
+      const solMint = address(SOL_MINT);
+      const [wsolAta] = await findAssociatedTokenPda({
+        owner, tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: solMint,
+      });
+
+      finalIxs.push(
+        this.kitIxToSerialized(getCreateAssociatedTokenIdempotentInstruction({
+          payer: signer, ata: wsolAta, owner, mint: solMint,
+        })),
+        this.kitIxToSerialized(getTransferSolInstruction({
+          source: signer, destination: wsolAta, amount: BigInt(amount),
+        })),
+        this.kitIxToSerialized(getSyncNativeInstruction({ account: wsolAta })),
+      );
+    }
+
+    finalIxs.push(...replacedIxs);
+
+    if (outputMint === SOL_MINT) {
+      // Append wSOL close instruction for SOL output
+      const solMint = address(SOL_MINT);
+      const [wsolAta] = await findAssociatedTokenPda({
+        owner, tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: solMint,
+      });
+
+      finalIxs.push(
+        this.kitIxToSerialized(getCloseAccountInstruction({
+          account: wsolAta, destination: owner, owner: signer,
+        })),
+      );
+    }
+
+    console.log(`[JupiterManager.getSwapInstructions] Final: ${finalIxs.length} instructions, ${(data.addressLookupTableAddresses || []).length} LUTs`);
+
+    return {
+      instructions: finalIxs,
+      extraLookupTables: data.addressLookupTableAddresses || [],
+      quote: { outputAmount, priceImpactPct, otherAmountThreshold },
+    };
+  }
+
+  /**
    * Fetch token information from Jupiter Tokens V2 API by mint addresses.
    * Batches into chunks of 100 (Jupiter API limit) with parallel requests.
    */

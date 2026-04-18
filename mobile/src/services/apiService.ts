@@ -339,6 +339,85 @@ class ApiService {
     return { transactionId: res.transactionId, instructions: res.instructions };
   }
 
+  async swapQuote(params: {
+    inputMint: string;
+    outputMint: string;
+    amount: string;
+    slippageBps?: string;
+  }): Promise<{
+    outputAmount: string;
+    outputUiAmount: number;
+    priceImpactPct: number;
+    minimumReceived: string;
+    minimumReceivedUi: number;
+  }> {
+    const res = await this.get<{
+      success: boolean;
+      data: {
+        outputAmount: string;
+        outputUiAmount: number;
+        priceImpactPct: number;
+        minimumReceived: string;
+        minimumReceivedUi: number;
+      };
+    }>('/solana/v2/swap-quote', params as Record<string, string>);
+    return res.data;
+  }
+
+  async swapInstructions(params: {
+    inputMint: string;
+    outputMint: string;
+    amount: string;
+    walletAddress: string;
+    ownerAddress: string;
+    slippageBps?: number;
+  }): Promise<{
+    transactionId: string;
+    instructions: SerializedInstruction[];
+    extraLookupTables?: string[];
+    quote: {
+      outputAmount: string;
+      outputUiAmount: number;
+      priceImpactPct: number;
+      minimumReceived: string;
+      minimumReceivedUi: number;
+    };
+  }> {
+    const res = await this.signedPost<{
+      success: boolean;
+      transactionId: string;
+      instructions: SerializedInstruction[];
+      extraLookupTables?: string[];
+      quote: {
+        outputAmount: string;
+        outputUiAmount: number;
+        priceImpactPct: number;
+        minimumReceived: string;
+        minimumReceivedUi: number;
+      };
+    }>('/solana/v2/swap', params);
+    return {
+      transactionId: res.transactionId,
+      instructions: res.instructions,
+      extraLookupTables: res.extraLookupTables,
+      quote: res.quote,
+    };
+  }
+
+  async getPopularTokens(): Promise<{
+    mint: string;
+    symbol: string;
+    name: string;
+    decimals: number;
+    logoUrl: string;
+  }[]> {
+    const res = await this.get<{
+      success: boolean;
+      data: { mint: string; symbol: string; name: string; decimals: number; logoUrl: string }[];
+    }>('/solana/v2/popular-tokens');
+    return res.data;
+  }
+
   async getSuggestions(params: {
     vaultAddress?: string;
     walletAddress?: string;
