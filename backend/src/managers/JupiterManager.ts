@@ -357,8 +357,10 @@ export class JupiterManager {
   }> {
     console.log(`[JupiterManager.getSwapQuote] inputMint=${inputMint}, outputMint=${outputMint}, amount=${amount}, slippageBps=${slippageBps}`);
 
+    // Limit route complexity for Squads vault transactions — the inner message
+    // and execute TX must both fit within Solana's 1232-byte transaction limit.
     const response = await this.api.get('/swap/v1/quote', {
-      params: { inputMint, outputMint, amount, slippageBps },
+      params: { inputMint, outputMint, amount, slippageBps, maxAccounts: 20 },
     });
 
     const quote = response.data;
