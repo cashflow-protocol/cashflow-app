@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel } from '../models';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel } from '../models';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { PriceManager } from '../managers';
 import { dispatchSystemNotification } from '../services/notificationService';
@@ -71,6 +71,99 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 }
 
 router.use(requireAdmin);
+
+// ─── Stats ───
+
+/**
+ * GET /stats
+ * Aggregate counts for the admin dashboard.
+ */
+router.get('/stats', async (_req, res) => {
+  try {
+    const now = new Date();
+    const startOfTodayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const startOfYesterdayUTC = new Date(startOfTodayUTC.getTime() - 86_400_000);
+
+    const [
+      usersTotal,
+      usersToday,
+      usersYesterday,
+      waitlistTotal,
+      waitlistApproved,
+      waitlistNotApproved,
+      waitlistYesterdayApproved,
+      waitlistYesterdayNotApproved,
+      waitlistTodayApproved,
+      waitlistTodayNotApproved,
+      txTotal,
+      txToday,
+      txYesterday,
+      depositsTotal,
+      depositsToday,
+      depositsYesterday,
+      withdrawalsTotal,
+      withdrawalsToday,
+      withdrawalsYesterday,
+      transfersTotal,
+      transfersToday,
+      transfersYesterday,
+    ] = await Promise.all([
+      // Users
+      UserModel.countDocuments({}),
+      UserModel.countDocuments({ createdAt: { $gte: startOfTodayUTC } }),
+      UserModel.countDocuments({ createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // Waitlist totals
+      WaitlistUserModel.countDocuments({}),
+      WaitlistUserModel.countDocuments({ approvedAt: { $exists: true } }),
+      WaitlistUserModel.countDocuments({ approvedAt: { $exists: false } }),
+      // Waitlist yesterday
+      WaitlistUserModel.countDocuments({ createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC }, approvedAt: { $exists: true } }),
+      WaitlistUserModel.countDocuments({ createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC }, approvedAt: { $exists: false } }),
+      // Waitlist today
+      WaitlistUserModel.countDocuments({ createdAt: { $gte: startOfTodayUTC }, approvedAt: { $exists: true } }),
+      WaitlistUserModel.countDocuments({ createdAt: { $gte: startOfTodayUTC }, approvedAt: { $exists: false } }),
+      // Transactions totals
+      TransactionModel.countDocuments({}),
+      TransactionModel.countDocuments({ createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // Deposits
+      TransactionModel.countDocuments({ action: 'deposit' }),
+      TransactionModel.countDocuments({ action: 'deposit', createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ action: 'deposit', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // Withdrawals
+      TransactionModel.countDocuments({ action: 'withdraw' }),
+      TransactionModel.countDocuments({ action: 'withdraw', createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ action: 'withdraw', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // Transfers
+      TransactionModel.countDocuments({ action: 'transfer' }),
+      TransactionModel.countDocuments({ action: 'transfer', createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ action: 'transfer', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+    ]);
+
+    res.json({
+      success: true,
+      users: { total: usersTotal, today: usersToday, yesterday: usersYesterday },
+      waitlist: {
+        total: waitlistTotal,
+        approved: waitlistApproved,
+        notApproved: waitlistNotApproved,
+        yesterday: { approved: waitlistYesterdayApproved, notApproved: waitlistYesterdayNotApproved },
+        today: { approved: waitlistTodayApproved, notApproved: waitlistTodayNotApproved },
+      },
+      transactions: {
+        total: txTotal,
+        today: txToday,
+        yesterday: txYesterday,
+        deposits: { total: depositsTotal, today: depositsToday, yesterday: depositsYesterday },
+        withdrawals: { total: withdrawalsTotal, today: withdrawalsToday, yesterday: withdrawalsYesterday },
+        transfers: { total: transfersTotal, today: transfersToday, yesterday: transfersYesterday },
+      },
+    });
+  } catch (error) {
+    console.error('Admin stats error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load stats' });
+  }
+});
 
 // ─── Invite Codes ───
 

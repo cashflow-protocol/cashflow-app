@@ -93,29 +93,29 @@ router.post('/verify', async (req, res) => {
 
     // Upsert user and log auth event (non-blocking)
     const now = new Date();
-    (async () => {
-      try {
-        // Look up waitlist user to link
-        const waitlistUser = await WaitlistUserModel.findOne({ publicKey }).lean();
-        const extraFields: Record<string, any> = { lastSeenAt: now, publicKey };
-        if (inviteCode) extraFields.inviteCode = inviteCode;
-        if (waitlistUser) extraFields.waitlistUserId = String(waitlistUser._id);
 
-        const existingUser = await UserModel.findOne({ vaultAddress });
-        await UserModel.findOneAndUpdate(
-          { vaultAddress },
-          { $set: extraFields, $setOnInsert: { vaultAddress } },
-          { upsert: true },
-        );
+    // Upsert user and retrieve _id for JWT
+    let userId: string | undefined;
+    try {
+      const waitlistUser = await WaitlistUserModel.findOne({ publicKey }).lean();
+      const extraFields: Record<string, any> = { lastSeenAt: now, publicKey };
+      if (inviteCode) extraFields.inviteCode = inviteCode;
+      if (waitlistUser) extraFields.waitlistUserId = String(waitlistUser._id);
 
-        if (!existingUser) {
-          // Telegram notification moved to confirm-vault (only after bundle lands on-chain)
-          subscribeToVault(vaultAddress);
-        }
-      } catch (err) {
-        console.error('User upsert error:', err);
+      const existingUser = await UserModel.findOne({ vaultAddress });
+      const user = await UserModel.findOneAndUpdate(
+        { vaultAddress },
+        { $set: extraFields, $setOnInsert: { vaultAddress } },
+        { upsert: true, new: true },
+      );
+      userId = user ? String(user._id) : undefined;
+
+      if (!existingUser) {
+        subscribeToVault(vaultAddress);
       }
-    })();
+    } catch (err) {
+      console.error('User upsert error:', err);
+    }
 
     AuthLogModel.create({
       publicKey,
@@ -129,7 +129,7 @@ router.post('/verify', async (req, res) => {
 
     // Issue JWT
     const accessToken = jwt.sign(
-      { sub: publicKey, vaultAddress },
+      { sub: publicKey, vaultAddress, ...(userId && { userId }) },
       process.env.JWT_SECRET!,
       { expiresIn: TOKEN_EXPIRY_SECONDS },
     );

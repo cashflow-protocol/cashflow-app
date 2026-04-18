@@ -12,4 +12,5 @@ export { DeviceToken, DeviceTokenModel } from './DeviceToken';
 export { UserCostBasis, UserCostBasisModel } from './UserCostBasis';
 export { FeeTransaction, FeeTransactionModel, FeeTransactionStatus, FeeType } from './FeeTransaction';
 export { RecoveryProposal, RecoveryProposalModel, RecoveryProposalStatus } from './RecoveryProposal';
+export { NotifyInterest, NotifyInterestModel } from './NotifyInterest';
 export { VaultPayment, VaultPaymentModel, VaultPaymentStatus, VaultMode } from './VaultPayment';

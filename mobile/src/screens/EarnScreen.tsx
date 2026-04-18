@@ -21,8 +21,14 @@ import { useTheme } from '../theme/ThemeContext';
 
 const ALL_FILTER = 'All';
 const STABLES_FILTER = 'Stables';
-const STABLECOIN_SYMBOLS = new Set(['USDC', 'USDT', 'JupUSD', 'USDG', 'USDS', 'PYUSD']);
-const PINNED_FILTERS = [ALL_FILTER, STABLES_FILTER, 'SOL', 'USDC'];
+const YIELD_STABLES_FILTER = 'Yield Stables';
+const STABLECOIN_SYMBOLS = new Set(['USDC', 'USDT', 'JupUSD', 'USDG', 'USDS', 'PYUSD', 'USD*', 'sUSDv', 'ONyc']);
+const YIELD_STABLECOIN_MINTS = new Set([
+  'star9agSpjiFe3M49B3RniVU4CMBBEK3Qnaqn3RGiFM', // USD*
+  'pTA4St7D5WshfLUPBXoaxn5m8e3k2ort2DVt3gUTa17', // sUSDv
+  '5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5', // ONyc
+]);
+const PINNED_FILTERS = [ALL_FILTER, STABLES_FILTER, YIELD_STABLES_FILTER, 'SOL', 'USDC'];
 
 export default function EarnScreen() {
   const { colors } = useTheme();
@@ -61,6 +67,7 @@ export default function EarnScreen() {
   const filteredTokens = useMemo(() => {
     if (activeFilter === ALL_FILTER) return tokens;
     if (activeFilter === STABLES_FILTER) return tokens.filter((t) => STABLECOIN_SYMBOLS.has(t.symbol));
+    if (activeFilter === YIELD_STABLES_FILTER) return tokens.filter((t) => YIELD_STABLECOIN_MINTS.has(t.mint));
     return tokens.filter((t) => t.symbol === activeFilter);
   }, [tokens, activeFilter]);
 
@@ -205,6 +212,8 @@ export default function EarnScreen() {
                   logoUrl={item.logoUrl}
                   rewardsRate={item.rewardsRate}
                   positionAmount={item.position?.balance.uiAmount}
+                  protocolName={item.protocolName}
+                  protocolIconUrl={item.protocolIconUrl}
                   onPress={() => { logEarnVaultPress(item.symbol, item.vaultAddress, item.type); setSelectedToken(item); }}
                 />
               )}
@@ -238,6 +247,8 @@ export default function EarnScreen() {
           position={selectedToken.position}
           minDepositAmount={selectedToken.minDepositAmount}
           minWithdrawAmount={selectedToken.minWithdrawAmount}
+          protocolName={selectedToken.protocolName}
+          protocolIconUrl={selectedToken.protocolIconUrl}
         />
       )}
     </View>

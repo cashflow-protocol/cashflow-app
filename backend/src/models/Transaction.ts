@@ -5,6 +5,7 @@ export enum TransactionAction {
   DEPOSIT = 'deposit',
   WITHDRAW = 'withdraw',
   TRANSFER = 'transfer',
+  SWAP = 'swap',
 }
 
 export enum TransactionStatus {
@@ -50,6 +51,9 @@ export class Transaction {
 
   @prop()
   public destinationAddress?: string;
+
+  @prop()
+  public outputMint?: string;
 
   @prop()
   public signature?: string;

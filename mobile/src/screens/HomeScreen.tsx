@@ -29,6 +29,7 @@ import SuggestionCard from '../components/SuggestionCard';
 import ComingSoonModal from '../components/ComingSoonModal';
 import ReceiveModal from '../components/ReceiveModal';
 import SendModal from '../components/SendModal';
+import SwapModal from '../components/SwapModal';
 import FundWalletModal from '../components/FundWalletModal';
 import { useNotifications } from '../hooks/useNotifications';
 import Svg, { Path } from 'react-native-svg';
@@ -41,6 +42,7 @@ import {
   logComingSoonView,
   logReceiveModalOpen,
   logSendModalOpen,
+  logSwapModalOpen,
   logReceiveFundFromSeeker,
   logSectionMorePress,
 } from '../services/analyticsService';
@@ -195,7 +197,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
           <ActionButton
             icon={<ConvertIcon size={32} />}
             label="Convert"
-            onPress={() => { logHomeActionPress('convert'); logComingSoonView('convert'); setConvertModalVisible(true); }}
+            onPress={() => { logHomeActionPress('convert'); logSwapModalOpen(); setConvertModalVisible(true); }}
             backgroundColor={colors.cardSecondary}
           />
         </View>
@@ -283,6 +285,8 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
                   rewardsRate={token.rewardsRate}
                   positionAmount={token.position?.balance.uiAmount}
                   positionUsdValue={token.position?.balance.usdValue}
+                  protocolName={token.protocolName}
+                  protocolIconUrl={token.protocolIconUrl}
                   compact
                 />
               ))}
@@ -355,12 +359,10 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         onClose={() => setFundWalletModalVisible(false)}
         onSuccess={refreshAssets}
       />
-      <ComingSoonModal
+      <SwapModal
         visible={convertModalVisible}
         onClose={() => setConvertModalVisible(false)}
-        icon={<ConvertIcon size={48} color="#175DA3" />}
-        title="Convert"
-        subtitle="Token swaps powered by Jupiter. Coming soon."
+        onSuccess={refreshAssets}
       />
     </View>
   );

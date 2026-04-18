@@ -12,7 +12,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'react-native-linear-gradient';
 import { ArrowLeft, Gauge } from 'lucide-react-native';
 import BottomSheet from '../components/BottomSheet';
-import { getSpendingLimitInfo, updateSpendingLimit, type SpendingLimitInfo } from '../services/squadsService';
+import { getSpendingLimitInfo, updateSpendingLimit, addGasCoverSpendingLimit, type SpendingLimitInfo } from '../services/squadsService';
 import { getVault } from '../services/vaultStorage';
 import { logScreenView } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
@@ -45,6 +45,7 @@ export default function SpendingLimitsScreen({ onNavigate, onBack }: SpendingLim
   const [sheetVisible, setSheetVisible] = useState(false);
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => { logScreenView('SpendingLimitsScreen'); }, []);
 
@@ -82,6 +83,23 @@ export default function SpendingLimitsScreen({ onNavigate, onBack }: SpendingLim
       setUpdating(false);
     }
   }, [selectedAmount, fetchInfo, showToast]);
+
+  const handleCreate = useCallback(async () => {
+    setCreating(true);
+    try {
+      const vault = await getVault();
+      if (!vault) throw new Error('No vault found');
+      await addGasCoverSpendingLimit(vault.multisigAddress);
+      showToast('Spending limit created', undefined, 'success');
+      setLoading(true);
+      await fetchInfo();
+    } catch (err: any) {
+      console.error('[SpendingLimitsScreen] create error:', err);
+      showToast(err.message || 'Failed to create spending limit', 'error');
+    } finally {
+      setCreating(false);
+    }
+  }, [fetchInfo, showToast]);
 
   const openSheet = useCallback(() => {
     if (info) {
@@ -135,6 +153,20 @@ export default function SpendingLimitsScreen({ onNavigate, onBack }: SpendingLim
                 No spending limit configured for this vault.
               </Text>
             </View>
+            <TouchableOpacity
+              style={[styles.changeButton, { backgroundColor: colors.primaryButton }]}
+              onPress={handleCreate}
+              activeOpacity={0.7}
+              disabled={creating}
+            >
+              {creating ? (
+                <ActivityIndicator size="small" color={colors.primaryButtonText} />
+              ) : (
+                <Text style={[styles.changeButtonText, { color: colors.primaryButtonText }]}>
+                  Create Spending Limit
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
         ) : (
           <>

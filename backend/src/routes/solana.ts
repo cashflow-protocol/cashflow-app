@@ -12,14 +12,15 @@ import {
   AccountRole,
 } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from '@solana/kit';
-import { DBManager, JitoManager, PriceManager, SolanaDomainManager, TokenManager, TransferManager } from '../managers';
+import { DBManager, JitoManager, JupiterManager, PriceManager, SolanaDomainManager, TokenManager, TransferManager } from '../managers';
 import { TransactionAction } from '../models/Transaction';
 import { EarnTokenModel } from '../models';
-import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import { SUPPORTED_TOKENS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
 const router = Router();
 const dbManager = new DBManager();
 const jitoManager = new JitoManager();
+const jupiterManager = new JupiterManager();
 const tokenManager = new TokenManager();
 const transferManager = new TransferManager();
 const priceManager = new PriceManager();
@@ -362,6 +363,119 @@ router.post('/transfer', async (req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   }
+});
+
+// GET /solana/v2/swap-quote - Get a Jupiter swap quote for UI preview
+router.get('/swap-quote', async (req: Request, res: Response) => {
+  try {
+    const { inputMint, outputMint, amount, slippageBps } = req.query;
+
+    if (!inputMint || !outputMint || !amount ||
+        typeof inputMint !== 'string' || typeof outputMint !== 'string' || typeof amount !== 'string') {
+      res.status(400).json({ success: false, error: 'inputMint, outputMint, and amount query params are required' });
+      return;
+    }
+
+    const slippage = slippageBps ? parseInt(slippageBps as string, 10) : 50;
+    const quote = await jupiterManager.getSwapQuote(inputMint, outputMint, amount, slippage);
+
+    // Resolve decimals for output token
+    const outputTokenInfo = SUPPORTED_TOKENS_BY_MINT[outputMint];
+    const outputDecimals = outputTokenInfo?.decimals ?? 6;
+    const outputUiAmount = Number(quote.outputAmount) / 10 ** outputDecimals;
+    const minimumReceivedUi = Number(quote.otherAmountThreshold) / 10 ** outputDecimals;
+
+    res.json({
+      success: true,
+      data: {
+        outputAmount: quote.outputAmount,
+        outputUiAmount,
+        priceImpactPct: quote.priceImpactPct,
+        minimumReceived: quote.otherAmountThreshold,
+        minimumReceivedUi,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('Error fetching swap quote:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to fetch swap quote',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// POST /solana/v2/swap - Get raw swap instructions for Squads vault flow
+router.post('/swap', async (req: Request, res: Response) => {
+  try {
+    const { inputMint, outputMint, amount, walletAddress, ownerAddress, slippageBps } = req.body;
+
+    if (!inputMint || !outputMint || !amount || !walletAddress || !ownerAddress) {
+      res.status(400).json({
+        success: false,
+        error: 'inputMint, outputMint, amount, walletAddress, and ownerAddress are required',
+      });
+      return;
+    }
+
+    console.log(`SWAP inputMint=${inputMint}, outputMint=${outputMint}, amount=${amount}, owner=${ownerAddress}`);
+
+    // Use walletAddress as templateSigner (Jupiter rejects PDAs)
+    const result = await jupiterManager.getSwapInstructions(
+      inputMint, outputMint, amount, ownerAddress, walletAddress, slippageBps || 50,
+    );
+
+    const record = await dbManager.createTransaction({
+      action: TransactionAction.SWAP,
+      mint: inputMint,
+      outputMint,
+      amount,
+      walletAddress,
+    });
+
+    // Resolve output decimals for UI amounts
+    const outputTokenInfo = SUPPORTED_TOKENS_BY_MINT[outputMint];
+    const outputDecimals = outputTokenInfo?.decimals ?? 6;
+    const outputUiAmount = Number(result.quote.outputAmount) / 10 ** outputDecimals;
+    const minimumReceivedUi = Number(result.quote.otherAmountThreshold) / 10 ** outputDecimals;
+
+    res.json({
+      success: true,
+      transactionId: record._id,
+      instructions: result.instructions,
+      extraLookupTables: result.extraLookupTables,
+      quote: {
+        outputAmount: result.quote.outputAmount,
+        outputUiAmount,
+        priceImpactPct: result.quote.priceImpactPct,
+        minimumReceived: result.quote.otherAmountThreshold,
+        minimumReceivedUi,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('Error creating swap instructions:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to create swap instructions',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /solana/v2/popular-tokens - Return list of popular tokens for swap output selector
+router.get('/popular-tokens', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: SUPPORTED_TOKENS.map(t => ({
+      mint: t.mint,
+      symbol: t.symbol,
+      name: t.name,
+      decimals: t.decimals,
+      logoUrl: t.logoUrl,
+    })),
+  });
 });
 
 // POST /solana/v1/build-transfer - Build a full unsigned transaction for a direct wallet-to-wallet transfer

@@ -224,3 +224,8 @@ export async function updateEarnTokenConfig(id: string, config: { minDepositAmou
     body: JSON.stringify(config),
   });
 }
+
+// Stats
+export async function getStats() {
+  return apiFetch('/stats');
+}

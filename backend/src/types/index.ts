@@ -2,6 +2,9 @@ export enum EarnTokenType {
   JUPITER = 'jupiter',
   KAMINO = 'kamino',
   DRIFT = 'drift',
+  PERENA = 'perena',
+  SOLOMON = 'solomon',
+  ONRE = 'onre',
 }
 
 export interface IBalance {

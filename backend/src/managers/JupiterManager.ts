@@ -28,6 +28,8 @@ import type { SerializedInstruction } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const PLATFORM_FEE_BPS = 10; // 0.1% swap fee
+const PLATFORM_FEE_WALLET = process.env.TREASURY_WALLET_ADDRESS;
 
 interface JupiterAsset {
   address: string;
@@ -338,6 +340,161 @@ export class JupiterManager {
       console.error('Error creating Jupiter withdraw transaction:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get a swap quote from Jupiter Swap API.
+   */
+  async getSwapQuote(
+    inputMint: string,
+    outputMint: string,
+    amount: string,
+    slippageBps: number = 50,
+  ): Promise<{
+    outputAmount: string;
+    priceImpactPct: number;
+    otherAmountThreshold: string;
+    routePlan: any[];
+    quoteResponse: any;
+  }> {
+    console.log(`[JupiterManager.getSwapQuote] inputMint=${inputMint}, outputMint=${outputMint}, amount=${amount}, slippageBps=${slippageBps}`);
+
+    // Limit route complexity for Squads vault transactions — the inner message
+    // and execute TX must both fit within Solana's 1232-byte transaction limit.
+    const params: Record<string, any> = { inputMint, outputMint, amount, slippageBps, maxAccounts: 20 };
+    if (PLATFORM_FEE_WALLET) {
+      params.platformFeeBps = PLATFORM_FEE_BPS;
+    }
+    const response = await this.api.get('/swap/v1/quote', { params });
+
+    const quote = response.data;
+    return {
+      outputAmount: quote.outAmount,
+      priceImpactPct: parseFloat(quote.priceImpactPct || '0'),
+      otherAmountThreshold: quote.otherAmountThreshold,
+      routePlan: quote.routePlan || [],
+      quoteResponse: quote,
+    };
+  }
+
+  /**
+   * Get raw swap instructions for Jupiter Swap (used by Squads vault flow).
+   * Uses templateSigner for the API call (Jupiter rejects PDAs), then replaces
+   * all occurrences of templateSigner and its derived ATAs with ownerAddress.
+   * For SOL input, prepends wSOL wrapping instructions.
+   * For SOL output, appends wSOL close instruction.
+   */
+  async getSwapInstructions(
+    inputMint: string,
+    outputMint: string,
+    amount: string,
+    ownerAddress: string,
+    templateSigner: string,
+    slippageBps: number = 50,
+  ): Promise<{
+    instructions: SerializedInstruction[];
+    extraLookupTables: string[];
+    quote: { outputAmount: string; priceImpactPct: number; otherAmountThreshold: string };
+  }> {
+    console.log(`[JupiterManager.getSwapInstructions] in=${inputMint}, out=${outputMint}, amount=${amount}, owner=${ownerAddress}, apiSigner=${templateSigner}`);
+
+    // 1. Fetch fresh quote
+    const { quoteResponse, outputAmount, priceImpactPct, otherAmountThreshold } =
+      await this.getSwapQuote(inputMint, outputMint, amount, slippageBps);
+
+    // 2. Get swap instructions from Jupiter
+    const swapParams: Record<string, any> = {
+      quoteResponse,
+      userPublicKey: templateSigner,
+      dynamicComputeUnitLimit: true,
+      dynamicSlippage: true,
+    };
+
+    // Platform fee: derive the fee account (ATA of fee wallet for the output token)
+    if (PLATFORM_FEE_WALLET) {
+      const [feeAta] = await findAssociatedTokenPda({
+        owner: address(PLATFORM_FEE_WALLET),
+        tokenProgram: TOKEN_PROGRAM_ADDRESS,
+        mint: address(outputMint === SOL_MINT ? SOL_MINT : outputMint),
+      });
+      swapParams.feeAccount = feeAta as string;
+    }
+
+    const response = await this.api.post('/swap/v1/swap-instructions', swapParams);
+
+    const data = response.data;
+
+    // 3. Collect all instructions in execution order
+    // NOTE: Skip computeBudgetInstructions — they only work at the top-level
+    // transaction, not via CPI. The Squads execute TX sets its own compute budget.
+    const rawIxs: SerializedInstruction[] = [];
+
+    if (data.setupInstructions) {
+      for (const ix of data.setupInstructions) {
+        rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+      }
+    }
+    if (data.swapInstruction) {
+      const ix = data.swapInstruction;
+      rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+    }
+    if (data.cleanupInstruction) {
+      const ix = data.cleanupInstruction;
+      rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+    }
+
+    console.log(`[JupiterManager.getSwapInstructions] Jupiter returned ${rawIxs.length} raw instructions`);
+
+    // 4. Replace template signer with real owner (vault PDA)
+    const replacedIxs = (await this.replaceAuthority(rawIxs, templateSigner, ownerAddress, inputMint))
+      .map(ix => this.makeAtaIdempotent(ix));
+
+    // 5. Handle SOL wrapping/unwrapping
+    const finalIxs: SerializedInstruction[] = [];
+    const signer = this.createNoopSigner(ownerAddress);
+    const owner = address(ownerAddress);
+
+    if (inputMint === SOL_MINT) {
+      // Prepend wSOL wrapping instructions for SOL input
+      const solMint = address(SOL_MINT);
+      const [wsolAta] = await findAssociatedTokenPda({
+        owner, tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: solMint,
+      });
+
+      finalIxs.push(
+        this.kitIxToSerialized(getCreateAssociatedTokenIdempotentInstruction({
+          payer: signer, ata: wsolAta, owner, mint: solMint,
+        })),
+        this.kitIxToSerialized(getTransferSolInstruction({
+          source: signer, destination: wsolAta, amount: BigInt(amount),
+        })),
+        this.kitIxToSerialized(getSyncNativeInstruction({ account: wsolAta })),
+      );
+    }
+
+    finalIxs.push(...replacedIxs);
+
+    if (outputMint === SOL_MINT) {
+      // Append wSOL close instruction for SOL output
+      const solMint = address(SOL_MINT);
+      const [wsolAta] = await findAssociatedTokenPda({
+        owner, tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: solMint,
+      });
+
+      finalIxs.push(
+        this.kitIxToSerialized(getCloseAccountInstruction({
+          account: wsolAta, destination: owner, owner: signer,
+        })),
+      );
+    }
+
+    console.log(`[JupiterManager.getSwapInstructions] Final: ${finalIxs.length} instructions, ${(data.addressLookupTableAddresses || []).length} LUTs`);
+
+    return {
+      instructions: finalIxs,
+      extraLookupTables: data.addressLookupTableAddresses || [],
+      quote: { outputAmount, priceImpactPct, otherAmountThreshold },
+    };
   }
 
   /**

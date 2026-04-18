@@ -217,6 +217,40 @@ export function logSendError(symbol: string, error: string) {
   analytics().logEvent('send_error', { symbol, error: error.slice(0, 100) });
 }
 
+// ── Swap (Convert) ──
+
+export function logSwapModalOpen() {
+  analytics().logEvent('swap_modal_open');
+}
+
+export function logSwapInputTokenSelect(symbol: string, mint: string) {
+  analytics().logEvent('swap_input_token_select', { symbol, mint: mint.slice(0, 44) });
+}
+
+export function logSwapOutputTokenSelect(symbol: string, mint: string) {
+  analytics().logEvent('swap_output_token_select', { symbol, mint: mint.slice(0, 44) });
+}
+
+export function logSwapMaxPress(symbol: string) {
+  analytics().logEvent('swap_max_press', { symbol });
+}
+
+export function logSwapFlipPress() {
+  analytics().logEvent('swap_flip_press');
+}
+
+export function logSwapSubmit(inputSymbol: string, outputSymbol: string, amount: string) {
+  analytics().logEvent('swap_submit', { input_symbol: inputSymbol, output_symbol: outputSymbol, amount });
+}
+
+export function logSwapSuccess(inputSymbol: string, outputSymbol: string, amount: string) {
+  analytics().logEvent('swap_success', { input_symbol: inputSymbol, output_symbol: outputSymbol, amount });
+}
+
+export function logSwapError(inputSymbol: string, error: string) {
+  analytics().logEvent('swap_error', { input_symbol: inputSymbol, error: error.slice(0, 100) });
+}
+
 // ── Earn / Vault Modal ──
 
 export function logEarnFilterSelect(filter: string) {

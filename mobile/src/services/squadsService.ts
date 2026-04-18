@@ -407,8 +407,12 @@ export async function addGasCoverSpendingLimit(
   const tx1 = new VersionedTransaction(msg1);
 
   // TX2: execute + close + Jito tip + cover
+  const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
   const tx2Instructions: TransactionInstruction[] = [
-    multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: creator, rentPayer: feePayer }),
+    multisig.instructions.configTransactionExecute({
+      multisigPda, transactionIndex, member: creator, rentPayer: feePayer,
+      spendingLimits: [spendingLimitPda],
+    }),
   ];
   if (multisigAccount.rentCollector) {
     tx2Instructions.push(multisig.instructions.configTransactionAccountsClose({
@@ -1264,7 +1268,7 @@ export async function executeVaultTransaction(
   // Derive vault PDA
   const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
 
-  // Ensure spending limit exists for non-Seeker mode (lazy migration for existing vaults)
+  // Ensure spending limit exists for non-Seeker mode (lazy migration for existing vaults)  
   if (!seekerMode) {
     await ensureGasCoverSpendingLimit(multisigAddress);
   }

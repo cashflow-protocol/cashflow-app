@@ -63,6 +63,27 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     decimals: 6,
     logoUrl: 'https://assets.coingecko.com/coins/images/31212/standard/PYUSD_Token_Logo_2x.png?1765987788',
   },
+  {
+    mint: 'star9agSpjiFe3M49B3RniVU4CMBBEK3Qnaqn3RGiFM',
+    symbol: 'USD*',
+    name: 'USD*',
+    decimals: 6,
+    logoUrl: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/perena_usd.png',
+  },
+  {
+    mint: 'pTA4St7D5WshfLUPBXoaxn5m8e3k2ort2DVt3gUTa17',
+    symbol: 'sUSDv',
+    name: 'Staked USDv',
+    decimals: 6,
+    logoUrl: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/susdv.png',
+  },
+  {
+    mint: '5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5',
+    symbol: 'ONyc',
+    name: 'ONyc',
+    decimals: 6,
+    logoUrl: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/onyc.png',
+  },
 
 ];
 

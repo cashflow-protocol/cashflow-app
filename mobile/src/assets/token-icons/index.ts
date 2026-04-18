@@ -12,6 +12,9 @@ const TOKEN_ICONS: Record<string, ImageSourcePropType> = {
   '2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH': require('./2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH.png'),
   'USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA': require('./USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA.png'),
   '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo': require('./2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo.png'),
+  'star9agSpjiFe3M49B3RniVU4CMBBEK3Qnaqn3RGiFM': require('./star9agSpjiFe3M49B3RniVU4CMBBEK3Qnaqn3RGiFM.png'),
+  'pTA4St7D5WshfLUPBXoaxn5m8e3k2ort2DVt3gUTa17': require('./pTA4St7D5WshfLUPBXoaxn5m8e3k2ort2DVt3gUTa17.png'),
+  '5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5': require('./5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5.png'),
 };
 
 export function getTokenIcon(mint: string): ImageSourcePropType | null {
