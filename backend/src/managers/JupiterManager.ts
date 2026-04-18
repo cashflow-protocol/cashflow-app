@@ -407,13 +407,10 @@ export class JupiterManager {
     const data = response.data;
 
     // 3. Collect all instructions in execution order
+    // NOTE: Skip computeBudgetInstructions — they only work at the top-level
+    // transaction, not via CPI. The Squads execute TX sets its own compute budget.
     const rawIxs: SerializedInstruction[] = [];
 
-    if (data.computeBudgetInstructions) {
-      for (const ix of data.computeBudgetInstructions) {
-        rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
-      }
-    }
     if (data.setupInstructions) {
       for (const ix of data.setupInstructions) {
         rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });

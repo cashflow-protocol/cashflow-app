@@ -15,6 +15,7 @@ import { getTokenIcon } from '../assets/token-icons';
 import apiService from '../services/apiService';
 import { getVault, type VaultData } from '../services/vaultStorage';
 import { executeVaultTransaction } from '../services/squadsService';
+import { getCloudPublicKey } from '../services/keypairStorage';
 import { useAssets } from '../hooks/useAssets';
 import type { WalletAsset } from '../types/earn';
 import {
@@ -281,13 +282,22 @@ export default function SwapModal({ visible, onClose, onSuccess }: SwapModalProp
     setResult(null);
 
     try {
+      // Use cloud wallet as the template signer for Jupiter API calls.
+      // The backend replaces this with the vault PDA in the actual instructions.
+      const cloudKey = await getCloudPublicKey();
+      if (!cloudKey) {
+        setResult({ success: false, message: 'Cloud wallet not found' });
+        setLoading(false);
+        return;
+      }
+
       const inputMint = inputToken.mint === 'native' ? SOL_MINT : inputToken.mint;
 
       const res = await apiService.swapInstructions({
         inputMint,
         outputMint: outputToken.mint,
         amount: parsedRaw.toString(),
-        walletAddress: vaultData.vaultAddress,
+        walletAddress: cloudKey,
         ownerAddress: vaultData.vaultAddress,
       });
 
