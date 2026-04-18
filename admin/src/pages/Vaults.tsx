@@ -237,6 +237,7 @@ export default function VaultsPage() {
               <th>Type</th>
               <th>Vault Address</th>
               <th>Coin</th>
+              <th>Name</th>
               <th>Pool Size</th>
               <th>Reward Rate</th>
               <th>Status</th>
@@ -246,9 +247,9 @@ export default function VaultsPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
             ) : tokens.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: '#999' }}>No vaults found</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40, color: '#999' }}>No vaults found</td></tr>
             ) : tokens.map((t) => (
               <tr key={t.id}>
                 <td>
@@ -289,6 +290,9 @@ export default function VaultsPage() {
                   >
                     <strong>{t.symbol}</strong>
                   </a>
+                </td>
+                <td style={{ fontSize: 13, color: '#555' }}>
+                  {t.vaultTitle || '—'}
                 </td>
                 <td>
                   <span style={{ fontWeight: 500 }}>
