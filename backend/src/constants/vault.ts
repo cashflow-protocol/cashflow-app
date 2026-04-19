@@ -10,7 +10,7 @@ export const JITO_TIP_LAMPORTS = 500_000;
 /** Jito tip accounts — pick one at random per bundle */
 export const JITO_TIP_ACCOUNTS = [
   'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
-  'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKcFu7uBEDKtr',
+  'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY', 
   'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
   'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
   '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5',
