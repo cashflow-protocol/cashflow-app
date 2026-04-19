@@ -24,7 +24,7 @@ const jupiterManager = new JupiterManager();
 const tokenManager = new TokenManager();
 const transferManager = new TransferManager();
 const priceManager = new PriceManager();
-const kShouldSimulate = false;
+const kShouldSimulate = true;
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 
