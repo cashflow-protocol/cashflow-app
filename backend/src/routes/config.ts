@@ -15,7 +15,7 @@ router.get('/', (req: Request, res: Response) => {
       solanaRpcUrl: process.env.MOBILE_SOLANA_RPC ?? null,
       treasuryWallet: process.env.TREASURY_WALLET_ADDRESS ?? null,
       vaultCreationFee: VAULT_CREATION_FEE,
-      supportUrl: process.env.SUPPORT_URL ?? 'https://t.me/heymike777',
+      supportUrl: process.env.SUPPORT_URL ?? 'https://t.me/mike_cashflow',
       adminTxFeePayerPublicKey: getAdminTxFeePayerPublicKeyBase58(),
     },
   });

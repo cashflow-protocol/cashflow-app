@@ -309,11 +309,11 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
             </View>
           </View>
           <View style={styles.helpButtons}>
-            <TouchableOpacity style={[styles.helpButton, { backgroundColor: colors.cardSecondary }]} onPress={() => { logSupportLinkPress(); Linking.openURL('https://t.me/heymike777'); }}>
+            <TouchableOpacity style={[styles.helpButton, { backgroundColor: colors.cardSecondary }]} onPress={() => { logSupportLinkPress(); Linking.openURL('https://t.me/mike_cashflow'); }}>
               <SupportIcon size={20} />
               <Text style={[styles.helpButtonText, { color: colors.textPrimary }]}>Support</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.helpButton, { backgroundColor: colors.cardSecondary }]} onPress={() => { logQuestionsLinkPress(); Linking.openURL('https://t.me/heymike777'); }}>
+            <TouchableOpacity style={[styles.helpButton, { backgroundColor: colors.cardSecondary }]} onPress={() => { logQuestionsLinkPress(); Linking.openURL('https://t.me/mike_cashflow'); }}>
               <QuestionsIcon size={20} />
               <Text style={[styles.helpButtonText, { color: colors.textPrimary }]}>Questions</Text>
             </TouchableOpacity>

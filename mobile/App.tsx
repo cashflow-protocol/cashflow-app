@@ -27,6 +27,7 @@ import NotificationsScreen from './src/screens/NotificationsScreen';
 import VaultRecoveryScreen from './src/screens/VaultRecoveryScreen';
 import BiometricLockScreen from './src/components/BiometricLockScreen';
 import TabBar, { type TabName } from './src/components/TabBar';
+import ContactFloatingButton from './src/components/ContactFloatingButton';
 import { getVault } from './src/services/vaultStorage';
 import { checkWaitlistStatus } from './src/services/onboardingService';
 import { hasPin } from './src/services/pinStorage';
@@ -389,6 +390,7 @@ function App() {
             <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
             <WalletProvider>
               {onboardingContent}
+              <ContactFloatingButton />
             </WalletProvider>
           </SafeAreaProvider>
         </ThemeProvider>
