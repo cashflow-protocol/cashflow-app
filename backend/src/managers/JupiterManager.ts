@@ -403,11 +403,14 @@ export class JupiterManager {
       await this.getSwapQuote(inputMint, outputMint, amount, slippageBps);
 
     // 2. Get swap instructions from Jupiter
+    // wrapAndUnwrapSol: false — we handle wSOL wrap/unwrap manually so there's
+    // no duplication with Jupiter's setup/cleanup when running through Squads CPI.
     const swapParams: Record<string, any> = {
       quoteResponse,
       userPublicKey: templateSigner,
       dynamicComputeUnitLimit: true,
       dynamicSlippage: true,
+      wrapAndUnwrapSol: false,
     };
 
     // Platform fee: derive the fee account (ATA of fee wallet for the output token)
@@ -475,12 +478,22 @@ export class JupiterManager {
     finalIxs.push(...replacedIxs);
 
     if (outputMint === SOL_MINT) {
-      // Append wSOL close instruction for SOL output
+      // With wrapAndUnwrapSol: false, Jupiter won't create or close the wSOL ATA.
+      // We must create it before the swap (so Jupiter can deposit into it),
+      // then close it after the swap to unwrap SOL back to the owner.
       const solMint = address(SOL_MINT);
       const [wsolAta] = await findAssociatedTokenPda({
         owner, tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: solMint,
       });
 
+      // Prepend ATA create (before the swap instructions)
+      finalIxs.splice(0, 0,
+        this.kitIxToSerialized(getCreateAssociatedTokenIdempotentInstruction({
+          payer: signer, ata: wsolAta, owner, mint: solMint,
+        })),
+      );
+
+      // Append close (after the swap instructions)
       finalIxs.push(
         this.kitIxToSerialized(getCloseAccountInstruction({
           account: wsolAta, destination: owner, owner: signer,
