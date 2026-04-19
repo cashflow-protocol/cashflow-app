@@ -1368,6 +1368,8 @@ router.post('/create-vault', async (req, res) => {
       }).compileToV0Message(luts);
       const tx3 = new VersionedTransaction(msg3);
 
+      console.log('TX3 accounts:', msg3.staticAccountKeys.map((k, i) => `[${i}] ${k.toBase58()}`));
+
       // Admin tx fee payer signs TX2 and TX3 (fee payer + rent payer)
       tx2.sign([adminTxFeePayerKeypair]);
       tx3.sign([adminTxFeePayerKeypair]);
