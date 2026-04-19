@@ -1268,7 +1268,16 @@ export async function executeVaultTransaction(
   // Derive vault PDA
   const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
 
-  // Ensure spending limit exists for non-Seeker mode (lazy migration for existing vaults)  
+  // Vault needs SOL for rent when inner instructions create accounts (ATAs, farm state)
+  const MIN_VAULT_SOL = 0.01;
+  const vaultSolBalance = await connection.getBalance(vaultPda, 'confirmed') / 1e9;
+  if (vaultSolBalance < MIN_VAULT_SOL) {
+    throw new Error(
+      `Not enough SOL in your vault for transaction fees. You need at least ${MIN_VAULT_SOL} SOL (current: ${vaultSolBalance.toFixed(4)} SOL). Please deposit SOL first.`,
+    );
+  }
+
+  // Ensure spending limit exists for non-Seeker mode (lazy migration for existing vaults)
   if (!seekerMode) {
     await ensureGasCoverSpendingLimit(multisigAddress);
   }
