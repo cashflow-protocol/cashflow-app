@@ -389,25 +389,29 @@ export class JupiterManager {
     outputMint: string,
     amount: string,
     ownerAddress: string,
-    templateSigner: string,
+    _templateSigner: string,
     slippageBps: number = 50,
   ): Promise<{
     instructions: SerializedInstruction[];
     extraLookupTables: string[];
     quote: { outputAmount: string; priceImpactPct: number; otherAmountThreshold: string };
   }> {
-    console.log(`[JupiterManager.getSwapInstructions] in=${inputMint}, out=${outputMint}, amount=${amount}, owner=${ownerAddress}, apiSigner=${templateSigner}`);
+    console.log(`[JupiterManager.getSwapInstructions] in=${inputMint}, out=${outputMint}, amount=${amount}, owner=${ownerAddress}`);
 
     // 1. Fetch fresh quote
     const { quoteResponse, outputAmount, priceImpactPct, otherAmountThreshold } =
       await this.getSwapQuote(inputMint, outputMint, amount, slippageBps);
 
-    // 2. Get swap instructions from Jupiter
-    // wrapAndUnwrapSol: false — we handle wSOL wrap/unwrap manually so there's
-    // no duplication with Jupiter's setup/cleanup when running through Squads CPI.
+    // 2. Get swap instructions from Jupiter using the vault PDA directly.
+    // Jupiter's API accepts any pubkey (including PDAs) as userPublicKey —
+    // it just uses it for ATA derivation and account placement.
+    // This avoids the fragile replaceAuthority step where instruction data
+    // could encode the original signer, causing InvalidTokenAccount errors.
+    // wrapAndUnwrapSol: false — we handle wSOL wrap/unwrap manually since
+    // the vault PDA pays rent via Squads CPI, not as a direct signer.
     const swapParams: Record<string, any> = {
       quoteResponse,
-      userPublicKey: templateSigner,
+      userPublicKey: ownerAddress,
       dynamicComputeUnitLimit: true,
       dynamicSlippage: true,
       wrapAndUnwrapSol: false,
@@ -430,29 +434,25 @@ export class JupiterManager {
     // 3. Collect all instructions in execution order
     // NOTE: Skip computeBudgetInstructions — they only work at the top-level
     // transaction, not via CPI. The Squads execute TX sets its own compute budget.
-    const rawIxs: SerializedInstruction[] = [];
+    const jupiterIxs: SerializedInstruction[] = [];
 
     if (data.setupInstructions) {
       for (const ix of data.setupInstructions) {
-        rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+        jupiterIxs.push(this.makeAtaIdempotent({ programId: ix.programId, accounts: ix.accounts, data: ix.data }));
       }
     }
     if (data.swapInstruction) {
       const ix = data.swapInstruction;
-      rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+      jupiterIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
     }
     if (data.cleanupInstruction) {
       const ix = data.cleanupInstruction;
-      rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+      jupiterIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
     }
 
-    console.log(`[JupiterManager.getSwapInstructions] Jupiter returned ${rawIxs.length} raw instructions`);
+    console.log(`[JupiterManager.getSwapInstructions] Jupiter returned ${jupiterIxs.length} instructions`);
 
-    // 4. Replace template signer with real owner (vault PDA)
-    const replacedIxs = (await this.replaceAuthority(rawIxs, templateSigner, ownerAddress, inputMint))
-      .map(ix => this.makeAtaIdempotent(ix));
-
-    // 5. Handle SOL wrapping/unwrapping
+    // 4. Build final instruction list with SOL wrapping/unwrapping
     const finalIxs: SerializedInstruction[] = [];
     const signer = this.createNoopSigner(ownerAddress);
     const owner = address(ownerAddress);
@@ -475,25 +475,29 @@ export class JupiterManager {
       );
     }
 
-    finalIxs.push(...replacedIxs);
-
     if (outputMint === SOL_MINT) {
-      // With wrapAndUnwrapSol: false, Jupiter won't create or close the wSOL ATA.
-      // We must create it before the swap (so Jupiter can deposit into it),
-      // then close it after the swap to unwrap SOL back to the owner.
+      // Create the wSOL ATA before the swap so Jupiter can deposit into it.
       const solMint = address(SOL_MINT);
       const [wsolAta] = await findAssociatedTokenPda({
         owner, tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: solMint,
       });
 
-      // Prepend ATA create (before the swap instructions)
-      finalIxs.splice(0, 0,
+      finalIxs.push(
         this.kitIxToSerialized(getCreateAssociatedTokenIdempotentInstruction({
           payer: signer, ata: wsolAta, owner, mint: solMint,
         })),
       );
+    }
 
-      // Append close (after the swap instructions)
+    finalIxs.push(...jupiterIxs);
+
+    if (outputMint === SOL_MINT) {
+      // Close the wSOL ATA after the swap to unwrap SOL back to the owner.
+      const solMint = address(SOL_MINT);
+      const [wsolAta] = await findAssociatedTokenPda({
+        owner, tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: solMint,
+      });
+
       finalIxs.push(
         this.kitIxToSerialized(getCloseAccountInstruction({
           account: wsolAta, destination: owner, owner: signer,
