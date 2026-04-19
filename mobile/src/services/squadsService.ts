@@ -1269,7 +1269,7 @@ export async function executeVaultTransaction(
   const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
 
   // Vault needs SOL for rent when inner instructions create accounts (ATAs, farm state)
-  const MIN_VAULT_SOL = 0.01;
+  const MIN_VAULT_SOL = 0.02;
   const vaultSolBalance = await connection.getBalance(vaultPda, 'confirmed') / 1e9;
   if (vaultSolBalance < MIN_VAULT_SOL) {
     throw new Error(
