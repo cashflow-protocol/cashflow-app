@@ -64,7 +64,14 @@ async function getLuts(conn: Connection): Promise<AddressLookupTableAccount[]> {
 }
 
 // Web3.js connection for @sqds/multisig SDK calls
-const connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
+// Uses `let` so it can be recreated after the backend RPC URL is applied.
+let connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
+
+/** Recreate the connection with the current RPC endpoint. Call after setSolanaRpcEndpoint(). */
+export function resetSquadsConnection(): void {
+  connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
+  cachedLuts = null;
+}
 
 /** Resolved signing context — shared by all vault operations */
 interface SigningContext {
