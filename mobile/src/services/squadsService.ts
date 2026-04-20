@@ -1628,9 +1628,11 @@ export async function reclaimRent(
 
   let acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
 
-  // Step 1: Ensure rentCollector is set
-  if (!acct.rentCollector) {
-    onProgress?.('Setting rent collector...');
+  // Step 1: Ensure rentCollector is set to the vault PDA
+  const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
+  const currentCollector = acct.rentCollector ? new PublicKey(acct.rentCollector).toBase58() : null;
+  if (!currentCollector || currentCollector !== vaultPda.toBase58()) {
+    onProgress?.('Setting rent collector to vault...');
     await setRentCollector(multisigPda, ctx, BigInt(acct.transactionIndex.toString()));
     acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
     if (!acct.rentCollector) {
