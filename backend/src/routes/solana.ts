@@ -300,8 +300,13 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
       return;
     }
 
+    const confirmed = status?.confirmation_status === 'confirmed' || status?.confirmation_status === 'finalized';
+    if (!confirmed) {
+      console.warn(`Jito bundle not confirmed after polling: ${bundleId}, status=${status?.confirmation_status ?? 'unknown'}`);
+    }
+
     res.json({
-      success: true,
+      success: confirmed,
       bundleId,
       status: status?.confirmation_status ?? 'pending',
       slot: status?.slot ?? null,
