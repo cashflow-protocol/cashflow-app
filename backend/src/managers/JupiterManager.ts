@@ -418,13 +418,25 @@ export class JupiterManager {
     };
 
     // Platform fee: derive the fee account (ATA of fee wallet for the output token)
+    let feeAtaCreateIx: SerializedInstruction | null = null;
     if (PLATFORM_FEE_WALLET) {
+      const feeMint = address(outputMint);
+      const feeOwner = address(PLATFORM_FEE_WALLET);
       const [feeAta] = await findAssociatedTokenPda({
-        owner: address(PLATFORM_FEE_WALLET),
+        owner: feeOwner,
         tokenProgram: TOKEN_PROGRAM_ADDRESS,
-        mint: address(outputMint === SOL_MINT ? SOL_MINT : outputMint),
+        mint: feeMint,
       });
       swapParams.feeAccount = feeAta as string;
+
+      // Ensure the fee ATA exists — create idempotently as an inner instruction.
+      // The vault PDA pays rent if the ATA doesn't exist yet.
+      feeAtaCreateIx = this.kitIxToSerialized(getCreateAssociatedTokenIdempotentInstruction({
+        payer: this.createNoopSigner(ownerAddress),
+        ata: feeAta,
+        owner: feeOwner,
+        mint: feeMint,
+      }));
     }
 
     const response = await this.api.post('/swap/v1/swap-instructions', swapParams);
@@ -473,6 +485,11 @@ export class JupiterManager {
         })),
         this.kitIxToSerialized(getSyncNativeInstruction({ account: wsolAta })),
       );
+    }
+
+    // Create fee ATA before the swap (idempotent — no-op if it already exists)
+    if (feeAtaCreateIx) {
+      finalIxs.push(feeAtaCreateIx);
     }
 
     finalIxs.push(...jupiterIxs);
