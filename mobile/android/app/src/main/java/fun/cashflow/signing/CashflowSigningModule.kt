@@ -27,6 +27,7 @@ import com.google.android.gms.auth.blockstore.RetrieveBytesRequest
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.ConnectionResult
 import org.json.JSONObject
+import android.os.Build
 import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
@@ -542,6 +543,13 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
         try {
           val seed = decryptWithKeystore(data, biometric = true)
           callback(seed, null)
+        } catch (e: UserNotAuthenticatedException) {
+          // Biometric auth succeeded but Keystore key still locked.
+          // This happens on Android 11+ when the key was created with the deprecated
+          // setUserAuthenticationValidityDurationSeconds() — it only accepts device
+          // credential, not biometric, for timer-based keys.
+          // Fall back to device credential prompt to reset the timer.
+          promptDeviceCredentialThenDecrypt(data, activity, callback)
         } catch (e: Exception) {
           callback(null, e)
         }
@@ -562,6 +570,111 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
         )
         .build()
       prompt.authenticate(promptInfo)
+    }
+  }
+
+  /**
+   * Device credential fallback: prompt for device PIN/pattern/password to reset
+   * the Keystore timer for keys created with the deprecated validity-seconds API.
+   * After successful decrypt, regenerates the Keystore key with the correct
+   * setUserAuthenticationParameters so biometric works for subsequent calls.
+   */
+  private fun promptDeviceCredentialThenDecrypt(
+    data: ByteArray,
+    activity: FragmentActivity,
+    callback: (ByteArray?, Exception?) -> Unit
+  ) {
+    val executor = ContextCompat.getMainExecutor(reactApplicationContext)
+    val credCallback = object : BiometricPrompt.AuthenticationCallback() {
+      override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+        try {
+          val seed = decryptWithKeystore(data, biometric = true)
+          callback(seed, null)
+          // Regenerate the biometric Keystore key with correct auth params
+          // so that biometric works for subsequent calls without device credential.
+          regenerateBioKey()
+        } catch (e: Exception) {
+          callback(null, e)
+        }
+      }
+      override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+        callback(null, Exception("Device credential required: $errString"))
+      }
+    }
+
+    activity.runOnUiThread {
+      val prompt = BiometricPrompt(activity, executor, credCallback)
+      val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        .setTitle("Cashflow")
+        .setSubtitle("Enter device PIN to continue")
+        .setAllowedAuthenticators(BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+        .build()
+      prompt.authenticate(promptInfo)
+    }
+  }
+
+  /**
+   * Delete the old biometric Keystore key (created with deprecated API) and recreate
+   * it with setUserAuthenticationParameters, then re-encrypt all biometric-protected
+   * data. Runs within the 5-minute device credential validity window.
+   */
+  private fun regenerateBioKey() {
+    try {
+      val prefs = getPrefs()
+      if (prefs.getBoolean("bio_key_v2", false)) return // already regenerated
+
+      // Collect all biometric-protected entries, decrypt with old key
+      val entries = mutableMapOf<String, Pair<ByteArray, ByteArray>>() // tag -> (seed, encrypted)
+      for (tag in listOf("device")) {
+        val encBase64 = prefs.getString("${tag}_seed", null) ?: continue
+        if (!prefs.getBoolean("${tag}_bio", false)) continue
+        val encrypted = Base64.decode(encBase64, Base64.NO_WRAP)
+        val seed = decryptWithKeystore(encrypted, biometric = true)
+        entries[tag] = Pair(seed, encrypted)
+      }
+
+      // Decrypt biometric PIN if stored
+      val bioPinBase64 = prefs.getString("bio_pin", null)
+      var bioPin: ByteArray? = null
+      if (bioPinBase64 != null) {
+        val encPin = Base64.decode(bioPinBase64, Base64.NO_WRAP)
+        bioPin = try { decryptWithKeystore(encPin, biometric = true) } catch (_: Exception) { null }
+      }
+
+      // Delete old key
+      val keyStore = KeyStore.getInstance("AndroidKeyStore")
+      keyStore.load(null)
+      keyStore.deleteEntry(KEYSTORE_ALIAS_BIO)
+
+      // Recreate with correct auth params (getOrCreateAesKey now uses setUserAuthenticationParameters)
+      getOrCreateAesKey(biometric = true)
+
+      // Re-encrypt all entries with new key
+      val editor = prefs.edit()
+      for ((tag, pair) in entries) {
+        val (seed, _) = pair
+        try {
+          val reEncrypted = encryptWithKeystore(seed, biometric = true)
+          editor.putString("${tag}_seed", Base64.encodeToString(reEncrypted, Base64.NO_WRAP))
+        } finally {
+          seed.fill(0)
+        }
+      }
+
+      // Re-encrypt biometric PIN
+      if (bioPin != null) {
+        try {
+          val reEncrypted = encryptWithKeystore(bioPin, biometric = true)
+          editor.putString("bio_pin", Base64.encodeToString(reEncrypted, Base64.NO_WRAP))
+        } finally {
+          bioPin.fill(0)
+        }
+      }
+
+      editor.putBoolean("bio_key_v2", true)
+      editor.apply()
+    } catch (_: Exception) {
+      // Non-critical — will retry next time decryptWithBiometric hits the fallback
     }
   }
 
@@ -590,7 +703,18 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
     if (biometric) {
       builder.setUserAuthenticationRequired(true)
-      builder.setUserAuthenticationValidityDurationSeconds(BIO_VALIDITY_SECONDS)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        // On Android 11+, the deprecated setUserAuthenticationValidityDurationSeconds
+        // maps to AUTH_DEVICE_CREDENTIAL only — biometric no longer resets the timer.
+        // Use setUserAuthenticationParameters to explicitly allow both.
+        builder.setUserAuthenticationParameters(
+          BIO_VALIDITY_SECONDS,
+          KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
+        )
+      } else {
+        @Suppress("DEPRECATION")
+        builder.setUserAuthenticationValidityDurationSeconds(BIO_VALIDITY_SECONDS)
+      }
     }
 
     keyGenerator.init(builder.build())

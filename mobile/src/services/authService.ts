@@ -12,6 +12,7 @@ class AuthService {
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
   private pendingInviteCode: string | null = null;
+  private pendingAuth: Promise<string> | null = null;
 
   /** Set an invite code to include in the next authentication request. */
   setInviteCode(code: string): void {
@@ -23,7 +24,13 @@ class AuthService {
     if (this.accessToken && Date.now() < this.tokenExpiresAt - TOKEN_REFRESH_BUFFER_MS) {
       return this.accessToken;
     }
-    return this.authenticate();
+    // Dedup: all concurrent callers share the same in-flight auth request
+    if (!this.pendingAuth) {
+      this.pendingAuth = this.authenticate().finally(() => {
+        this.pendingAuth = null;
+      });
+    }
+    return this.pendingAuth;
   }
 
   /** Clear the cached token (call on 401 to force re-auth). */

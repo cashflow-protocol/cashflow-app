@@ -53,7 +53,6 @@ import {
   setUserHasVault,
   setUserOnWaitlist,
 } from './src/services/analyticsService';
-
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | 'keys-recovery' | 'add-recovery-key' | 'spending-limits' | null;
@@ -93,6 +92,7 @@ function App() {
         hasPin(),
         getCloudPublicKey(),
       ]);
+
       if (config) {
         if (config.solanaRpcUrl) {
           setSolanaRpcEndpoint(config.solanaRpcUrl);
