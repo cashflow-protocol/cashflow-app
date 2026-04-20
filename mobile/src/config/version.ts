@@ -1,2 +1,4 @@
-export const APP_VERSION = '1.0';
-export const BUILD_NUMBER = '23';
+import DeviceInfo from 'react-native-device-info';
+
+export const APP_VERSION = DeviceInfo.getVersion();
+export const BUILD_NUMBER = DeviceInfo.getBuildNumber();

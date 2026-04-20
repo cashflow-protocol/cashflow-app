@@ -282,7 +282,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
           )}
         </View>
 
-        <Text style={[styles.versionText, { color: colors.textTertiary }]}>App verion: {APP_VERSION} ({BUILD_NUMBER})</Text>
+        <Text style={[styles.versionText, { color: colors.textTertiary }]}>App version: {APP_VERSION} ({BUILD_NUMBER})</Text>
       </ScrollView>
     </View>
   );
