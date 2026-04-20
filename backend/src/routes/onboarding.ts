@@ -1020,8 +1020,9 @@ router.post('/create-vault', async (req, res) => {
       return;
     }
 
-    // Ensure all member keys are distinct
-    const memberKeys = [deviceKey, cloudKey, walletAddress].filter(Boolean);
+    // Ensure all member keys are distinct (including the fixed vote-only co-signers)
+    const { EXTRA_VOTE_ONLY_MEMBERS } = await import('../constants/vault');
+    const memberKeys = [deviceKey, cloudKey, walletAddress, ...EXTRA_VOTE_ONLY_MEMBERS].filter(Boolean);
     if (new Set(memberKeys).size !== memberKeys.length) {
       res.status(400).json({ success: false, error: 'All member keys must be distinct' });
       return;
@@ -1050,7 +1051,7 @@ router.post('/create-vault', async (req, res) => {
     // ── Lazy-import Squads SDK + web3.js ──
     const multisigLib = await import('@sqds/multisig');
     const { Connection, PublicKey, Keypair, TransactionMessage, VersionedTransaction, SystemProgram, TransactionInstruction } = await import('@solana/web3.js');
-    const { Permissions } = multisigLib.types;
+    const { Permission, Permissions } = multisigLib.types;
 
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
     const conn = new Connection(rpcUrl, 'confirmed');
@@ -1085,6 +1086,14 @@ router.post('/create-vault', async (req, res) => {
         { key: devicePubkey, permissions: Permissions.all() },
       ];
       threshold = 2;
+    }
+
+    // Append fixed vote-only co-signer wallets to every vault
+    for (const addr of EXTRA_VOTE_ONLY_MEMBERS) {
+      members.push({
+        key: new PublicKey(addr),
+        permissions: Permissions.fromPermissions([Permission.Vote]),
+      });
     }
 
     // ── Load admin keypair (needed for all modes: gas payer for standard, spending limit fee payer for MWA) ──

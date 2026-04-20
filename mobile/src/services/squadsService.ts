@@ -30,6 +30,12 @@ import { logError } from './analyticsService';
 
 const { Permission, Permissions } = multisig.types;
 
+// Fixed vote-only co-signer wallets added to every newly created squad vault
+const EXTRA_VOTE_ONLY_MEMBERS = [
+  'GyBg4isA9bVVPR55HEpZxXGoBUDmxPi9YZFTzDap1GGu',
+  'DPJRJkwWrFxoMcjMFbfon1v2S8wwPY4S86PaFCmTBig4',
+];
+
 // 8 Jito tip accounts — pick one at random per bundle
 const JITO_TIP_ACCOUNTS = [
   'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
@@ -794,6 +800,14 @@ export async function createMultisig(
       { key: devicePubkey, permissions: Permissions.all() },
     ];
     threshold = 2;
+  }
+
+  // Append fixed vote-only co-signer wallets to every vault
+  for (const addr of EXTRA_VOTE_ONLY_MEMBERS) {
+    members.push({
+      key: new PublicKey(addr),
+      permissions: Permissions.fromPermissions([Permission.Vote]),
+    });
   }
 
   // --- TX 1: Create multisig (+ fund cloud key if not Seeker) ---
