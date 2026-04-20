@@ -297,9 +297,11 @@ function App() {
           <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
           <BiometricLockScreen
             onUnlock={() => setLocked(false)}
-            onPinUnlock={async (pin) => {
+            onPinUnlock={async (pin, fromManualEntry) => {
               await cachePin(pin);
-              storePinForBiometric(pin).catch(() => {});
+              if (fromManualEntry) {
+                await storePinForBiometric(pin).catch(() => {});
+              }
               initializePushNotifications().catch((err) => {
                 console.error('Push notification init failed:', err);
               });

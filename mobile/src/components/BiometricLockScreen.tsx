@@ -9,7 +9,7 @@ import { logScreenView, logBiometricUnlockAttempt, logBiometricUnlockSuccess, lo
 
 interface BiometricLockScreenProps {
   onUnlock: () => void;
-  onPinUnlock?: (pin: string) => void | Promise<void>;
+  onPinUnlock?: (pin: string, fromManualEntry: boolean) => void | Promise<void>;
 }
 
 export default function BiometricLockScreen({ onUnlock, onPinUnlock }: BiometricLockScreenProps) {
@@ -20,7 +20,7 @@ export default function BiometricLockScreen({ onUnlock, onPinUnlock }: Biometric
     const pin = await retrievePinWithBiometric();
     if (pin) {
       logBiometricUnlockSuccess();
-      await onPinUnlock?.(pin);
+      await onPinUnlock?.(pin, false);
       onUnlock();
     }
   }, [onUnlock, onPinUnlock]);
@@ -36,7 +36,7 @@ export default function BiometricLockScreen({ onUnlock, onPinUnlock }: Biometric
       const result = await verifyPin(pin);
       if (result.success) {
         logPinUnlockSuccess();
-        await onPinUnlock?.(pin);
+        await onPinUnlock?.(pin, true);
         onUnlock();
       } else {
         logPinUnlockFailed();
