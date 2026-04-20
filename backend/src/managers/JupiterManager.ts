@@ -421,20 +421,26 @@ export class JupiterManager {
     if (PLATFORM_FEE_WALLET) {
       const feeMint = address(outputMint);
       const feeOwner = address(PLATFORM_FEE_WALLET);
+
+      // Detect whether the output mint uses Token or Token-2022
+      const mintInfo = await this.rpc.getAccountInfo(feeMint).send();
+      const feeTokenProgram = mintInfo.value?.owner === TOKEN_2022_PROGRAM_ADDRESS
+        ? TOKEN_2022_PROGRAM_ADDRESS
+        : TOKEN_PROGRAM_ADDRESS;
+
       const [feeAta] = await findAssociatedTokenPda({
         owner: feeOwner,
-        tokenProgram: TOKEN_PROGRAM_ADDRESS,
+        tokenProgram: feeTokenProgram,
         mint: feeMint,
       });
       swapParams.feeAccount = feeAta as string;
 
       // Ensure the fee ATA exists on-chain (paid by admin, not the user's vault).
-      // Idempotent — skips if already created.
       try {
-        const info = await this.rpc.getAccountInfo(feeAta).send();
-        if (!info.value) {
-          console.log(`[JupiterManager] Creating fee ATA ${feeAta} for mint ${outputMint}`);
-          await this.createFeeAta(feeOwner, feeMint);
+        const ataInfo = await this.rpc.getAccountInfo(feeAta).send();
+        if (!ataInfo.value) {
+          console.log(`[JupiterManager] Creating fee ATA ${feeAta} for mint ${outputMint} (${feeTokenProgram === TOKEN_2022_PROGRAM_ADDRESS ? 'Token-2022' : 'Token'})`);
+          await this.createFeeAta(feeOwner as string, feeMint as string, feeTokenProgram as string);
         }
       } catch { /* non-critical — Jupiter will fail if ATA truly missing */ }
     }
@@ -741,23 +747,26 @@ export class JupiterManager {
    * Create a fee ATA on-chain using the admin fee payer (not the user's vault).
    * Called once per new output token — subsequent swaps see the ATA already exists.
    */
-  private async createFeeAta(owner: string, mint: string): Promise<void> {
+  private async createFeeAta(owner: string, mint: string, tokenProgram?: string): Promise<void> {
     try {
       const { getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
       const { Connection, Transaction } = await import('@solana/web3.js');
-      const { createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } = await import('@solana/spl-token');
+      const { createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } = await import('@solana/spl-token');
       const { PublicKey } = await import('@solana/web3.js');
 
       const adminKeypair = getAdminTxFeePayerKeypair();
       const rpcUrl = process.env.HELIUS_RPC_URL || process.env.SOLANA_RPC_URL || '';
       const connection = new Connection(rpcUrl, 'confirmed');
 
-      const ownerPk = new PublicKey(owner as string);
-      const mintPk = new PublicKey(mint as string);
-      const ata = getAssociatedTokenAddressSync(mintPk, ownerPk, true);
+      const ownerPk = new PublicKey(owner);
+      const mintPk = new PublicKey(mint);
+      const tokenProgramId = tokenProgram === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+        ? TOKEN_2022_PROGRAM_ID
+        : TOKEN_PROGRAM_ID;
+      const ata = getAssociatedTokenAddressSync(mintPk, ownerPk, true, tokenProgramId);
 
       const ix = createAssociatedTokenAccountIdempotentInstruction(
-        adminKeypair.publicKey, ata, ownerPk, mintPk,
+        adminKeypair.publicKey, ata, ownerPk, mintPk, tokenProgramId,
       );
       const tx = new Transaction().add(ix);
       const sig = await connection.sendTransaction(tx, [adminKeypair]);
