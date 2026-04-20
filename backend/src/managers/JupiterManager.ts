@@ -418,7 +418,6 @@ export class JupiterManager {
     };
 
     // Platform fee: derive the fee account (ATA of fee wallet for the output token)
-    let feeAtaCreateIx: SerializedInstruction | null = null;
     if (PLATFORM_FEE_WALLET) {
       const feeMint = address(outputMint);
       const feeOwner = address(PLATFORM_FEE_WALLET);
@@ -429,14 +428,15 @@ export class JupiterManager {
       });
       swapParams.feeAccount = feeAta as string;
 
-      // Ensure the fee ATA exists — create idempotently as an inner instruction.
-      // The vault PDA pays rent if the ATA doesn't exist yet.
-      feeAtaCreateIx = this.kitIxToSerialized(getCreateAssociatedTokenIdempotentInstruction({
-        payer: this.createNoopSigner(ownerAddress),
-        ata: feeAta,
-        owner: feeOwner,
-        mint: feeMint,
-      }));
+      // Ensure the fee ATA exists on-chain (paid by admin, not the user's vault).
+      // Idempotent — skips if already created.
+      try {
+        const info = await this.rpc.getAccountInfo(feeAta).send();
+        if (!info.value) {
+          console.log(`[JupiterManager] Creating fee ATA ${feeAta} for mint ${outputMint}`);
+          await this.createFeeAta(feeOwner, feeMint);
+        }
+      } catch { /* non-critical — Jupiter will fail if ATA truly missing */ }
     }
 
     const response = await this.api.post('/swap/v1/swap-instructions', swapParams);
@@ -485,11 +485,6 @@ export class JupiterManager {
         })),
         this.kitIxToSerialized(getSyncNativeInstruction({ account: wsolAta })),
       );
-    }
-
-    // Create fee ATA before the swap (idempotent — no-op if it already exists)
-    if (feeAtaCreateIx) {
-      finalIxs.push(feeAtaCreateIx);
     }
 
     finalIxs.push(...jupiterIxs);
@@ -740,6 +735,37 @@ export class JupiterManager {
       })),
       data: Buffer.from(ix.data ?? new Uint8Array()).toString('base64'),
     };
+  }
+
+  /**
+   * Create a fee ATA on-chain using the admin fee payer (not the user's vault).
+   * Called once per new output token — subsequent swaps see the ATA already exists.
+   */
+  private async createFeeAta(owner: Address, mint: Address): Promise<void> {
+    try {
+      const { getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
+      const { Connection, Transaction } = await import('@solana/web3.js');
+      const { createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } = await import('@solana/spl-token');
+      const { PublicKey } = await import('@solana/web3.js');
+
+      const adminKeypair = getAdminTxFeePayerKeypair();
+      const rpcUrl = process.env.HELIUS_RPC_URL || process.env.SOLANA_RPC_URL || '';
+      const connection = new Connection(rpcUrl, 'confirmed');
+
+      const ownerPk = new PublicKey(owner as string);
+      const mintPk = new PublicKey(mint as string);
+      const ata = getAssociatedTokenAddressSync(mintPk, ownerPk, true);
+
+      const ix = createAssociatedTokenAccountIdempotentInstruction(
+        adminKeypair.publicKey, ata, ownerPk, mintPk,
+      );
+      const tx = new Transaction().add(ix);
+      const sig = await connection.sendTransaction(tx, [adminKeypair]);
+      await connection.confirmTransaction(sig, 'confirmed');
+      console.log(`[JupiterManager] Fee ATA created: ${ata.toBase58()} sig=${sig}`);
+    } catch (err: any) {
+      console.error('[JupiterManager] Failed to create fee ATA:', err.message);
+    }
   }
 
   private async saveTokensToDatabase(tokens: JupiterEarnTokenResponse[]): Promise<void> {
