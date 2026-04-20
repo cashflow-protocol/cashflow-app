@@ -297,14 +297,14 @@ function App() {
           <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
           <BiometricLockScreen
             onUnlock={() => setLocked(false)}
-            onPinUnlock={async (pin, fromManualEntry) => {
+            onPinUnlock={async (pin) => {
               await cachePin(pin);
-              if (fromManualEntry) {
-                await storePinForBiometric(pin).catch(() => {});
-              }
               initializePushNotifications().catch((err) => {
                 console.error('Push notification init failed:', err);
               });
+              // Fire-and-forget AFTER unlock — avoids BiometricPrompt conflict
+              // with the preceding retrievePinWithBiometric prompt.
+              storePinForBiometric(pin).catch(() => {});
             }}
           />
         </SafeAreaProvider>
