@@ -475,23 +475,20 @@ export class JupiterManager {
       );
     }
 
-    // For SOL output: Jupiter's setup creates the wSOL ATA.
-    // We'll add the close instruction only after confirming the swap works.
-    // For SOL input: manual wrapping is already prepended above.
     finalIxs.push(...jupiterIxs);
 
-    // TODO: re-enable after confirming swap works via Squads CPI
-    // if (outputMint === SOL_MINT) {
-    //   const solMint = address(SOL_MINT);
-    //   const [wsolAta] = await findAssociatedTokenPda({
-    //     owner, tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: solMint,
-    //   });
-    //   finalIxs.push(
-    //     this.kitIxToSerialized(getCloseAccountInstruction({
-    //       account: wsolAta, destination: owner, owner: signer,
-    //     })),
-    //   );
-    // }
+    if (outputMint === SOL_MINT) {
+      // Close the wSOL ATA after the swap to unwrap SOL back to the owner.
+      const solMint = address(SOL_MINT);
+      const [wsolAta] = await findAssociatedTokenPda({
+        owner, tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: solMint,
+      });
+      finalIxs.push(
+        this.kitIxToSerialized(getCloseAccountInstruction({
+          account: wsolAta, destination: owner, owner: signer,
+        })),
+      );
+    }
 
     console.log(`[JupiterManager.getSwapInstructions] Final: ${finalIxs.length} instructions, ${(data.addressLookupTableAddresses || []).length} LUTs`);
 

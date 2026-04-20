@@ -295,12 +295,6 @@ function buildVaultExecuteIx(
     }
   }
 
-  // Debug: log the remaining accounts passed to VaultTransactionExecute
-  console.log(`[buildVaultExecuteIx] ${accountMetas.length} remaining accounts:`);
-  accountMetas.forEach((a, i) => {
-    console.log(`  [${i}] ${a.pubkey.toBase58()} w=${a.isWritable} s=${a.isSigner}`);
-  });
-
   return multisig.generated.createVaultTransactionExecuteInstruction(
     {
       multisig: multisigPda,
