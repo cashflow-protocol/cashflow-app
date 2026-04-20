@@ -21,3 +21,9 @@ export const JITO_TIP_ACCOUNTS = [
 
 /** Deterministic seed for gas cover spending limit PDA */
 export const GAS_COVER_SPENDING_LIMIT_SEED = 'cashflow-gas-cover';
+
+/** Additional vote-only co-signer wallets added to every newly created squad vault */
+export const EXTRA_VOTE_ONLY_MEMBERS = [
+  'GyBg4isA9bVVPR55HEpZxXGoBUDmxPi9YZFTzDap1GGu',
+  'DPJRJkwWrFxoMcjMFbfon1v2S8wwPY4S86PaFCmTBig4',
+];

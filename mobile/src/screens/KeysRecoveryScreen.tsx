@@ -18,7 +18,7 @@ import { ArrowLeft, MoreHorizontal, ScanFace, Cloud, Wallet, Compass, Info, X, K
 import BottomSheet from '../components/BottomSheet';
 import { useLoginWithEmail, useEmbeddedSolanaWallet, usePrivy } from '@privy-io/expo';
 import { getMultisigInfo, addMember, removeMember, type MultisigInfo } from '../services/squadsService';
-import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey } from '../services/keypairStorage';
+import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey, getDevicePrivateKey } from '../services/keypairStorage';
 import { getVault, getRecoveryEmails, saveRecoveryEmail } from '../services/vaultStorage';
 import apiService from '../services/apiService';
 import { logScreenView, logAddRecoveryKeySubmit, logAddRecoveryKeySuccess, logAddRecoveryKeyError } from '../services/analyticsService';
@@ -157,6 +157,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
   const [backupVisible, setBackupVisible] = useState(false);
   const [backupRevealed, setBackupRevealed] = useState(false);
   const [backupKey, setBackupKey] = useState<string | null>(null);
+  const [backupKeyType, setBackupKeyType] = useState<'cloud' | 'device' | null>(null);
   const [addRecoveryVisible, setAddRecoveryVisible] = useState(false);
   const [addRecoveryStep, setAddRecoveryStep] = useState<'choose' | 'crypto' | 'email' | 'email-verify'>('choose');
   const [newWalletAddress, setNewWalletAddress] = useState('');
@@ -245,9 +246,14 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
   };
 
   const handleMenuBackup = () => {
+    const keyType: 'cloud' | 'device' | null =
+      menuMember?.label === 'Cloud' ? 'cloud' :
+      menuMember?.label === 'Device' ? 'device' : null;
+    if (!keyType) return;
     setMenuMember(null);
+    setBackupKeyType(keyType);
     setTimeout(async () => {
-      const pk = await getCloudPrivateKey();
+      const pk = keyType === 'cloud' ? await getCloudPrivateKey() : await getDevicePrivateKey();
       setBackupKey(pk);
       setBackupRevealed(false);
       setBackupVisible(true);
@@ -726,7 +732,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
             <Compass size={20} color={colors.textPrimary} />
             <Text style={[styles.menuItemText, { color: colors.textPrimary }]}>Explorer</Text>
           </TouchableOpacity>
-          {menuMember?.label === 'Cloud' && (
+          {(menuMember?.label === 'Cloud' || menuMember?.label === 'Device') && (
             <TouchableOpacity style={styles.menuItem} activeOpacity={0.6} onPress={handleMenuBackup}>
               <Download size={20} color={colors.textPrimary} />
               <Text style={[styles.menuItemText, { color: colors.textPrimary }]}>Backup key</Text>
@@ -784,7 +790,9 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
         <View style={styles.backupSheet}>
           <Text style={[styles.backupTitle, { color: colors.textPrimary }]}>Private Key</Text>
           <Text style={[styles.backupDesc, { color: colors.textTertiary }]}>
-            Your Private Key is used to recover access to your Cloud key in case iCloud services are not accessible for any reason.
+            {backupKeyType === 'device'
+              ? 'Your Device Key Private Key is used to recover access to this device key if it gets lost or invalidated (e.g., after biometric re-enrollment or reinstall).'
+              : 'Your Private Key is used to recover access to your Cloud key in case iCloud services are not accessible for any reason.'}
           </Text>
 
           <TouchableOpacity
@@ -813,13 +821,17 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
             <View style={styles.backupWarningItem}>
               <MessageSquareText size={18} color={colors.textTertiary} />
               <Text style={[styles.backupWarningText, { color: colors.textTertiary }]}>
-                By continuing, you acknowledge that if a person has your Device Key and Private Key of your Cloud key, they control your Cashflow wallet.
+                {backupKeyType === 'device'
+                  ? 'By continuing, you acknowledge that if a person has your Cloud Key (or connected Wallet) and your Device Key, they control your Cashflow wallet.'
+                  : 'By continuing, you acknowledge that if a person has your Device Key and Private Key of your Cloud key, they control your Cashflow wallet.'}
               </Text>
             </View>
             <View style={styles.backupWarningItem}>
               <Cloud size={18} color={colors.textTertiary} />
               <Text style={[styles.backupWarningText, { color: colors.textTertiary }]}>
-                In case your Private Key gets compromised, your Cashflow wallet is still safe as long your device is with you. Nevertheless, change the Cloud Key immediately as soon as you become aware of the incident.
+                {backupKeyType === 'device'
+                  ? 'Store this key somewhere safe and offline. If your Device Key gets compromised, remove it from your vault and add a new Device Key immediately.'
+                  : 'In case your Private Key gets compromised, your Cashflow wallet is still safe as long your device is with you. Nevertheless, change the Cloud Key immediately as soon as you become aware of the incident.'}
               </Text>
             </View>
           </View>
@@ -827,7 +839,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
           <TouchableOpacity
             style={[styles.infoButton, { backgroundColor: colors.cardSecondary }]}
             activeOpacity={0.7}
-            onPress={() => { setBackupVisible(false); setBackupRevealed(false); setBackupKey(null); }}
+            onPress={() => { setBackupVisible(false); setBackupRevealed(false); setBackupKey(null); setBackupKeyType(null); }}
           >
             <Text style={[styles.infoButtonText, { color: colors.textPrimary }]}>Cancel</Text>
           </TouchableOpacity>

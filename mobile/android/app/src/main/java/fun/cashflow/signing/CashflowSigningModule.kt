@@ -2,8 +2,10 @@ package `fun`.cashflow.signing
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.UserNotAuthenticatedException
 import android.util.Base64
 import androidx.biometric.BiometricManager
@@ -41,9 +43,16 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     const val NAME = "CashflowSigning"
     private const val KEYSTORE_ALIAS = "fun.cashflow.signing.aes"
     private const val KEYSTORE_ALIAS_BIO = "fun.cashflow.signing.aes.bio"
+    private const val KEYSTORE_ALIAS_BIO_V2 = "fun.cashflow.signing.aes.bio.v2"
+    private const val KEYSTORE_ALIAS_BIO_V3 = "fun.cashflow.signing.aes.bio.v3"
     private const val PREFS_NAME = "fun.cashflow.signing"
     private const val GCM_TAG_LENGTH = 128
     private const val BIO_VALIDITY_SECONDS = 300 // 5 minutes — matches app lock timeout
+    // V3: per-use biometric key with CryptoObject. Standalone BiometricPrompt
+    // doesn't reliably reset the Keystore timer on Seeker firmware, so we bind
+    // authentication directly to each cipher operation via CryptoObject.
+    // Per-use = timeout 0. Session caching (cachedDeviceSeed) avoids prompts
+    // on subsequent signs within the same session.
     private const val ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
     // Hardcoded salt compiled into the binary — an attacker needs both the Keystore key AND
     // this salt to recover the seed. Must match iOS. Changing this invalidates all stored keys.
@@ -53,6 +62,9 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     private val BLOCKSTORE_SALT = "cashflow:blockstore:v1:a3e8f1c4".toByteArray(Charsets.UTF_8)
     private val BLOCKSTORE_HKDF_INFO = "blockstore-aes-gcm".toByteArray(Charsets.UTF_8)
     private const val BLOCKSTORE_KEY = "cf_cloud_backup"
+    // Legacy: V2 key timeout (kept so any V2-encrypted data from prior builds
+    // remains decryptable). All new encryption goes through V3.
+    private const val BIO_V2_TIMEOUT_SECONDS = 15
   }
 
   private fun isGmsAvailable(): Boolean {
@@ -69,6 +81,10 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
   // --- PIN cache for cloud key encryption/decryption ---
   private var cachedPin: String? = null
+  // Session cache for decrypted device seed. V3 per-use CryptoObject requires
+  // a biometric prompt for each decrypt, so we cache the seed in memory after
+  // first unlock and reuse until clearCachedPin (triggered by app lock).
+  private var cachedDeviceSeed: ByteArray? = null
 
   @ReactMethod
   override fun cachePin(pin: String, promise: Promise) {
@@ -79,6 +95,8 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
   @ReactMethod
   override fun clearCachedPin(promise: Promise) {
     cachedPin = null
+    cachedDeviceSeed?.fill(0)
+    cachedDeviceSeed = null
     promise.resolve(null)
   }
 
@@ -89,34 +107,31 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
         promise.resolve(null)
         return
       }
-      getOrCreateAesKey(biometric = true)
+      val prefs = getPrefs()
+      if (prefs.getBoolean("bio_pin_v3", false)) {
+        // Already V3 — skip to avoid unnecessary biometric prompt.
+        // Flag is cleared by reEncryptCloudKeyWithPin on PIN change.
+        promise.resolve(null)
+        return
+      }
+      // Encrypt with V3 biometric key. If the V3 timer is active (from a recent
+      // biometric prompt in retrievePinWithBiometric), this succeeds silently.
+      // Otherwise falls back to showing a biometric prompt.
       val pinBytes = pin.toByteArray(Charsets.UTF_8)
-      try {
-        val encrypted = encryptWithKeystore(pinBytes, biometric = true)
-        getPrefs().edit()
+      encryptWithBiometricV3(pinBytes, "Enable biometric unlock") { encrypted, error ->
+        if (error != null || encrypted == null) {
+          promise.resolve(null)
+          return@encryptWithBiometricV3
+        }
+        prefs.edit()
           .putString("bio_pin", Base64.encodeToString(encrypted, Base64.NO_WRAP))
+          .putBoolean("bio_pin_v3", true)
+          .remove("bio_pin_v2")
           .apply()
         promise.resolve(null)
-      } catch (e: UserNotAuthenticatedException) {
-        // Biometric key needs recent auth — prompt then encrypt
-        promptBiometricUnlock("Enable biometric unlock") { success, authError ->
-          if (!success) {
-            promise.resolve(null)
-            return@promptBiometricUnlock
-          }
-          try {
-            val encrypted = encryptWithKeystore(pinBytes, biometric = true)
-            getPrefs().edit()
-              .putString("bio_pin", Base64.encodeToString(encrypted, Base64.NO_WRAP))
-              .apply()
-            promise.resolve(null)
-          } catch (e2: Exception) {
-            promise.resolve(null)
-          }
-        }
       }
     } catch (e: Exception) {
-      promise.reject("ERR_STORE_PIN", "Failed to store PIN for biometric: ${e.message}", e)
+      promise.resolve(null)
     }
   }
 
@@ -130,15 +145,35 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
         return
       }
       val encrypted = Base64.decode(encryptedBase64, Base64.NO_WRAP)
-      decryptWithBiometric(encrypted, "Unlock Cashflow") { pinBytes, error ->
-        if (error != null || pinBytes == null) {
-          promise.resolve(null)
-          return@decryptWithBiometric
-        }
+      val isV3 = prefs.getBoolean("bio_pin_v3", false)
+      val isV2 = prefs.getBoolean("bio_pin_v2", false)
+
+      val resolveWithPin = { pinBytes: ByteArray ->
         val pin = String(pinBytes, Charsets.UTF_8)
         cachedPin = pin
         pinBytes.fill(0)
         promise.resolve(pin)
+      }
+
+      if (isV3) {
+        // V3: 5-min timer with AUTH_BIOMETRIC_STRONG. One biometric prompt unlocks
+        // the key for the session.
+        decryptWithBiometricV3(encrypted, "Unlock Cashflow") { pinBytes, error ->
+          if (error != null || pinBytes == null) { promise.resolve(null); return@decryptWithBiometricV3 }
+          resolveWithPin(pinBytes)
+        }
+      } else if (isV2) {
+        // Legacy V2 per-use CryptoObject (from prior builds) — kept readable.
+        decryptWithBiometricV2(encrypted, "Unlock Cashflow") { pinBytes, error ->
+          if (error != null || pinBytes == null) { promise.resolve(null); return@decryptWithBiometricV2 }
+          resolveWithPin(pinBytes)
+        }
+      } else {
+        // Legacy v1 bio_pin — old timer-based key with device credential fallback on Android 11+
+        decryptWithLegacyBio(encrypted, "Unlock Cashflow") { pinBytes, error ->
+          if (error != null || pinBytes == null) { promise.resolve(null); return@decryptWithLegacyBio }
+          resolveWithPin(pinBytes)
+        }
       }
     } catch (e: Exception) {
       promise.resolve(null)
@@ -167,8 +202,12 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
           .putString("cloud_seed", Base64.encodeToString(reEncrypted, Base64.NO_WRAP))
           .apply()
 
-        // Update cached PIN
+        // Update cached PIN and force bio_pin re-encryption on next storePinForBiometric
         cachedPin = newPin
+        prefs.edit()
+          .remove("bio_pin_v2")
+          .remove("bio_pin_v3")
+          .apply()
 
         // Also re-backup to Block Store with new PIN
         backupToBlockStoreInternal(seed, pubBytes, newPin, promise)
@@ -195,14 +234,22 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
       val useBio = !cloudSync && isBiometricAvailable()
 
       if (useBio) {
-        // Device key: biometric-protected Keystore encryption
-        getOrCreateAesKey(biometric = true)
-
-        try {
-          val encrypted = encryptWithKeystore(seed, biometric = true)
-          saveAndResolve(tag, seed, pubKey, encrypted, useBio = true, promise)
-        } catch (e: UserNotAuthenticatedException) {
-          promptBiometricThenEncrypt(tag, seed, pubKey, promise)
+        // Device key: V3 biometric Keystore (5-min timer, AUTH_BIOMETRIC_STRONG)
+        encryptWithBiometricV3(seed, "Secure your signing key") { encrypted, error ->
+          if (error != null || encrypted == null) {
+            seed.fill(0)
+            promise.reject("ERR_KEYGEN", "Failed to generate keypair: ${error?.message ?: "authentication required"}", error)
+            return@encryptWithBiometricV3
+          }
+          val prefs = getPrefs()
+          prefs.edit()
+            .putString("${tag}_seed", Base64.encodeToString(encrypted, Base64.NO_WRAP))
+            .putString("${tag}_pub", Base64.encodeToString(pubKey, Base64.NO_WRAP))
+            .putBoolean("${tag}_bio", true)
+            .putBoolean("${tag}_bio_v3", true)
+            .apply()
+          seed.fill(0)
+          promise.resolve(base58Encode(pubKey))
         }
       } else if (cloudSync && cachedPin != null) {
         // Cloud key: PIN-based encryption (same scheme as Block Store)
@@ -237,60 +284,6 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     promise.resolve(base58Encode(pubKey))
   }
 
-  private fun promptBiometricThenEncrypt(
-    tag: String,
-    seed: ByteArray,
-    pubKey: ByteArray,
-    promise: Promise,
-  ) {
-    promptBiometricUnlock("Authenticate to secure your signing key") { success, error ->
-      if (!success) {
-        seed.fill(0)
-        promise.reject("ERR_KEYGEN", "Failed to generate keypair: ${error?.message ?: "authentication required"}", error)
-        return@promptBiometricUnlock
-      }
-      try {
-        val encrypted = encryptWithKeystore(seed, biometric = true)
-        saveAndResolve(tag, seed, pubKey, encrypted, useBio = true, promise)
-      } catch (e: Exception) {
-        seed.fill(0)
-        promise.reject("ERR_KEYGEN", "Failed to generate keypair: ${e.message}", e)
-      }
-    }
-  }
-
-  /** Prompt biometric just to unlock the Keystore key (no decrypt needed). */
-  private fun promptBiometricUnlock(reason: String, onResult: (Boolean, Exception?) -> Unit) {
-    val activity = currentActivity as? FragmentActivity
-    if (activity == null) {
-      onResult(false, Exception("No activity available for biometric prompt"))
-      return
-    }
-
-    val executor = ContextCompat.getMainExecutor(reactApplicationContext)
-    val callback = object : BiometricPrompt.AuthenticationCallback() {
-      override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-        onResult(true, null)
-      }
-      override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-        onResult(false, Exception("Authentication cancelled: $errString"))
-      }
-    }
-
-    activity.runOnUiThread {
-      val prompt = BiometricPrompt(activity, executor, callback)
-      val promptInfo = BiometricPrompt.PromptInfo.Builder()
-        .setTitle("Cashflow")
-        .setSubtitle(reason)
-        .setAllowedAuthenticators(
-          BiometricManager.Authenticators.BIOMETRIC_STRONG or
-          BiometricManager.Authenticators.DEVICE_CREDENTIAL
-        )
-        .build()
-      prompt.authenticate(promptInfo)
-    }
-  }
-
   @ReactMethod
   override fun getPublicKey(tag: String, promise: Promise) {
     try {
@@ -320,19 +313,47 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
       val encrypted = Base64.decode(encryptedBase64, Base64.NO_WRAP)
 
       if (useBio) {
-        decryptWithBiometric(encrypted, "Authenticate to export key") { seed, error ->
-          if (error != null) {
-            promise.reject("ERR_EXPORT", "Failed to export private key: ${error.message}", error)
-            return@decryptWithBiometric
-          }
+        val isV3 = prefs.getBoolean("${tag}_bio_v3", false)
+        val isV2 = prefs.getBoolean("${tag}_bio_v2", false)
+        val v3Base64 = prefs.getString("${tag}_seed_v3", null)
+
+        val onSeed = { seed: ByteArray ->
           try {
-            val privateKey = Ed25519PrivateKeyParameters(seed!!, 0)
+            val privateKey = Ed25519PrivateKeyParameters(seed, 0)
             val pubKey = privateKey.generatePublicKey().encoded
             val fullKeypair = seed + pubKey
             promise.resolve(base58Encode(fullKeypair))
           } finally {
-            seed!!.fill(0)
+            seed.fill(0)
           }
+        }
+
+        val tryPrimary = {
+          val decryptFn: (ByteArray, String, (ByteArray?, Exception?) -> Unit) -> Unit =
+            if (isV2) ::decryptWithBiometricV2 else ::decryptWithLegacyBio
+          decryptFn(encrypted, "Authenticate to export key") { seed, error ->
+            if (error != null) {
+              promise.reject("ERR_EXPORT", "Failed to export private key: ${error.message}", error)
+              return@decryptFn
+            }
+            onSeed(seed!!)
+          }
+        }
+
+        if (isV3) {
+          val v3Encrypted = if (v3Base64 != null) Base64.decode(v3Base64, Base64.NO_WRAP) else encrypted
+          val hasLegacyBackup = v3Base64 != null
+          decryptWithBiometricV3(v3Encrypted, "Authenticate to export key") { seed, error ->
+            if (error == null && seed != null) {
+              onSeed(seed)
+            } else if (hasLegacyBackup) {
+              tryPrimary()
+            } else {
+              promise.reject("ERR_EXPORT", "Failed to export private key: ${error?.message ?: "V3 decrypt failed"}", error)
+            }
+          }
+        } else {
+          tryPrimary()
         }
       } else {
         // Cloud key: decrypt with cached PIN; fallback to Keystore for legacy data
@@ -351,50 +372,129 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  /** Helper: sign a message with a seed (does NOT zero-fill — caller manages lifecycle). */
+  private fun signAndResolve(seed: ByteArray, messageBase64: String, promise: Promise) {
+    val message = Base64.decode(messageBase64, Base64.NO_WRAP)
+    val privateKey = Ed25519PrivateKeyParameters(seed, 0)
+    val signer = Ed25519Signer()
+    signer.init(true, privateKey)
+    signer.update(message, 0, message.size)
+    val signature = signer.generateSignature()
+    promise.resolve(Base64.encodeToString(signature, Base64.NO_WRAP))
+  }
+
   @ReactMethod
   override fun sign(tag: String, messageBase64: String, promise: Promise) {
     try {
       val prefs = getPrefs()
-      val encryptedBase64 = prefs.getString("${tag}_seed", null)
+      val primaryBase64 = prefs.getString("${tag}_seed", null)
         ?: throw Exception("No keypair found for tag: $tag")
       val useBio = prefs.getBoolean("${tag}_bio", false)
-      val encrypted = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+      val primaryEncrypted = Base64.decode(primaryBase64, Base64.NO_WRAP)
 
-      if (useBio) {
-        decryptWithBiometric(encrypted, "Authenticate to sign") { seed, error ->
-          if (error != null) {
-            promise.reject("ERR_SIGN", "Failed to sign: ${error.message}", error)
-            return@decryptWithBiometric
-          }
-          try {
-            val message = Base64.decode(messageBase64, Base64.NO_WRAP)
-            val privateKey = Ed25519PrivateKeyParameters(seed!!, 0)
-            val signer = Ed25519Signer()
-            signer.init(true, privateKey)
-            signer.update(message, 0, message.size)
-            val signature = signer.generateSignature()
-            promise.resolve(Base64.encodeToString(signature, Base64.NO_WRAP))
-          } finally {
-            seed!!.fill(0)
-          }
-        }
-      } else {
-        // Cloud key: decrypt with cached PIN; fallback to Keystore for legacy data
-        val seed = decryptSeed(tag, encrypted)
+      if (!useBio) {
+        // PIN-based or legacy Keystore decryption (unchanged)
+        val seed = decryptSeed(tag, primaryEncrypted)
         try {
-          val message = Base64.decode(messageBase64, Base64.NO_WRAP)
-          val privateKey = Ed25519PrivateKeyParameters(seed, 0)
-          val signer = Ed25519Signer()
-          signer.init(true, privateKey)
-          signer.update(message, 0, message.size)
-          val signature = signer.generateSignature()
-          promise.resolve(Base64.encodeToString(signature, Base64.NO_WRAP))
+          signAndResolve(seed, messageBase64, promise)
         } finally {
           seed.fill(0)
         }
+        return
       }
+
+      // Session cache fast-path: if we've already decrypted the device seed
+      // this session, reuse it (avoids per-use biometric prompt on every sign).
+      if (tag == "device") {
+        val cached = cachedDeviceSeed
+        if (cached != null) {
+          signAndResolve(cached, messageBase64, promise)
+          return
+        }
+      }
+
+      val isV3 = prefs.getBoolean("${tag}_bio_v3", false)
+      val isV2 = prefs.getBoolean("${tag}_bio_v2", false)
+      val v3Base64 = prefs.getString("${tag}_seed_v3", null)
+
+      // Try V3 first if available. V3 blob lives EITHER in ${tag}_seed_v3
+      // (for users migrated from legacy — ${tag}_seed stays intact as safety net)
+      // OR in ${tag}_seed (for new users whose first encryption is V3 — no legacy backup).
+      if (isV3) {
+        val v3Encrypted = if (v3Base64 != null) Base64.decode(v3Base64, Base64.NO_WRAP) else primaryEncrypted
+        val hasLegacyBackup = v3Base64 != null
+        decryptWithBiometricV3(v3Encrypted, "Authenticate to sign") { seed, error ->
+          if (error == null && seed != null) {
+            if (tag == "device") cachedDeviceSeed = seed.clone()
+            try { signAndResolve(seed, messageBase64, promise) } finally { seed.fill(0) }
+          } else if (hasLegacyBackup) {
+            // V3 failed — fall back to legacy blob in ${tag}_seed and re-migrate
+            signWithPrimaryAndMigrate(tag, primaryEncrypted, messageBase64, isV2, prefs, promise)
+          } else {
+            // No fallback available (new-user V3 blob is in the primary slot)
+            promise.reject("ERR_SIGN", "Failed to sign: ${error?.message ?: "V3 decrypt failed"}", error)
+          }
+        }
+        return
+      }
+
+      // V3 not yet migrated — use V2 or legacy from primary slot and migrate to V3
+      signWithPrimaryAndMigrate(tag, primaryEncrypted, messageBase64, isV2, prefs, promise)
     } catch (e: Exception) {
       promise.reject("ERR_SIGN", "Failed to sign: ${e.message}", e)
+    }
+  }
+
+  /**
+   * Decrypt with V2 or legacy key from primary slot, sign, then background-migrate
+   * seed to V3. The V3 blob is written to ${tag}_seed_v3 — the legacy primary slot
+   * (${tag}_seed) stays intact as a safety net in case the V3 key later gets
+   * invalidated (e.g., biometric re-enrollment).
+   */
+  private fun signWithPrimaryAndMigrate(
+    tag: String,
+    encrypted: ByteArray,
+    messageBase64: String,
+    isV2: Boolean,
+    prefs: SharedPreferences,
+    promise: Promise
+  ) {
+    val migrate = { seedCopy: ByteArray ->
+      encryptWithBiometricV3(seedCopy, "Secure your signing key") { newEncrypted, encErr ->
+        if (encErr == null && newEncrypted != null) {
+          // Write V3 to SEPARATE slot. Primary stays intact for future fallback.
+          prefs.edit()
+            .putString("${tag}_seed_v3", Base64.encodeToString(newEncrypted, Base64.NO_WRAP))
+            .putBoolean("${tag}_bio_v3", true)
+            .apply()
+        }
+        seedCopy.fill(0)
+      }
+    }
+
+    val onDecrypted = { seed: ByteArray ->
+      val seedCopy = seed.clone()
+      if (tag == "device") cachedDeviceSeed = seed.clone()
+      try { signAndResolve(seed, messageBase64, promise) } finally { seed.fill(0) }
+      migrate(seedCopy)
+    }
+
+    if (isV2) {
+      decryptWithBiometricV2(encrypted, "Authenticate to sign") { seed, error ->
+        if (error != null) {
+          promise.reject("ERR_SIGN", "Failed to sign: ${error.message}", error)
+          return@decryptWithBiometricV2
+        }
+        onDecrypted(seed!!)
+      }
+    } else {
+      decryptWithLegacyBio(encrypted, "Authenticate to sign") { seed, error ->
+        if (error != null) {
+          promise.reject("ERR_SIGN", "Failed to sign: ${error.message}", error)
+          return@decryptWithLegacyBio
+        }
+        onDecrypted(seed!!)
+      }
     }
   }
 
@@ -414,8 +514,11 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
       val prefs = getPrefs()
       prefs.edit()
         .remove("${tag}_seed")
+        .remove("${tag}_seed_v3")
         .remove("${tag}_pub")
         .remove("${tag}_bio")
+        .remove("${tag}_bio_v2")
+        .remove("${tag}_bio_v3")
         .apply()
       promise.resolve(null)
     } catch (e: Exception) {
@@ -512,7 +615,384 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
       BiometricManager.BIOMETRIC_SUCCESS
   }
 
-  private fun decryptWithBiometric(
+  // --- V2 per-use CryptoObject biometric operations ---
+  // The V2 key uses setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG)
+  // which requires CryptoObject for every operation. This avoids the Android 11+
+  // timer issue where BiometricPrompt without CryptoObject doesn't reset the
+  // Keystore auth timer for keys created with the deprecated validity-seconds API.
+
+  private fun getOrCreateAesKeyV2(): SecretKey {
+    val keyStore = KeyStore.getInstance("AndroidKeyStore")
+    keyStore.load(null)
+
+    // If the key was created with per-use (timeout=0) from a previous build, delete it
+    // so it gets recreated with the correct timeout-based parameters.
+    if (!getPrefs().getBoolean("bio_v2_timeout_key", false)) {
+      if (keyStore.containsAlias(KEYSTORE_ALIAS_BIO_V2)) {
+        keyStore.deleteEntry(KEYSTORE_ALIAS_BIO_V2)
+        getPrefs().edit()
+          .remove("bio_pin_v2")
+          .remove("device_bio_v2")
+          .putBoolean("bio_v2_timeout_key", true)
+          .apply()
+      } else {
+        getPrefs().edit().putBoolean("bio_v2_timeout_key", true).apply()
+      }
+    }
+
+    val existingKey = keyStore.getEntry(KEYSTORE_ALIAS_BIO_V2, null)
+    if (existingKey is KeyStore.SecretKeyEntry) {
+      return existingKey.secretKey
+    }
+
+    val builder = KeyGenParameterSpec.Builder(
+      KEYSTORE_ALIAS_BIO_V2,
+      KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+    )
+      .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+      .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+      .setKeySize(256)
+      .setUserAuthenticationRequired(true)
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      // Explicit AUTH_BIOMETRIC_STRONG — standalone BiometricPrompt resets the timer.
+      // Unlike the deprecated setUserAuthenticationValidityDurationSeconds which maps
+      // to AUTH_DEVICE_CREDENTIAL only on Android 11+.
+      builder.setUserAuthenticationParameters(BIO_V2_TIMEOUT_SECONDS, KeyProperties.AUTH_BIOMETRIC_STRONG)
+    } else {
+      @Suppress("DEPRECATION")
+      builder.setUserAuthenticationValidityDurationSeconds(BIO_V2_TIMEOUT_SECONDS)
+    }
+
+    val keyGenerator = KeyGenerator.getInstance(
+      KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore"
+    )
+    keyGenerator.init(builder.build())
+    return keyGenerator.generateKey()
+  }
+
+  /** Synchronous encrypt with V2 key. Throws UserNotAuthenticatedException if timer expired. */
+  private fun encryptWithKeystoreV2(plaintext: ByteArray): ByteArray {
+    val mask = hkdfDerive(plaintext.size)
+    val masked = ByteArray(plaintext.size) { i -> (plaintext[i].toInt() xor mask[i].toInt()).toByte() }
+    val key = getOrCreateAesKeyV2()
+    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+    cipher.init(Cipher.ENCRYPT_MODE, key)
+    val iv = cipher.iv
+    val ciphertext = cipher.doFinal(masked)
+    return byteArrayOf(ENCRYPT_VERSION_V2) + iv + ciphertext
+  }
+
+  /** Synchronous decrypt with V2 key. Throws UserNotAuthenticatedException if timer expired. */
+  private fun decryptWithKeystoreV2(data: ByteArray): ByteArray {
+    val hasV2Prefix = data.isNotEmpty() && data[0] == ENCRYPT_VERSION_V2
+    val payload = if (hasV2Prefix) data.copyOfRange(1, data.size) else data
+    val key = getOrCreateAesKeyV2()
+    val iv = payload.copyOfRange(0, 12)
+    val ciphertext = payload.copyOfRange(12, payload.size)
+    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+    cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH, iv))
+    val decrypted = cipher.doFinal(ciphertext)
+    if (!hasV2Prefix) return decrypted
+    val mask = hkdfDerive(decrypted.size)
+    return ByteArray(decrypted.size) { i -> (decrypted[i].toInt() xor mask[i].toInt()).toByte() }
+  }
+
+  /**
+   * Encrypt with V2 biometric Keystore key. Tries synchronously first (timer may be
+   * active from a recent biometric prompt). If timer expired, shows a standalone
+   * BiometricPrompt to reset it, then retries.
+   */
+  private fun encryptWithBiometricV2(
+    plaintext: ByteArray,
+    reason: String,
+    callback: (ByteArray?, Exception?) -> Unit
+  ) {
+    try {
+      val encrypted = encryptWithKeystoreV2(plaintext)
+      callback(encrypted, null)
+      return
+    } catch (_: UserNotAuthenticatedException) {
+      // Timer expired — need biometric
+    } catch (e: KeyPermanentlyInvalidatedException) {
+      try { val ks = KeyStore.getInstance("AndroidKeyStore"); ks.load(null); ks.deleteEntry(KEYSTORE_ALIAS_BIO_V2) } catch (_: Exception) {}
+      getPrefs().edit().remove("bio_v2_timeout_key").apply()
+      encryptWithBiometricV2(plaintext, reason, callback)
+      return
+    } catch (e: Exception) {
+      callback(null, e)
+      return
+    }
+
+    promptBiometricStrong(reason) { success, error ->
+      if (!success) { callback(null, error); return@promptBiometricStrong }
+      try {
+        val encrypted = encryptWithKeystoreV2(plaintext)
+        callback(encrypted, null)
+      } catch (e: Exception) {
+        callback(null, e)
+      }
+    }
+  }
+
+  /**
+   * Decrypt with V2 biometric Keystore key. Tries synchronously first (timer may be
+   * active from a recent biometric prompt). If timer expired, shows a standalone
+   * BiometricPrompt to reset it, then retries.
+   */
+  private fun decryptWithBiometricV2(
+    data: ByteArray,
+    reason: String,
+    callback: (ByteArray?, Exception?) -> Unit
+  ) {
+    try {
+      val decrypted = decryptWithKeystoreV2(data)
+      callback(decrypted, null)
+      return
+    } catch (_: UserNotAuthenticatedException) {
+      // Timer expired — need biometric
+    } catch (e: KeyPermanentlyInvalidatedException) {
+      callback(null, Exception("Biometric key invalidated — please re-create your wallet key"))
+      return
+    } catch (e: Exception) {
+      callback(null, e)
+      return
+    }
+
+    promptBiometricStrong(reason) { success, error ->
+      if (!success) { callback(null, error); return@promptBiometricStrong }
+      try {
+        val decrypted = decryptWithKeystoreV2(data)
+        callback(decrypted, null)
+      } catch (e: Exception) {
+        callback(null, e)
+      }
+    }
+  }
+
+  // --- V3 per-use CryptoObject biometric operations ---
+  // Each crypto operation requires its own BiometricPrompt with CryptoObject
+  // binding. This works reliably on all Android versions and OEM firmware
+  // including Seeker, where timer-based keys fail to honor standalone BiometricPrompt.
+
+  private fun getOrCreateAesKeyV3(): SecretKey {
+    val keyStore = KeyStore.getInstance("AndroidKeyStore")
+    keyStore.load(null)
+
+    // One-time: if an older V3 key (timer-based, 15s or 300s) exists, delete it
+    // so it gets recreated with correct per-use CryptoObject parameters. Any data
+    // encrypted with the old V3 key becomes orphaned, but we never overwrite the
+    // primary legacy ${tag}_seed slot, so decrypt falls back to legacy automatically.
+    if (!getPrefs().getBoolean("bio_v3_peruse_key", false)) {
+      if (keyStore.containsAlias(KEYSTORE_ALIAS_BIO_V3)) {
+        keyStore.deleteEntry(KEYSTORE_ALIAS_BIO_V3)
+      }
+      getPrefs().edit()
+        .putBoolean("bio_v3_peruse_key", true)
+        .remove("bio_pin_v3")
+        .remove("device_bio_v3")
+        .remove("cloud_bio_v3")
+        .apply()
+      // Also clear the V3 backup slot — data was encrypted with the deleted key
+      val prefs = getPrefs()
+      val editor = prefs.edit()
+      for (tag in listOf("device", "cloud")) {
+        editor.remove("${tag}_seed_v3")
+      }
+      editor.apply()
+    }
+
+    val existingKey = keyStore.getEntry(KEYSTORE_ALIAS_BIO_V3, null)
+    if (existingKey is KeyStore.SecretKeyEntry) {
+      return existingKey.secretKey
+    }
+
+    val builder = KeyGenParameterSpec.Builder(
+      KEYSTORE_ALIAS_BIO_V3,
+      KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+    )
+      .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+      .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+      .setKeySize(256)
+      .setUserAuthenticationRequired(true)
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      // Per-use (timeout=0) with AUTH_BIOMETRIC_STRONG. Operations require CryptoObject.
+      builder.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+    }
+    // Pre-Android 11: setUserAuthenticationRequired(true) without duration = per-use by default
+
+    val keyGenerator = KeyGenerator.getInstance(
+      KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore"
+    )
+    keyGenerator.init(builder.build())
+    return keyGenerator.generateKey()
+  }
+
+  /**
+   * Encrypt with V3 per-use biometric key via CryptoObject. Shows a BiometricPrompt
+   * bound to the cipher operation. No timer — auth is per-operation.
+   */
+  private fun encryptWithBiometricV3(
+    plaintext: ByteArray,
+    reason: String,
+    callback: (ByteArray?, Exception?) -> Unit
+  ) {
+    val activity = currentActivity as? FragmentActivity
+    if (activity == null) {
+      callback(null, Exception("No activity available for biometric prompt"))
+      return
+    }
+
+    try {
+      val mask = hkdfDerive(plaintext.size)
+      val masked = ByteArray(plaintext.size) { i -> (plaintext[i].toInt() xor mask[i].toInt()).toByte() }
+
+      val key = getOrCreateAesKeyV3()
+      val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+      cipher.init(Cipher.ENCRYPT_MODE, key)
+
+      val cryptoObject = BiometricPrompt.CryptoObject(cipher)
+      val executor = ContextCompat.getMainExecutor(reactApplicationContext)
+
+      val bioCallback = object : BiometricPrompt.AuthenticationCallback() {
+        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+          try {
+            val authedCipher = result.cryptoObject!!.cipher!!
+            val iv = authedCipher.iv
+            val ciphertext = authedCipher.doFinal(masked)
+            callback(byteArrayOf(ENCRYPT_VERSION_V2) + iv + ciphertext, null)
+          } catch (e: Exception) {
+            callback(null, e)
+          }
+        }
+        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+          callback(null, Exception("$errString"))
+        }
+      }
+
+      activity.runOnUiThread {
+        val prompt = BiometricPrompt(activity, executor, bioCallback)
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+          .setTitle("Cashflow")
+          .setSubtitle(reason)
+          .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+          .setNegativeButtonText("Cancel")
+          .build()
+        prompt.authenticate(promptInfo, cryptoObject)
+      }
+    } catch (e: KeyPermanentlyInvalidatedException) {
+      // Biometric enrollment changed — delete invalid key and retry once
+      try {
+        val ks = KeyStore.getInstance("AndroidKeyStore")
+        ks.load(null)
+        ks.deleteEntry(KEYSTORE_ALIAS_BIO_V3)
+      } catch (_: Exception) {}
+      encryptWithBiometricV3(plaintext, reason, callback)
+    } catch (e: Exception) {
+      callback(null, e)
+    }
+  }
+
+  /**
+   * Decrypt with V3 per-use biometric key via CryptoObject. Shows a BiometricPrompt
+   * bound to the cipher operation. No timer — auth is per-operation.
+   */
+  private fun decryptWithBiometricV3(
+    data: ByteArray,
+    reason: String,
+    callback: (ByteArray?, Exception?) -> Unit
+  ) {
+    val activity = currentActivity as? FragmentActivity
+    if (activity == null) {
+      callback(null, Exception("No activity available for biometric prompt"))
+      return
+    }
+
+    try {
+      val hasV2Prefix = data.isNotEmpty() && data[0] == ENCRYPT_VERSION_V2
+      val payload = if (hasV2Prefix) data.copyOfRange(1, data.size) else data
+      val iv = payload.copyOfRange(0, 12)
+      val ciphertext = payload.copyOfRange(12, payload.size)
+
+      val key = getOrCreateAesKeyV3()
+      val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+      cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH, iv))
+
+      val cryptoObject = BiometricPrompt.CryptoObject(cipher)
+      val executor = ContextCompat.getMainExecutor(reactApplicationContext)
+
+      val bioCallback = object : BiometricPrompt.AuthenticationCallback() {
+        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+          try {
+            val authedCipher = result.cryptoObject!!.cipher!!
+            val decrypted = authedCipher.doFinal(ciphertext)
+            val plaintext = if (hasV2Prefix) {
+              val mask = hkdfDerive(decrypted.size)
+              ByteArray(decrypted.size) { i -> (decrypted[i].toInt() xor mask[i].toInt()).toByte() }
+            } else {
+              decrypted
+            }
+            callback(plaintext, null)
+          } catch (e: Exception) {
+            callback(null, e)
+          }
+        }
+        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+          callback(null, Exception("$errString"))
+        }
+      }
+
+      activity.runOnUiThread {
+        val prompt = BiometricPrompt(activity, executor, bioCallback)
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+          .setTitle("Cashflow")
+          .setSubtitle(reason)
+          .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+          .setNegativeButtonText("Cancel")
+          .build()
+        prompt.authenticate(promptInfo, cryptoObject)
+      }
+    } catch (e: KeyPermanentlyInvalidatedException) {
+      callback(null, Exception("Biometric key invalidated — please re-create your wallet key"))
+    } catch (e: Exception) {
+      callback(null, e)
+    }
+  }
+
+  /** Standalone BiometricPrompt with BIOMETRIC_STRONG — resets V3 timer. */
+  private fun promptBiometricStrong(reason: String, onResult: (Boolean, Exception?) -> Unit) {
+    val activity = currentActivity as? FragmentActivity
+    if (activity == null) {
+      onResult(false, Exception("No activity available for biometric prompt"))
+      return
+    }
+
+    val executor = ContextCompat.getMainExecutor(reactApplicationContext)
+    val callback = object : BiometricPrompt.AuthenticationCallback() {
+      override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+        onResult(true, null)
+      }
+      override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+        onResult(false, Exception("$errString"))
+      }
+    }
+
+    activity.runOnUiThread {
+      val prompt = BiometricPrompt(activity, executor, callback)
+      val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        .setTitle("Cashflow")
+        .setSubtitle(reason)
+        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+        .setNegativeButtonText("Cancel")
+        .build()
+      prompt.authenticate(promptInfo)
+    }
+  }
+
+  // --- Legacy timer-based biometric decrypt (for migration from old key format) ---
+
+  private fun decryptWithLegacyBio(
     data: ByteArray,
     reason: String,
     callback: (ByteArray?, Exception?) -> Unit
@@ -542,6 +1022,10 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
         try {
           val seed = decryptWithKeystore(data, biometric = true)
           callback(seed, null)
+        } catch (e: UserNotAuthenticatedException) {
+          // Biometric didn't reset Keystore timer (Android 11+ with deprecated API).
+          // Fall back to device credential prompt.
+          promptDeviceCredentialThenDecrypt(data, activity, callback)
         } catch (e: Exception) {
           callback(null, e)
         }
@@ -560,6 +1044,40 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
           BiometricManager.Authenticators.BIOMETRIC_STRONG or
           BiometricManager.Authenticators.DEVICE_CREDENTIAL
         )
+        .build()
+      prompt.authenticate(promptInfo)
+    }
+  }
+
+  /**
+   * Device credential fallback for legacy timer-based keys on Android 11+.
+   */
+  private fun promptDeviceCredentialThenDecrypt(
+    data: ByteArray,
+    activity: FragmentActivity,
+    callback: (ByteArray?, Exception?) -> Unit
+  ) {
+    val executor = ContextCompat.getMainExecutor(reactApplicationContext)
+    val credCallback = object : BiometricPrompt.AuthenticationCallback() {
+      override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+        try {
+          val seed = decryptWithKeystore(data, biometric = true)
+          callback(seed, null)
+        } catch (e: Exception) {
+          callback(null, e)
+        }
+      }
+      override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+        callback(null, Exception("Device credential required: $errString"))
+      }
+    }
+
+    activity.runOnUiThread {
+      val prompt = BiometricPrompt(activity, executor, credCallback)
+      val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        .setTitle("Cashflow")
+        .setSubtitle("Enter device PIN to continue")
+        .setAllowedAuthenticators(BiometricManager.Authenticators.DEVICE_CREDENTIAL)
         .build()
       prompt.authenticate(promptInfo)
     }
@@ -590,7 +1108,15 @@ class CashflowSigningModule(reactContext: ReactApplicationContext) :
 
     if (biometric) {
       builder.setUserAuthenticationRequired(true)
-      builder.setUserAuthenticationValidityDurationSeconds(BIO_VALIDITY_SECONDS)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        builder.setUserAuthenticationParameters(
+          BIO_VALIDITY_SECONDS,
+          KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
+        )
+      } else {
+        @Suppress("DEPRECATION")
+        builder.setUserAuthenticationValidityDurationSeconds(BIO_VALIDITY_SECONDS)
+      }
     }
 
     keyGenerator.init(builder.build())
