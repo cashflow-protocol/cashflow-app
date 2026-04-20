@@ -2,7 +2,7 @@ export type Cluster = 'mainnet-beta' | 'devnet' | 'testnet';
 
 // Solana RPC endpoints
 export const RPC_ENDPOINTS = {
-  'mainnet-beta': 'https://api.mainnet-beta.solana.com',
+  'mainnet-beta': 'https://melitta-xw3ac1-fast-mainnet.helius-rpc.com',
   devnet: 'https://api.devnet.solana.com',
   testnet: 'https://api.testnet.solana.com',
 } as const;
