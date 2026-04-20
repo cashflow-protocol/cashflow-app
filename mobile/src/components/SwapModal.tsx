@@ -119,6 +119,17 @@ export default function SwapModal({ visible, onClose, onSuccess }: SwapModalProp
     }
   }, [visible]);
 
+  // Keep inputToken balance in sync when assets refresh (e.g. after a swap)
+  useEffect(() => {
+    if (!inputToken) return;
+    const fresh = assets.find(
+      a => a.mint === inputToken.mint || (a.mint === 'native' && inputToken.mint === 'native'),
+    );
+    if (fresh && fresh.amount !== inputToken.amount) {
+      setInputToken(fresh);
+    }
+  }, [assets]);
+
   // Debounced quote fetch
   useEffect(() => {
     if (step !== 'swap' || !inputToken || !outputToken || !isValidAmount) {
