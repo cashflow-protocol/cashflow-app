@@ -64,7 +64,14 @@ async function getLuts(conn: Connection): Promise<AddressLookupTableAccount[]> {
 }
 
 // Web3.js connection for @sqds/multisig SDK calls
-const connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
+// Uses `let` so it can be recreated after the backend RPC URL is applied.
+let connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
+
+/** Recreate the connection with the current RPC endpoint. Call after setSolanaRpcEndpoint(). */
+export function resetSquadsConnection(): void {
+  connection = new Connection(SOLANA_CONFIG.rpcEndpoint, SOLANA_CONFIG.commitment);
+  cachedLuts = null;
+}
 
 /** Resolved signing context — shared by all vault operations */
 interface SigningContext {
@@ -1268,7 +1275,16 @@ export async function executeVaultTransaction(
   // Derive vault PDA
   const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
 
-  // Ensure spending limit exists for non-Seeker mode (lazy migration for existing vaults)  
+  // Vault needs SOL for rent when inner instructions create accounts (ATAs, farm state)
+  const MIN_VAULT_SOL = 0.02;
+  const vaultSolBalance = await connection.getBalance(vaultPda, 'confirmed') / 1e9;
+  if (vaultSolBalance < MIN_VAULT_SOL) {
+    throw new Error(
+      `Not enough SOL in your vault for transaction fees. You need at least ${MIN_VAULT_SOL} SOL (current: ${vaultSolBalance.toFixed(4)} SOL). Please deposit SOL first.`,
+    );
+  }
+
+  // Ensure spending limit exists for non-Seeker mode (lazy migration for existing vaults)
   if (!seekerMode) {
     await ensureGasCoverSpendingLimit(multisigAddress);
   }
@@ -1619,9 +1635,11 @@ export async function reclaimRent(
 
   let acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
 
-  // Step 1: Ensure rentCollector is set
-  if (!acct.rentCollector) {
-    onProgress?.('Setting rent collector...');
+  // Step 1: Ensure rentCollector is set to the vault PDA
+  const [vaultPda] = multisig.getVaultPda({ multisigPda, index: 0 });
+  const currentCollector = acct.rentCollector ? new PublicKey(acct.rentCollector).toBase58() : null;
+  if (!currentCollector || currentCollector !== vaultPda.toBase58()) {
+    onProgress?.('Setting rent collector to vault...');
     await setRentCollector(multisigPda, ctx, BigInt(acct.transactionIndex.toString()));
     acct = await multisig.accounts.Multisig.fromAccountAddress(connection, multisigPda);
     if (!acct.rentCollector) {

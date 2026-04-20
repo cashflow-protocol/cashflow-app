@@ -34,6 +34,8 @@ import { hasPin } from './src/services/pinStorage';
 import { migrateKeypairsToBiometric, getCloudPublicKey, isGmsAvailable, cachePin, clearCachedPin, storePinForBiometric } from './src/services/keypairStorage';
 import apiService from './src/services/apiService';
 import { setSolanaRpcEndpoint } from './src/config/solana';
+import { resetSquadsConnection } from './src/services/squadsService';
+import walletService from './src/services/walletService';
 import { applyRemoteConfig, IS_SOLANA_MOBILE } from './src/config/constants';
 import { PrivyProvider } from '@privy-io/expo';
 import { PRIVY_CONFIG } from './src/config/api';
@@ -92,7 +94,11 @@ function App() {
         getCloudPublicKey(),
       ]);
       if (config) {
-        if (config.solanaRpcUrl) setSolanaRpcEndpoint(config.solanaRpcUrl);
+        if (config.solanaRpcUrl) {
+          setSolanaRpcEndpoint(config.solanaRpcUrl);
+          resetSquadsConnection();
+          walletService.resetRpc();
+        }
         applyRemoteConfig(config);
       }
       const hasVault = vault !== null && vault.isInitialized !== false;

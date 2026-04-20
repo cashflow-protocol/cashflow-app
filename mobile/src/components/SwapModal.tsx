@@ -16,7 +16,7 @@ import apiService from '../services/apiService';
 import { getVault, type VaultData } from '../services/vaultStorage';
 import { executeVaultTransaction } from '../services/squadsService';
 import { getCloudPublicKey } from '../services/keypairStorage';
-import { useAssets } from '../hooks/useAssets';
+import { useAssets, invalidateAssets } from '../hooks/useAssets';
 import type { WalletAsset } from '../types/earn';
 import {
   logSwapInputTokenSelect,
@@ -118,6 +118,17 @@ export default function SwapModal({ visible, onClose, onSuccess }: SwapModalProp
       })();
     }
   }, [visible]);
+
+  // Keep inputToken balance in sync when assets refresh (e.g. after a swap)
+  useEffect(() => {
+    if (!inputToken) return;
+    const fresh = assets.find(
+      a => a.mint === inputToken.mint || (a.mint === 'native' && inputToken.mint === 'native'),
+    );
+    if (fresh && fresh.amount !== inputToken.amount) {
+      setInputToken(fresh);
+    }
+  }, [assets]);
 
   // Debounced quote fetch
   useEffect(() => {
@@ -328,7 +339,9 @@ export default function SwapModal({ visible, onClose, onSuccess }: SwapModalProp
       await executeVaultTransaction(vaultData.multisigAddress, res.instructions, res.extraLookupTables, res.transactionId);
       logSwapSuccess(inputToken.symbol, outputToken.symbol, amount);
       setResult({ success: true, message: `Swapped ${amount} ${inputToken.symbol} for ${outputToken.symbol}` });
-      setTimeout(() => { onSuccess(); onClose(); }, 1500);
+      invalidateAssets();
+      onSuccess();
+      setTimeout(onClose, 1500);
     } catch (err) {
       const errMsg = (err as Error).message || 'unknown';
       logSwapError(inputToken.symbol, errMsg);

@@ -300,10 +300,23 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
       return;
     }
 
+    const confirmed = status?.confirmation_status === 'confirmed' || status?.confirmation_status === 'finalized';
+    if (!confirmed) {
+      console.warn(`Jito bundle not confirmed after polling: ${bundleId}, status=${status?.confirmation_status ?? 'unknown'}`);
+      res.status(408).json({
+        success: false,
+        error: 'Bundle not confirmed — it may still land. Please check your balances.',
+        bundleId,
+        status: status?.confirmation_status ?? 'pending',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
     res.json({
       success: true,
       bundleId,
-      status: status?.confirmation_status ?? 'pending',
+      status: status?.confirmation_status,
       slot: status?.slot ?? null,
       transactions: status?.transactions ?? [],
       timestamp: new Date().toISOString(),

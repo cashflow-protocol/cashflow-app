@@ -389,35 +389,60 @@ export class JupiterManager {
     outputMint: string,
     amount: string,
     ownerAddress: string,
-    templateSigner: string,
+    _templateSigner: string,
     slippageBps: number = 50,
   ): Promise<{
     instructions: SerializedInstruction[];
     extraLookupTables: string[];
     quote: { outputAmount: string; priceImpactPct: number; otherAmountThreshold: string };
   }> {
-    console.log(`[JupiterManager.getSwapInstructions] in=${inputMint}, out=${outputMint}, amount=${amount}, owner=${ownerAddress}, apiSigner=${templateSigner}`);
+    console.log(`[JupiterManager.getSwapInstructions] in=${inputMint}, out=${outputMint}, amount=${amount}, owner=${ownerAddress}`);
 
     // 1. Fetch fresh quote
     const { quoteResponse, outputAmount, priceImpactPct, otherAmountThreshold } =
       await this.getSwapQuote(inputMint, outputMint, amount, slippageBps);
 
-    // 2. Get swap instructions from Jupiter
+    // 2. Get swap instructions from Jupiter using the vault PDA directly.
+    // Jupiter's API accepts any pubkey (including PDAs) as userPublicKey —
+    // it just uses it for ATA derivation and account placement.
+    // This avoids the fragile replaceAuthority step where instruction data
+    // could encode the original signer, causing InvalidTokenAccount errors.
+    // wrapAndUnwrapSol: false — we handle wSOL wrap/unwrap manually since
+    // the vault PDA pays rent via Squads CPI, not as a direct signer.
     const swapParams: Record<string, any> = {
       quoteResponse,
-      userPublicKey: templateSigner,
+      userPublicKey: ownerAddress,
       dynamicComputeUnitLimit: true,
       dynamicSlippage: true,
+      wrapAndUnwrapSol: false,
     };
 
     // Platform fee: derive the fee account (ATA of fee wallet for the output token)
     if (PLATFORM_FEE_WALLET) {
+      const feeMint = address(outputMint);
+      const feeOwner = address(PLATFORM_FEE_WALLET);
+
+      // Detect whether the output mint uses Token or Token-2022
+      const mintInfo = await this.rpc.getAccountInfo(feeMint, { encoding: 'base64' }).send();
+      const feeTokenProgram = mintInfo.value?.owner === TOKEN_2022_PROGRAM_ADDRESS
+        ? TOKEN_2022_PROGRAM_ADDRESS
+        : TOKEN_PROGRAM_ADDRESS;
+
       const [feeAta] = await findAssociatedTokenPda({
-        owner: address(PLATFORM_FEE_WALLET),
-        tokenProgram: TOKEN_PROGRAM_ADDRESS,
-        mint: address(outputMint === SOL_MINT ? SOL_MINT : outputMint),
+        owner: feeOwner,
+        tokenProgram: feeTokenProgram,
+        mint: feeMint,
       });
       swapParams.feeAccount = feeAta as string;
+
+      // Ensure the fee ATA exists on-chain (paid by admin, not the user's vault).
+      try {
+        const ataInfo = await this.rpc.getAccountInfo(feeAta).send();
+        if (!ataInfo.value) {
+          console.log(`[JupiterManager] Creating fee ATA ${feeAta} for mint ${outputMint} (${feeTokenProgram === TOKEN_2022_PROGRAM_ADDRESS ? 'Token-2022' : 'Token'})`);
+          await this.createFeeAta(feeOwner as string, feeMint as string, feeTokenProgram as string);
+        }
+      } catch { /* non-critical — Jupiter will fail if ATA truly missing */ }
     }
 
     const response = await this.api.post('/swap/v1/swap-instructions', swapParams);
@@ -427,29 +452,25 @@ export class JupiterManager {
     // 3. Collect all instructions in execution order
     // NOTE: Skip computeBudgetInstructions — they only work at the top-level
     // transaction, not via CPI. The Squads execute TX sets its own compute budget.
-    const rawIxs: SerializedInstruction[] = [];
+    const jupiterIxs: SerializedInstruction[] = [];
 
     if (data.setupInstructions) {
       for (const ix of data.setupInstructions) {
-        rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+        jupiterIxs.push(this.makeAtaIdempotent({ programId: ix.programId, accounts: ix.accounts, data: ix.data }));
       }
     }
     if (data.swapInstruction) {
       const ix = data.swapInstruction;
-      rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+      jupiterIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
     }
     if (data.cleanupInstruction) {
       const ix = data.cleanupInstruction;
-      rawIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
+      jupiterIxs.push({ programId: ix.programId, accounts: ix.accounts, data: ix.data });
     }
 
-    console.log(`[JupiterManager.getSwapInstructions] Jupiter returned ${rawIxs.length} raw instructions`);
+    console.log(`[JupiterManager.getSwapInstructions] Jupiter returned ${jupiterIxs.length} instructions`);
 
-    // 4. Replace template signer with real owner (vault PDA)
-    const replacedIxs = (await this.replaceAuthority(rawIxs, templateSigner, ownerAddress, inputMint))
-      .map(ix => this.makeAtaIdempotent(ix));
-
-    // 5. Handle SOL wrapping/unwrapping
+    // 4. Build final instruction list with SOL wrapping/unwrapping
     const finalIxs: SerializedInstruction[] = [];
     const signer = this.createNoopSigner(ownerAddress);
     const owner = address(ownerAddress);
@@ -472,15 +493,14 @@ export class JupiterManager {
       );
     }
 
-    finalIxs.push(...replacedIxs);
+    finalIxs.push(...jupiterIxs);
 
     if (outputMint === SOL_MINT) {
-      // Append wSOL close instruction for SOL output
+      // Close the wSOL ATA after the swap to unwrap SOL back to the owner.
       const solMint = address(SOL_MINT);
       const [wsolAta] = await findAssociatedTokenPda({
         owner, tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: solMint,
       });
-
       finalIxs.push(
         this.kitIxToSerialized(getCloseAccountInstruction({
           account: wsolAta, destination: owner, owner: signer,
@@ -721,6 +741,40 @@ export class JupiterManager {
       })),
       data: Buffer.from(ix.data ?? new Uint8Array()).toString('base64'),
     };
+  }
+
+  /**
+   * Create a fee ATA on-chain using the admin fee payer (not the user's vault).
+   * Called once per new output token — subsequent swaps see the ATA already exists.
+   */
+  private async createFeeAta(owner: string, mint: string, tokenProgram?: string): Promise<void> {
+    try {
+      const { getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
+      const { Connection, Transaction } = await import('@solana/web3.js');
+      const { createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } = await import('@solana/spl-token');
+      const { PublicKey } = await import('@solana/web3.js');
+
+      const adminKeypair = getAdminTxFeePayerKeypair();
+      const rpcUrl = process.env.HELIUS_RPC_URL || process.env.SOLANA_RPC_URL || '';
+      const connection = new Connection(rpcUrl, 'confirmed');
+
+      const ownerPk = new PublicKey(owner);
+      const mintPk = new PublicKey(mint);
+      const tokenProgramId = tokenProgram === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+        ? TOKEN_2022_PROGRAM_ID
+        : TOKEN_PROGRAM_ID;
+      const ata = getAssociatedTokenAddressSync(mintPk, ownerPk, true, tokenProgramId);
+
+      const ix = createAssociatedTokenAccountIdempotentInstruction(
+        adminKeypair.publicKey, ata, ownerPk, mintPk, tokenProgramId,
+      );
+      const tx = new Transaction().add(ix);
+      const sig = await connection.sendTransaction(tx, [adminKeypair]);
+      await connection.confirmTransaction(sig, 'confirmed');
+      console.log(`[JupiterManager] Fee ATA created: ${ata.toBase58()} sig=${sig}`);
+    } catch (err: any) {
+      console.error('[JupiterManager] Failed to create fee ATA:', err.message);
+    }
   }
 
   private async saveTokensToDatabase(tokens: JupiterEarnTokenResponse[]): Promise<void> {

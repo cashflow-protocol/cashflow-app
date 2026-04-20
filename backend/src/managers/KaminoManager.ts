@@ -15,6 +15,10 @@ import {
 import type { Rpc, SolanaRpcApi, Instruction, TransactionSigner } from '@solana/kit';
 import { AccountRole } from '@solana/kit';
 import { KaminoVault } from '@kamino-finance/klend-sdk';
+import {
+  createSolanaRpc as createKaminoRpc,
+  address as kaminoAddress,
+} from '@kamino-finance/klend-sdk/node_modules/@solana/kit';
 import Decimal from 'decimal.js';
 import { SUPPORTED_TOKEN_MINTS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { EarnTokenType } from '../types';
@@ -124,15 +128,30 @@ function createNoopSigner(walletAddr: string): TransactionSigner {
   } as TransactionSigner;
 }
 
+/**
+ * Create a noop signer compatible with klend-sdk's bundled @solana/kit@2.x.
+ * The klend-sdk ships its own @solana/kit@2.3, which is incompatible at runtime
+ * with our top-level @solana/kit@6.x. Using the SDK's own address() avoids
+ * cross-version type mismatches that cause "Network request failed" errors.
+ */
+function createKaminoNoopSigner(walletAddr: string): any {
+  return {
+    address: kaminoAddress(walletAddr),
+    signTransactions: async (txs: any[]) => txs.map(() => ({})),
+  };
+}
+
 export class KaminoManager {
   private api: AxiosInstance;
   private rpc: Rpc<SolanaRpcApi>;
+  private kaminoRpc: any; // klend-sdk's own @solana/kit@2.x RPC
   private db: DBManager;
   private readonly baseURL = 'https://api.kamino.finance';
 
   constructor() {
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
     this.rpc = createSolanaRpc(rpcUrl);
+    this.kaminoRpc = createKaminoRpc(rpcUrl);
     this.db = new DBManager();
     this.api = axios.create({
       baseURL: this.baseURL,
@@ -213,10 +232,10 @@ export class KaminoManager {
    * Get raw deposit instructions for Kamino (used by Squads vault flow)
    */
   async getDepositInstructions(vaultAddress: string, amount: string, ownerAddress: string): Promise<SerializedInstruction[]> {
-    const vault = new KaminoVault(this.rpc as any, address(vaultAddress));
-    const signer = createNoopSigner(ownerAddress);
+    const vault = new KaminoVault(this.kaminoRpc, kaminoAddress(vaultAddress));
+    const signer = createKaminoNoopSigner(ownerAddress);
 
-    const depositResult = await vault.depositIxs(signer as any, new Decimal(amount));
+    const depositResult = await vault.depositIxs(signer, new Decimal(amount));
 
     const allIxs = [
       ...depositResult.depositIxs,
@@ -230,13 +249,13 @@ export class KaminoManager {
    * Get raw withdraw instructions for Kamino (used by Squads vault flow)
    */
   async getWithdrawInstructions(vaultAddress: string, amount: string, ownerAddress: string): Promise<SerializedInstruction[]> {
-    const vault = new KaminoVault(this.rpc as any, address(vaultAddress));
-    const signer = createNoopSigner(ownerAddress);
+    const vault = new KaminoVault(this.kaminoRpc, kaminoAddress(vaultAddress));
+    const signer = createKaminoNoopSigner(ownerAddress);
 
     const exchangeRate = await vault.getExchangeRate();
     const shareAmount = new Decimal(amount).div(exchangeRate);
 
-    const withdrawResult = await vault.withdrawIxs(signer as any, shareAmount);
+    const withdrawResult = await vault.withdrawIxs(signer, shareAmount);
 
     const allIxs = [
       ...withdrawResult.unstakeFromFarmIfNeededIxs,
@@ -258,8 +277,8 @@ export class KaminoManager {
       const positions = await Promise.all(
         vaults.map(async (vault) => {
           try {
-            const kaminoVault = new KaminoVault(this.rpc as any, address(vault.vaultAddress!));
-            const shares = await kaminoVault.getUserShares(address(walletAddress));
+            const kaminoVault = new KaminoVault(this.kaminoRpc, kaminoAddress(vault.vaultAddress!));
+            const shares = await kaminoVault.getUserShares(kaminoAddress(walletAddress));
             if (shares.totalShares.lte(0)) return null;
 
             const exchangeRate = await kaminoVault.getExchangeRate();
@@ -295,10 +314,10 @@ export class KaminoManager {
    */
   async deposit(vaultAddress: string, amount: string, walletAddress: string): Promise<string> {
     try {
-      const vault = new KaminoVault(this.rpc as any, address(vaultAddress));
-      const signer = createNoopSigner(walletAddress);
+      const vault = new KaminoVault(this.kaminoRpc, kaminoAddress(vaultAddress));
+      const signer = createKaminoNoopSigner(walletAddress);
 
-      const depositResult = await vault.depositIxs(signer as any, new Decimal(amount));
+      const depositResult = await vault.depositIxs(signer, new Decimal(amount));
 
       const allIxs = [
         ...depositResult.depositIxs,
@@ -322,14 +341,14 @@ export class KaminoManager {
    */
   async withdraw(vaultAddress: string, amount: string, walletAddress: string): Promise<string> {
     try {
-      const vault = new KaminoVault(this.rpc as any, address(vaultAddress));
-      const signer = createNoopSigner(walletAddress);
+      const vault = new KaminoVault(this.kaminoRpc, kaminoAddress(vaultAddress));
+      const signer = createKaminoNoopSigner(walletAddress);
 
       // Convert underlying token amount to share amount
       const exchangeRate = await vault.getExchangeRate();
       const shareAmount = new Decimal(amount).div(exchangeRate);
 
-      const withdrawResult = await vault.withdrawIxs(signer as any, shareAmount);
+      const withdrawResult = await vault.withdrawIxs(signer, shareAmount);
 
       const allIxs = [
         ...withdrawResult.unstakeFromFarmIfNeededIxs,

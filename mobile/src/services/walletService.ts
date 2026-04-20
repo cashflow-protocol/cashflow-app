@@ -38,6 +38,11 @@ class WalletService {
     this.rpc = createSolanaRpc(SOLANA_CONFIG.rpcEndpoint);
   }
 
+  /** Recreate the RPC client with the current endpoint. Call after setSolanaRpcEndpoint(). */
+  resetRpc(): void {
+    this.rpc = createSolanaRpc(SOLANA_CONFIG.rpcEndpoint);
+  }
+
   async connect(): Promise<WalletAccount | null> {
     try {
       const result = await getTransact()(async (wallet: any) => {
