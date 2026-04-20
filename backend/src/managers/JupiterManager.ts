@@ -423,7 +423,7 @@ export class JupiterManager {
       const feeOwner = address(PLATFORM_FEE_WALLET);
 
       // Detect whether the output mint uses Token or Token-2022
-      const mintInfo = await this.rpc.getAccountInfo(feeMint).send();
+      const mintInfo = await this.rpc.getAccountInfo(feeMint, { encoding: 'base64' }).send();
       const feeTokenProgram = mintInfo.value?.owner === TOKEN_2022_PROGRAM_ADDRESS
         ? TOKEN_2022_PROGRAM_ADDRESS
         : TOKEN_PROGRAM_ADDRESS;
