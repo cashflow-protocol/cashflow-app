@@ -741,7 +741,7 @@ export class JupiterManager {
    * Create a fee ATA on-chain using the admin fee payer (not the user's vault).
    * Called once per new output token — subsequent swaps see the ATA already exists.
    */
-  private async createFeeAta(owner: Address, mint: Address): Promise<void> {
+  private async createFeeAta(owner: string | Address, mint: string | Address): Promise<void> {
     try {
       const { getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
       const { Connection, Transaction } = await import('@solana/web3.js');
