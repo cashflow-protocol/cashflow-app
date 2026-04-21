@@ -1,26 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
-import { useWallets, useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import {
-  address,
-  createSolanaRpc,
-  createTransactionMessage,
-  setTransactionMessageFeePayer,
-  setTransactionMessageLifetimeUsingBlockhash,
-  appendTransactionMessageInstructions,
-  compileTransaction,
-  getTransactionEncoder,
-  getBase58Decoder,
-  pipe,
-} from '@solana/kit';
+  useWalletConnectors,
+  useConnectWallet,
+  useWallet,
+  useConnectorClient,
+} from '@solana/connector/react';
 import {
-  findAssociatedTokenPda,
-  getTransferCheckedInstruction,
-  getCreateAssociatedTokenIdempotentInstruction,
-  TOKEN_PROGRAM_ADDRESS,
-  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
-} from '@solana-program/token';
-import { getAddMemoInstruction } from '@solana-program/memo';
+  Sparkles, BadgePercent, TrendingUp, Rocket, Award, MessageCircle, Lock, ArrowRight,
+  Wallet,
+} from 'lucide-react';
 import type { SurveyData, Option } from './FamilyWaitlistModal.types';
 import {
   GENDER_OPTIONS,
@@ -35,8 +23,6 @@ import {
 } from './FamilyWaitlistModal.types';
 
 const API_BASE = 'https://api.cashflow.fun/waitlist/v1';
-const RPC_URL = 'https://api.mainnet-beta.solana.com';
-const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 type Step =
   | 'about' | 'family' | 'saving' | 'crypto' | 'goals' | 'challenge'
@@ -57,13 +43,20 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [paid, setPaid] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'connecting' | 'signing' | 'confirming'>('idle');
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'connecting' | 'signing' | 'sending'>('idle');
+  const [walletPickerOpen, setWalletPickerOpen] = useState(false);
+  // Set to true when the user clicked "Claim my pass" without a connected wallet;
+  // auto-fires the tx flow once a wallet connects.
+  const autoPayAfterConnectRef = useRef(false);
 
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  const { login, authenticated } = usePrivy();
-  const { wallets: privyWallets } = useWallets();
-  const { signAndSendTransaction } = useSignAndSendTransaction();
+  // @solana/connector hooks
+  const connectors = useWalletConnectors();
+  const { connect } = useConnectWallet();
+  const { account: connectedAccount } = useWallet();
+  const connectorClient = useConnectorClient();
+  const connectedAddress = connectedAccount?.toString();
 
   const closeAndReset = useCallback(() => {
     overlayRef.current?.classList.remove('open');
@@ -164,110 +157,96 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
     }
   };
 
-  const payNow = async () => {
+  const runPaymentFlow = useCallback(async (walletAddress: string) => {
     setError('');
-
-    // Ensure Privy wallet is available
-    if (!authenticated || privyWallets.length === 0) {
-      setPaymentStatus('connecting');
-      try {
-        await login();
-      } catch {
-        setPaymentStatus('idle');
-        setError('Wallet connection cancelled.');
-        return;
-      }
-    }
-
-    // Wait a tick for wallet to propagate after login
-    const wallet = privyWallets[0];
-    if (!wallet) {
-      setPaymentStatus('idle');
-      setError('No Solana wallet found. Try again.');
-      return;
-    }
-
-    setPaymentStatus('signing');
     setLoading(true);
     try {
-      // 1. Create payment intent
+      // 1. Backend builds unsigned tx (transfer + ATA + memo + Helius tip + priority fee)
+      setPaymentStatus('sending');
       const intentRes = await fetch(API_BASE + '/payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, walletAddress: wallet.address }),
+        body: JSON.stringify({ email, walletAddress }),
       });
       const intent = await intentRes.json();
       if (!intentRes.ok) throw new Error(intent.error || 'Failed to create payment intent');
 
-      // 2. Build tx
-      const rpc = createSolanaRpc(RPC_URL);
-      const mint = address(intent.mint);
-      const userAddr = address(wallet.address);
-      const treasuryAddr = address(intent.treasury);
+      // 2. Sign via @solana/connector's wallet-standard signTransaction feature
+      setPaymentStatus('signing');
+      if (!connectorClient) throw new Error('Wallet client not available');
+      const state = connectorClient.getSnapshot();
+      if (state.wallet.status !== 'connected') throw new Error('Wallet not connected');
 
-      const [userAta] = await findAssociatedTokenPda({
-        mint, owner: userAddr, tokenProgram: TOKEN_PROGRAM_ADDRESS,
+      const connectorId = state.wallet.session.connectorId;
+      const wallet = connectorClient.getConnector(connectorId);
+      if (!wallet) throw new Error('Wallet not found');
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const signFeature = wallet.features['solana:signTransaction'] as any;
+      if (!signFeature) throw new Error("Your wallet doesn't support transaction signing.");
+
+      const account = wallet.accounts.find((a) => {
+        const accAddr = typeof a.address === 'string' ? a.address : String(a.address);
+        return accAddr === walletAddress;
       });
-      const [treasuryAta] = await findAssociatedTokenPda({
-        mint, owner: treasuryAddr, tokenProgram: TOKEN_PROGRAM_ADDRESS,
+      if (!account) throw new Error('Account not found in wallet');
+
+      const txBytes = Uint8Array.from(atob(intent.transaction), (c) => c.charCodeAt(0));
+
+      const [{ signedTransaction }] = await signFeature.signTransaction({
+        transaction: txBytes,
+        account,
+        chain: 'solana:mainnet',
       });
 
-      const createAtaIx = getCreateAssociatedTokenIdempotentInstruction({
-        payer: { address: userAddr } as never,
-        ata: treasuryAta,
-        owner: treasuryAddr,
-        mint,
-      });
-      const transferIx = getTransferCheckedInstruction({
-        source: userAta,
-        mint,
-        destination: treasuryAta,
-        authority: { address: userAddr } as never,
-        amount: BigInt(intent.amount),
-        decimals: intent.decimals,
-      });
-      const memoIx = getAddMemoInstruction({ memo: intent.memoNonce });
+      const signedBase64 = btoa(String.fromCharCode(...new Uint8Array(signedTransaction)));
 
-      const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
-
-      const txMessage = pipe(
-        createTransactionMessage({ version: 0 }),
-        (m) => setTransactionMessageFeePayer(userAddr, m),
-        (m) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
-        (m) => appendTransactionMessageInstructions([createAtaIx, transferIx, memoIx], m),
-      );
-      const compiled = compileTransaction(txMessage);
-      const txBytes = getTransactionEncoder().encode(compiled);
-
-      // 3. Sign + send via Privy — returns { signature: Uint8Array }
-      const sendResult = await signAndSendTransaction({
-        transaction: txBytes as Uint8Array,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        wallet: wallet as any,
-      });
-      const sigBytes = (sendResult as { signature: Uint8Array }).signature;
-      const signature = getBase58Decoder().decode(sigBytes);
-
-      // 4. Confirm on backend
-      setPaymentStatus('confirming');
-      const confirmRes = await fetch(API_BASE + '/payment-confirm', {
+      // 3. Backend relays via HeliusSender.sendAndConfirm + verifies + marks paid
+      setPaymentStatus('sending');
+      const submitRes = await fetch(API_BASE + '/payment-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, txSignature: signature }),
+        body: JSON.stringify({ email, transaction: signedBase64 }),
       });
-      const confirmData = await confirmRes.json();
-      if (!confirmRes.ok) throw new Error(confirmData.error || 'Payment confirmation failed');
+      const submitData = await submitRes.json();
+      if (!submitRes.ok) throw new Error(submitData.error || 'Payment submission failed');
 
       setPaid(true);
       setStep('success');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Payment failed';
-      setError(msg);
+      // User-rejected signing comes through as a generic error — soften the wording.
+      setError(/reject|cancel|deny|User/i.test(msg) ? 'Signing cancelled.' : msg);
     } finally {
       setLoading(false);
       setPaymentStatus('idle');
     }
+  }, [email, connectorClient]);
+
+  const payNow = () => {
+    setError('');
+    if (!connectedAddress) {
+      autoPayAfterConnectRef.current = true;
+      setWalletPickerOpen(true);
+      return;
+    }
+    runPaymentFlow(connectedAddress);
   };
+
+  const onPickWallet = (walletId: string) => {
+    setWalletPickerOpen(false);
+    setPaymentStatus('connecting');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    connect(walletId as any);
+  };
+
+  // When a wallet connects after the user clicked "Claim my pass", auto-fire the payment
+  useEffect(() => {
+    if (!connectedAddress) return;
+    if (!autoPayAfterConnectRef.current) return;
+    autoPayAfterConnectRef.current = false;
+    runPaymentFlow(connectedAddress);
+  }, [connectedAddress, runPaymentFlow]);
 
   const skipPayment = () => {
     setPaid(false);
@@ -278,10 +257,6 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
 
   const showBack = (SURVEY_STEPS.includes(step) && step !== 'about') || step === 'email';
   const showSkip = SURVEY_STEPS.includes(step);
-
-  // Note: `ASSOCIATED_TOKEN_PROGRAM_ADDRESS` is imported only to pin the package — actual address
-  // comes from findAssociatedTokenPda internals. Referenced here to avoid unused-import TS error.
-  void ASSOCIATED_TOKEN_PROGRAM_ADDRESS;
 
   return (
     <div
@@ -410,20 +385,123 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
           </StepShell>
         )}
 
-        {step === 'payment' && (
-          <StepShell
-            title="Get early access"
-            subtitle="Pay 5 USDC and join the founding families cohort."
-            compact
-          >
-            <ul className="fwl-perks">
-              <li><strong>First to try</strong> the family vault, kids' savings, and joint goals</li>
-              <li><strong>Waived launch fees</strong> on your first year</li>
-              <li><strong>Better yield terms</strong> on early deposits</li>
-              <li><strong>Founding-family badge</strong> in the app</li>
-            </ul>
-            {error && <p className="waitlist-error">{error}</p>}
-          </StepShell>
+        {step === 'payment' && !walletPickerOpen && (
+          <div className="fwl-step fwl-step-pay">
+            <div className="fwl-pass">
+              <div className="fwl-pass-shine" aria-hidden="true" />
+
+              <div className="fwl-pass-ribbon">
+                <Sparkles size={14} strokeWidth={2.4} />
+                Founding Family Pass
+              </div>
+
+              <h2 className="fwl-pass-title">
+                Be a founding family.
+              </h2>
+              <p className="fwl-pass-pitch">
+                Your family's spot in the first 100. Every perk locked in forever — for a single 5 USDC.
+              </p>
+
+              <div className="fwl-price">
+                <div className="fwl-price-row">
+                  <span className="fwl-price-num">5</span>
+                  <div className="fwl-price-unit">
+                    <span>USDC</span>
+                    <small>one-time</small>
+                  </div>
+                </div>
+                <span className="fwl-price-note">locked in — forever</span>
+              </div>
+
+              <div className="fwl-pass-divider" aria-hidden="true" />
+
+              <ul className="fwl-pass-perks">
+                <li>
+                  <span className="fwl-perk-icon"><BadgePercent size={18} strokeWidth={2} /></span>
+                  <div>
+                    <strong>Waive all launch fees</strong>
+                    <span>up to $180 a year, skipped</span>
+                  </div>
+                </li>
+                <li>
+                  <span className="fwl-perk-icon"><TrendingUp size={18} strokeWidth={2} /></span>
+                  <div>
+                    <strong>2× yield boost</strong>
+                    <span>first 6 months after launch</span>
+                  </div>
+                </li>
+                <li>
+                  <span className="fwl-perk-icon"><Rocket size={18} strokeWidth={2} /></span>
+                  <div>
+                    <strong>Priority onboarding</strong>
+                    <span>skip the general waitlist</span>
+                  </div>
+                </li>
+                <li>
+                  <span className="fwl-perk-icon"><Award size={18} strokeWidth={2} /></span>
+                  <div>
+                    <strong>Founding-family badge</strong>
+                    <span>in the app — visible forever</span>
+                  </div>
+                </li>
+                <li>
+                  <span className="fwl-perk-icon"><MessageCircle size={18} strokeWidth={2} /></span>
+                  <div>
+                    <strong>Private founders' Discord</strong>
+                    <span>talk directly with the team</span>
+                  </div>
+                </li>
+              </ul>
+
+              <div className="fwl-pass-assurance">
+                <Lock size={12} strokeWidth={2.2} />
+                Solana · one-time · only 100 founding spots
+              </div>
+            </div>
+
+            {connectedAddress && (
+              <div className="fwl-wallet-chip">
+                <Wallet size={14} strokeWidth={2.2} />
+                Paying from <strong>{truncateAddr(connectedAddress)}</strong>
+              </div>
+            )}
+
+            {error && <p className="waitlist-error fwl-pay-error">{error}</p>}
+          </div>
+        )}
+
+        {step === 'payment' && walletPickerOpen && (
+          <div className="fwl-step fwl-step-pay fwl-step-picker">
+            <h2 className="fwl-picker-title">Connect your wallet</h2>
+            <p className="fwl-picker-sub">Pick any Solana wallet to pay the 5 USDC.</p>
+
+            <div className="fwl-wallet-list">
+              {connectors.length === 0 ? (
+                <div className="fwl-wallet-empty">
+                  No Solana wallets detected.<br />
+                  Install{' '}
+                  <a href="https://phantom.app" target="_blank" rel="noopener">Phantom</a>
+                  , <a href="https://solflare.com" target="_blank" rel="noopener">Solflare</a>
+                  , or any Solana wallet extension and refresh the page.
+                </div>
+              ) : (
+                connectors.map((w) => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    className="fwl-wallet-item"
+                    onClick={() => onPickWallet(w.id)}
+                  >
+                    {w.icon && <img src={w.icon} alt="" />}
+                    <span>{w.name}</span>
+                    <ArrowRight size={16} strokeWidth={2} />
+                  </button>
+                ))
+              )}
+            </div>
+
+            {error && <p className="waitlist-error fwl-pay-error">{error}</p>}
+          </div>
         )}
 
         {step === 'success' && (
@@ -467,16 +545,31 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
                   {loading ? 'Verifying…' : 'Verify'}
                 </button>
               )}
-              {step === 'payment' && (
+              {step === 'payment' && !walletPickerOpen && (
                 <>
-                  <button className="fwl-link" onClick={skipPayment} disabled={loading}>Skip for now</button>
-                  <button className="btn btn-m btn-gradient" onClick={payNow} disabled={loading}>
-                    {paymentStatus === 'connecting' && 'Connecting wallet…'}
-                    {paymentStatus === 'signing' && 'Preparing tx…'}
-                    {paymentStatus === 'confirming' && 'Confirming…'}
-                    {paymentStatus === 'idle' && 'Pay 5 USDC'}
+                  <button className="fwl-link fwl-link-subtle" onClick={skipPayment} disabled={loading}>
+                    No thanks, I'll wait
+                  </button>
+                  <button className="btn btn-l btn-gradient fwl-pay-btn" onClick={payNow} disabled={loading}>
+                    {paymentStatus === 'connecting' && 'Connecting…'}
+                    {paymentStatus === 'signing' && 'Sign in your wallet…'}
+                    {paymentStatus === 'sending' && 'Sending…'}
+                    {paymentStatus === 'idle' && (
+                      <>
+                        {connectedAddress ? 'Pay 5 USDC' : 'Claim my pass'}
+                        <ArrowRight size={18} strokeWidth={2.4} />
+                      </>
+                    )}
                   </button>
                 </>
+              )}
+              {step === 'payment' && walletPickerOpen && (
+                <button
+                  className="fwl-link fwl-link-subtle"
+                  onClick={() => { setWalletPickerOpen(false); autoPayAfterConnectRef.current = false; }}
+                >
+                  ← Back
+                </button>
               )}
             </div>
           </div>
@@ -487,6 +580,11 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
 }
 
 // ── sub-components ──
+
+function truncateAddr(addr: string) {
+  if (!addr) return '';
+  return addr.length > 10 ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : addr;
+}
 
 function StepShell({ title, subtitle, children, compact }: {
   title: string; subtitle?: string; children?: React.ReactNode; compact?: boolean;
