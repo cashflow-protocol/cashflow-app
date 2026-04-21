@@ -82,19 +82,8 @@ router.post('/send-code', async (req: Request, res: Response) => {
       const cleanSurvey = sanitizeSurvey(survey);
       const hasSurvey = Object.keys(cleanSurvey).length > 0;
 
-      const existing = await FamilyWaitlistEntryModel.findOne({ email: normalizedEmail, verified: true });
-      if (existing) {
-        if (hasSurvey) {
-          await FamilyWaitlistEntryModel.updateOne(
-            { email: normalizedEmail },
-            { $set: { ...cleanSurvey, surveyCompletedAt: new Date() } },
-          );
-        }
-        res.json({ success: true, message: 'Already on waitlist' });
-        return;
-      }
-
-      // Persist partial entry with survey data (unverified) so we don't lose it if they bail
+      // Always merge fresh survey data, even if the entry already exists. We do NOT
+      // short-circuit on `verified: true` — every sign-in requires a fresh code.
       if (hasSurvey) {
         await FamilyWaitlistEntryModel.findOneAndUpdate(
           { email: normalizedEmail },
@@ -172,10 +161,10 @@ router.post('/verify', async (req: Request, res: Response) => {
     pendingCodes.delete(normalizedEmail);
 
     const Model = isFamily ? FamilyWaitlistEntryModel : WaitlistEntryModel;
-    await Model.findOneAndUpdate(
+    const updated = await Model.findOneAndUpdate(
       { email: normalizedEmail },
       { $set: { email: normalizedEmail, verified: true } },
-      { upsert: true },
+      { upsert: true, new: true },
     );
 
     try {
@@ -189,7 +178,14 @@ router.post('/verify', async (req: Request, res: Response) => {
       console.error('[waitlist] Brevo contact creation error:', brevoError);
     }
 
-    res.json({ success: true, message: 'Email verified! You\'re on the waitlist.' });
+    // For the family flow, surface `paid` so the client can skip the payment step for returners
+    const paid = isFamily ? Boolean((updated as { paid?: boolean } | null)?.paid) : false;
+
+    res.json({
+      success: true,
+      message: 'Email verified! You\'re on the waitlist.',
+      paid,
+    });
   } catch (error) {
     console.error('[waitlist] verify error:', error);
     res.status(500).json({ success: false, error: 'Verification failed' });
