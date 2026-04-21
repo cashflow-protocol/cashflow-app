@@ -449,14 +449,14 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
                 <li>
                   <span className="fwl-perk-icon"><TrendingUp size={18} strokeWidth={2} /></span>
                   <div>
-                    <strong>2× yield boost</strong>
+                    <strong>Yield boost</strong>
                     <span>first 6 months after launch</span>
                   </div>
                 </li>
                 <li>
                   <span className="fwl-perk-icon"><Rocket size={18} strokeWidth={2} /></span>
                   <div>
-                    <strong>Priority onboarding</strong>
+                    <strong>Early access</strong>
                     <span>skip the general waitlist</span>
                   </div>
                 </li>
@@ -465,13 +465,6 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
                   <div>
                     <strong>Founding-family badge</strong>
                     <span>in the app — visible forever</span>
-                  </div>
-                </li>
-                <li>
-                  <span className="fwl-perk-icon"><MessageCircle size={18} strokeWidth={2} /></span>
-                  <div>
-                    <strong>Private founders' Discord</strong>
-                    <span>talk directly with the team</span>
                   </div>
                 </li>
               </ul>
