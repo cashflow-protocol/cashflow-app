@@ -1643,3 +1643,396 @@
   .fwl-success-icon { animation: none; }
 }
 
+/* ========= Founding Family Pass (payment step) ========= */
+
+.fwl-step-pay {
+  padding: 40px 36px 20px;
+}
+
+.fwl-pass {
+  position: relative;
+  background:
+    linear-gradient(160deg, #A85A3E 0%, #C97B5C 50%, #D9A048 100%);
+  background-size: 180% 180%;
+  color: #FFF8EA;
+  border-radius: 22px;
+  padding: 32px 30px 28px;
+  box-shadow:
+    0 1px 0 rgba(255, 248, 234, 0.2) inset,
+    0 24px 55px rgba(62, 47, 34, 0.32);
+  overflow: hidden;
+  transform: rotate(-0.4deg);
+  animation: pass-shimmer 12s ease-in-out infinite;
+}
+
+@keyframes pass-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* Soft diagonal light-beam overlay */
+.fwl-pass-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 15% 0%, rgba(255, 248, 234, 0.35) 0%, transparent 45%),
+    radial-gradient(ellipse at 90% 100%, rgba(62, 47, 34, 0.25) 0%, transparent 45%);
+}
+
+.fwl-pass > * { position: relative; z-index: 1; }
+
+.fwl-pass-ribbon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+  background: rgba(255, 248, 234, 0.22);
+  border: 1px solid rgba(255, 248, 234, 0.4);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #FFF8EA;
+  margin-bottom: 18px;
+  backdrop-filter: blur(4px);
+}
+
+.fwl-pass-title {
+  font-size: 30px !important;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: #FFF8EA !important;
+  margin: 0 0 10px !important;
+}
+
+.fwl-pass-pitch {
+  font-size: 15px;
+  color: rgba(255, 248, 234, 0.88);
+  line-height: 1.5;
+  margin: 0 0 22px;
+  max-width: 420px;
+}
+
+/* --- price --- */
+.fwl-price {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 0 6px;
+}
+
+.fwl-price-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.fwl-price-num {
+  font-size: 78px;
+  font-weight: 900;
+  line-height: 0.88;
+  letter-spacing: -0.04em;
+  color: #FFF8EA;
+  text-shadow: 0 4px 18px rgba(62, 47, 34, 0.35);
+  animation: price-pulse 3.5s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+
+@keyframes price-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.035); }
+}
+
+.fwl-price-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-bottom: 6px;
+  line-height: 1.1;
+}
+
+.fwl-price-unit span {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #FFF8EA;
+}
+
+.fwl-price-unit small {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 248, 234, 0.7);
+}
+
+.fwl-price-note {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 248, 234, 0.72);
+  margin-top: 2px;
+}
+
+/* --- ticket-style perforation divider --- */
+.fwl-pass-divider {
+  position: relative;
+  height: 1px;
+  margin: 22px -30px 22px;
+  background:
+    repeating-linear-gradient(
+      to right,
+      rgba(255, 248, 234, 0.45) 0,
+      rgba(255, 248, 234, 0.45) 6px,
+      transparent 6px,
+      transparent 12px
+    );
+}
+
+.fwl-pass-divider::before,
+.fwl-pass-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #F7EAD2;
+  box-shadow: inset 0 2px 4px rgba(62, 47, 34, 0.15);
+}
+
+.fwl-pass-divider::before { left: -12px; }
+.fwl-pass-divider::after  { right: -12px; }
+
+/* --- perks list --- */
+.fwl-pass-perks {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fwl-pass-perks li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.fwl-perk-icon {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 248, 234, 0.2);
+  border: 1px solid rgba(255, 248, 234, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFF8EA;
+  margin-top: 1px;
+}
+
+.fwl-pass-perks li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.fwl-pass-perks strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #FFF8EA;
+  margin-bottom: 1px;
+  line-height: 1.3;
+}
+
+.fwl-pass-perks span {
+  display: block;
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(255, 248, 234, 0.78);
+}
+
+/* --- assurance pill --- */
+.fwl-pass-assurance {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(255, 248, 234, 0.92);
+}
+
+.fwl-pass-assurance svg {
+  opacity: 0.85;
+}
+
+/* --- pay button extras --- */
+.fwl-pay-btn {
+  padding-left: 28px !important;
+  padding-right: 28px !important;
+  box-shadow: 0 10px 28px rgba(168, 90, 62, 0.4);
+}
+
+.fwl-pay-btn svg { margin-left: 2px; }
+
+/* De-emphasize "No thanks" on the payment step */
+.fwl-link-subtle {
+  font-size: 13px;
+  opacity: 0.7;
+  border-bottom-color: transparent !important;
+}
+
+.fwl-link-subtle:hover {
+  opacity: 1;
+}
+
+.fwl-pay-error {
+  margin: 16px 4px 0;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .fwl-step-pay { padding: 32px 20px 16px; }
+  .fwl-pass { padding: 26px 22px 24px; transform: none; }
+  .fwl-pass-title { font-size: 26px !important; }
+  .fwl-price-num { font-size: 64px; }
+  .fwl-pass-divider { margin: 18px -22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fwl-pass,
+  .fwl-price-num {
+    animation: none;
+  }
+}
+
+/* ========= Wallet picker + connected chip ========= */
+
+.fwl-wallet-chip {
+  margin: 16px auto 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(156, 175, 136, 0.2);
+  border: 1px solid rgba(94, 116, 80, 0.35);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sage-dark);
+}
+
+.fwl-wallet-chip strong {
+  font-weight: 700;
+  color: var(--chocolate);
+  font-variant-numeric: tabular-nums;
+}
+
+.fwl-step-picker {
+  padding: 48px 40px 20px;
+}
+
+.fwl-picker-title {
+  font-size: 24px !important;
+  font-weight: 800;
+  color: var(--chocolate);
+  letter-spacing: -0.02em;
+  margin: 0 0 6px !important;
+}
+
+.fwl-picker-sub {
+  font-size: 15px;
+  color: var(--ink-soft);
+  margin: 0 0 24px;
+}
+
+.fwl-wallet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 48vh;
+  overflow-y: auto;
+}
+
+.fwl-wallet-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1.5px solid rgba(181, 121, 58, 0.22);
+  border-radius: 14px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--chocolate);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.fwl-wallet-item:hover {
+  transform: translateY(-1px);
+  background: #FFF;
+  border-color: var(--terracotta);
+}
+
+.fwl-wallet-item img {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.fwl-wallet-item span {
+  flex: 1;
+  min-width: 0;
+}
+
+.fwl-wallet-item svg {
+  color: var(--ink-soft);
+  opacity: 0.5;
+  transition: color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.fwl-wallet-item:hover svg {
+  color: var(--terracotta-deep);
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+.fwl-wallet-empty {
+  padding: 24px 20px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1.5px dashed rgba(181, 121, 58, 0.3);
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.fwl-wallet-empty a {
+  color: var(--terracotta-deep);
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .fwl-step-picker { padding: 40px 20px 16px; }
+  .fwl-wallet-item { padding: 12px 14px; font-size: 14px; }
+}
+

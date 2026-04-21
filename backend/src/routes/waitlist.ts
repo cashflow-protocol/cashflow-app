@@ -197,8 +197,8 @@ router.post('/verify', async (req: Request, res: Response) => {
 });
 
 // POST /waitlist/v1/payment-intent
-// Creates a payment intent: generates a nonce to use as the tx memo, persists it on the family entry.
-// The client builds + sends the USDC transfer, then calls /payment-confirm with the tx signature.
+// Builds an unsigned VersionedTransaction: tip + (optional) create-ATA + transferChecked + memo,
+// with the user's wallet as fee payer. Returns base64 for the client to sign.
 router.post('/payment-intent', async (req: Request, res: Response) => {
   try {
     const { email, walletAddress } = req.body;
@@ -231,6 +231,57 @@ router.post('/payment-intent', async (req: Request, res: Response) => {
 
     const memoNonce = 'cfwl-' + randomBytes(6).toString('hex');
 
+    // Lazy-import web3.js + spl-token + HeliusSender (all backend-only deps)
+    const {
+      Connection, PublicKey, TransactionMessage, VersionedTransaction,
+      TransactionInstruction, ComputeBudgetProgram,
+    } = await import('@solana/web3.js');
+    const {
+      createAssociatedTokenAccountIdempotentInstruction,
+      createTransferCheckedInstruction,
+      getAssociatedTokenAddressSync,
+    } = await import('@solana/spl-token');
+    const { HeliusSender } = await import('../managers/HeliusSender');
+
+    const connection = new Connection(rpcUrl, 'confirmed');
+    const userPubkey = new PublicKey(walletAddress);
+    const treasuryPubkey = new PublicKey(treasury);
+    const mintPubkey = new PublicKey(USDC_MINT);
+
+    const userAta = getAssociatedTokenAddressSync(mintPubkey, userPubkey);
+    const treasuryAta = getAssociatedTokenAddressSync(mintPubkey, treasuryPubkey);
+
+    const memoIx = new TransactionInstruction({
+      keys: [],
+      programId: new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'),
+      data: Buffer.from(memoNonce, 'utf8'),
+    });
+
+    const instructions = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 80_000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000 }),
+      createAssociatedTokenAccountIdempotentInstruction(
+        userPubkey, treasuryAta, treasuryPubkey, mintPubkey,
+      ),
+      createTransferCheckedInstruction(
+        userAta, mintPubkey, treasuryAta, userPubkey,
+        WAITLIST_PAYMENT_AMOUNT, USDC_DECIMALS,
+      ),
+      memoIx,
+      HeliusSender.createTipIx(userPubkey),
+    ];
+
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+
+    const messageV0 = new TransactionMessage({
+      payerKey: userPubkey,
+      recentBlockhash: blockhash,
+      instructions,
+    }).compileToV0Message();
+
+    const tx = new VersionedTransaction(messageV0);
+    const base64Tx = Buffer.from(tx.serialize()).toString('base64');
+
     await FamilyWaitlistEntryModel.updateOne(
       { email: normalizedEmail },
       { $set: { paidNonce: memoNonce, paidWalletAddress: walletAddress } },
@@ -238,6 +289,7 @@ router.post('/payment-intent', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
+      transaction: base64Tx,
       treasury,
       mint: USDC_MINT,
       decimals: USDC_DECIMALS,
@@ -250,14 +302,14 @@ router.post('/payment-intent', async (req: Request, res: Response) => {
   }
 });
 
-// POST /waitlist/v1/payment-confirm
-// Verifies a submitted USDC transfer: checks on-chain that treasury received ≥ 5 USDC
-// and the memo matches the stored nonce. On success, marks paid: true on the family entry.
-router.post('/payment-confirm', async (req: Request, res: Response) => {
+// POST /waitlist/v1/payment-submit
+// Accepts a signed base64 tx, relays it via HeliusSender (with tip for SWQoS), waits for
+// confirmation, then verifies treasury USDC delta + memo matches the stored nonce. Marks paid.
+router.post('/payment-submit', async (req: Request, res: Response) => {
   try {
-    const { email, txSignature } = req.body;
-    if (!email || !txSignature || typeof txSignature !== 'string') {
-      res.status(400).json({ success: false, error: 'Email and txSignature are required' });
+    const { email, transaction } = req.body;
+    if (!email || !transaction || typeof transaction !== 'string') {
+      res.status(400).json({ success: false, error: 'Email and transaction are required' });
       return;
     }
 
@@ -275,7 +327,7 @@ router.post('/payment-confirm', async (req: Request, res: Response) => {
     }
 
     if (entry.paid) {
-      res.json({ success: true, message: 'Already paid' });
+      res.json({ success: true, message: 'Already paid', txSignature: entry.paidTxSignature });
       return;
     }
 
@@ -285,8 +337,19 @@ router.post('/payment-confirm', async (req: Request, res: Response) => {
       return;
     }
 
-    // Fetch the tx on-chain (polling for confirmation up to ~30s).
-    // Kit's response types are strict/readonly; we work with a minimal parsed shape.
+    // Send via HeliusSender with Jito tip (already included as an ix in the tx)
+    const { HeliusSender } = await import('../managers/HeliusSender');
+    let signature: string;
+    try {
+      signature = await HeliusSender.sendAndConfirm(transaction);
+    } catch (sendErr) {
+      const msg = sendErr instanceof Error ? sendErr.message : 'Transaction failed';
+      console.error('[waitlist] HeliusSender error:', sendErr);
+      res.status(400).json({ success: false, error: msg });
+      return;
+    }
+
+    // Verify the confirmed tx: treasury USDC delta + memo nonce
     type TokenBalance = { owner?: string; mint?: string; uiTokenAmount?: { amount?: string } };
     type ParsedIx = { program?: string; programId?: string; parsed?: unknown };
     type ParsedTx = {
@@ -294,30 +357,20 @@ router.post('/payment-confirm', async (req: Request, res: Response) => {
       transaction?: { message?: { instructions?: readonly ParsedIx[] } };
     };
 
-    let txRes: ParsedTx | null = null;
-    const deadline = Date.now() + 30_000;
-    while (Date.now() < deadline) {
-      const raw = await rpc
-        .getTransaction(txSignature as Signature, {
-          encoding: 'jsonParsed',
-          maxSupportedTransactionVersion: 0,
-          commitment: 'confirmed',
-        })
-        .send();
-      if (raw) { txRes = raw as unknown as ParsedTx; break; }
-      await new Promise((r) => setTimeout(r, 2000));
-    }
+    const raw = await rpc
+      .getTransaction(signature as Signature, {
+        encoding: 'jsonParsed',
+        maxSupportedTransactionVersion: 0,
+        commitment: 'confirmed',
+      })
+      .send();
+    const txRes = raw as unknown as ParsedTx | null;
 
-    if (!txRes) {
-      res.status(400).json({ success: false, error: 'Transaction not found or not yet confirmed' });
-      return;
-    }
-    if (txRes.meta?.err) {
-      res.status(400).json({ success: false, error: 'Transaction failed on-chain' });
+    if (!txRes || txRes.meta?.err) {
+      res.status(400).json({ success: false, error: 'Transaction not confirmed on-chain' });
       return;
     }
 
-    // Verify treasury USDC balance increase via pre/postTokenBalances
     const preBalances = txRes.meta?.preTokenBalances ?? [];
     const postBalances = txRes.meta?.postTokenBalances ?? [];
     const findTreasuryUsdc = (arr: readonly TokenBalance[]) =>
@@ -331,7 +384,6 @@ router.post('/payment-confirm', async (req: Request, res: Response) => {
       return;
     }
 
-    // Verify memo matches the expected nonce
     const instructions = txRes.transaction?.message?.instructions ?? [];
     const memoIx = instructions.find(
       (ix) => ix.program === 'spl-memo' || ix.programId === 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr',
@@ -342,8 +394,7 @@ router.post('/payment-confirm', async (req: Request, res: Response) => {
       return;
     }
 
-    // Guard against the same signature being reused for a different entry
-    const alreadyUsed = await FamilyWaitlistEntryModel.findOne({ paidTxSignature: txSignature });
+    const alreadyUsed = await FamilyWaitlistEntryModel.findOne({ paidTxSignature: signature });
     if (alreadyUsed && alreadyUsed.email !== normalizedEmail) {
       res.status(409).json({ success: false, error: 'Transaction signature already used' });
       return;
@@ -355,16 +406,16 @@ router.post('/payment-confirm', async (req: Request, res: Response) => {
         $set: {
           paid: true,
           paidAmount: Number(delta),
-          paidTxSignature: txSignature,
+          paidTxSignature: signature,
           paidAt: new Date(),
         },
       },
     );
 
-    res.json({ success: true, message: 'Payment confirmed' });
+    res.json({ success: true, message: 'Payment confirmed', txSignature: signature });
   } catch (error) {
-    console.error('[waitlist] payment-confirm error:', error);
-    res.status(500).json({ success: false, error: 'Payment confirmation failed' });
+    console.error('[waitlist] payment-submit error:', error);
+    res.status(500).json({ success: false, error: 'Payment submission failed' });
   }
 });
 
