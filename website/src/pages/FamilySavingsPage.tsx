@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent, CSSProperties, ComponentType } from
 import { Link } from 'react-router';
 import { CarFront, Plane, House, ShieldCheck } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
-import WaitlistModal from '../components/WaitlistModal';
+import FamilyWaitlistModal from '../components/FamilyWaitlistModal';
 import '../styles/landing.css';
 import '../styles/family.css';
 
@@ -393,7 +393,7 @@ export default function FamilySavingsPage() {
         </div>
       </footer>
 
-      <WaitlistModal open={waitlistOpen} onClose={() => setWaitlistOpen(false)} />
+      <FamilyWaitlistModal open={waitlistOpen} onClose={() => setWaitlistOpen(false)} />
     </div>
   );
 }

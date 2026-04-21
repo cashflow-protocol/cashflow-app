@@ -1268,3 +1268,378 @@
     gap: 16px;
   }
 }
+
+/* ========= Family Waitlist Modal (scrapbook/warm multi-step) ========= */
+
+.fwl-overlay {
+  background: rgba(62, 47, 34, 0.55);
+}
+
+.fwl-card {
+  background: #F7EAD2;
+  background-image:
+    radial-gradient(circle, rgba(168, 90, 62, 0.08) 1px, transparent 1.4px),
+    radial-gradient(circle, rgba(181, 121, 58, 0.04) 1px, transparent 1.4px);
+  background-size: 22px 22px, 22px 22px;
+  background-position: 0 0, 11px 11px;
+  border: 1px solid rgba(181, 121, 58, 0.18);
+  box-shadow:
+    0 1px 0 rgba(255, 248, 234, 0.6) inset,
+    0 40px 100px rgba(62, 47, 34, 0.45);
+  padding: 0;
+  max-width: 600px;
+  width: 100%;
+  text-align: left;
+  color: #2E2418;
+  overflow: hidden;
+}
+
+.fwl-card .modal-close {
+  background: rgba(62, 47, 34, 0.08);
+  color: #3E2F22;
+  z-index: 3;
+}
+
+.fwl-card .modal-close:hover {
+  background: rgba(62, 47, 34, 0.18);
+}
+
+/* --- progress bar --- */
+.fwl-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(181, 121, 58, 0.14);
+  overflow: hidden;
+}
+
+.fwl-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #A85A3E, #C97B5C, #D9A048);
+  border-radius: 0 4px 4px 0;
+  transition: width 0.35s cubic-bezier(0.25, 1, 0.3, 1);
+}
+
+/* --- step container --- */
+.fwl-step {
+  padding: 56px 48px 24px;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.fwl-step-compact {
+  padding: 56px 48px 16px;
+}
+
+.fwl-step h2 {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #3E2F22;
+  margin: 0 0 6px;
+  line-height: 1.15;
+}
+
+.fwl-subtitle {
+  font-size: 15px;
+  color: #6B5A45;
+  margin: 0 0 28px;
+  line-height: 1.5;
+}
+
+.fwl-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.fwl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fwl-field-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #8C5A2B;
+}
+
+/* --- chips (radio + multi) --- */
+.fwl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fwl-chip {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #3E2F22;
+  border: 1.5px solid rgba(181, 121, 58, 0.22);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.fwl-chip:hover {
+  border-color: rgba(168, 90, 62, 0.55);
+  transform: translateY(-1px);
+}
+
+.fwl-chip-active {
+  background: linear-gradient(135deg, #A85A3E, #C97B5C);
+  color: #FFF8EA;
+  border-color: #A85A3E;
+  box-shadow: 0 6px 14px rgba(168, 90, 62, 0.22);
+}
+
+.fwl-chip-active:hover {
+  transform: translateY(-1px);
+}
+
+/* --- stepper --- */
+.fwl-stepper {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1.5px solid rgba(181, 121, 58, 0.22);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+  width: fit-content;
+}
+
+.fwl-stepper button {
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(168, 90, 62, 0.1);
+  color: #A85A3E;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.fwl-stepper button:hover:not(:disabled) {
+  background: rgba(168, 90, 62, 0.2);
+}
+
+.fwl-stepper button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.fwl-stepper-value {
+  min-width: 44px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: #3E2F22;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- email + code inputs --- */
+.fwl-email-row {
+  display: flex;
+  gap: 12px;
+}
+
+.fwl-verify-row {
+  justify-content: center;
+}
+
+.fwl-input {
+  flex: 1;
+  padding: 14px 20px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  border: 1.5px solid rgba(181, 121, 58, 0.25);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #2E2418;
+  outline: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  min-height: 52px;
+}
+
+.fwl-input::placeholder {
+  color: rgba(62, 47, 34, 0.35);
+}
+
+.fwl-input:focus {
+  border-color: #C97B5C;
+  background: #FFF;
+}
+
+.fwl-code {
+  max-width: 220px;
+  text-align: center;
+  letter-spacing: 8px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+/* --- perks (payment step) --- */
+.fwl-perks {
+  list-style: none;
+  padding: 16px 20px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(181, 121, 58, 0.18);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fwl-perks li {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #3E2F22;
+  padding-left: 28px;
+  position: relative;
+}
+
+.fwl-perks li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #E8B558, #D9A048);
+  box-shadow: 0 2px 4px rgba(181, 121, 58, 0.25);
+}
+
+.fwl-perks li::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 9px;
+  width: 10px;
+  height: 5px;
+  border-left: 2px solid #3E2F22;
+  border-bottom: 2px solid #3E2F22;
+  transform: rotate(-45deg);
+}
+
+.fwl-perks strong {
+  font-weight: 700;
+  color: #A85A3E;
+}
+
+/* --- success screen --- */
+.fwl-success {
+  padding: 56px 48px 40px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.fwl-success-icon {
+  filter: drop-shadow(0 10px 20px rgba(181, 121, 58, 0.35));
+  animation: fwl-pop 0.5s cubic-bezier(0.3, 1.3, 0.5, 1.2) both;
+}
+
+@keyframes fwl-pop {
+  0%   { transform: scale(0) rotate(-30deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.fwl-success h2 {
+  font-size: 28px;
+  font-weight: 800;
+  color: #3E2F22;
+  letter-spacing: -0.02em;
+  margin: 8px 0 0;
+}
+
+.fwl-success p {
+  font-size: 16px;
+  color: #6B5A45;
+  line-height: 1.55;
+  max-width: 420px;
+  margin: 0 0 12px;
+}
+
+.fwl-success .btn-gradient {
+  margin-top: 8px;
+}
+
+/* --- footer (back / skip / next) --- */
+.fwl-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 48px 32px;
+  border-top: 1px solid rgba(181, 121, 58, 0.14);
+  background: rgba(255, 248, 234, 0.55);
+}
+
+.fwl-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.fwl-link {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6B5A45;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 4px;
+  border-bottom: 1.5px dashed rgba(107, 90, 69, 0.4);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.fwl-link:hover {
+  color: #A85A3E;
+  border-bottom-color: #A85A3E;
+}
+
+.fwl-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- error message inside modal --- */
+.fwl-card .waitlist-error {
+  color: #B5411F;
+  font-size: 14px;
+  margin-top: 12px;
+}
+
+/* --- responsive --- */
+@media (max-width: 640px) {
+  .fwl-card { max-width: calc(100vw - 32px); }
+  .fwl-step { padding: 48px 24px 20px; max-height: 76vh; }
+  .fwl-step h2 { font-size: 24px; }
+  .fwl-footer { padding: 16px 24px 24px; flex-wrap: wrap; }
+  .fwl-footer-right { margin-left: auto; }
+  .fwl-success { padding: 48px 24px 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fwl-progress-fill { transition: none; }
+  .fwl-success-icon { animation: none; }
+}
+
