@@ -2,12 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   useWalletConnectors,
   useConnectWallet,
+  useDisconnectWallet,
   useWallet,
   useConnectorClient,
 } from '@solana/connector/react';
 import {
   Sparkles, BadgePercent, TrendingUp, Rocket, Award, MessageCircle, Lock, ArrowRight,
-  Wallet,
 } from 'lucide-react';
 import type { SurveyData, Option } from './FamilyWaitlistModal.types';
 import {
@@ -45,18 +45,15 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
   const [paid, setPaid] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'connecting' | 'signing' | 'sending'>('idle');
   const [walletPickerOpen, setWalletPickerOpen] = useState(false);
-  // Set to true when the user clicked "Claim my pass" without a connected wallet;
-  // auto-fires the tx flow once a wallet connects.
-  const autoPayAfterConnectRef = useRef(false);
 
   const overlayRef = useRef<HTMLDivElement>(null);
 
   // @solana/connector hooks
   const connectors = useWalletConnectors();
   const { connect } = useConnectWallet();
-  const { account: connectedAccount } = useWallet();
+  const { disconnect } = useDisconnectWallet();
+  useWallet(); // keep subscription alive even though we read via connectorClient
   const connectorClient = useConnectorClient();
-  const connectedAddress = connectedAccount?.toString();
 
   const closeAndReset = useCallback(() => {
     overlayRef.current?.classList.remove('open');
@@ -161,7 +158,7 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
     }
   };
 
-  const runPaymentFlow = useCallback(async (walletAddress: string) => {
+  const runPaymentFlow = useCallback(async (walletId: string, walletAddress: string) => {
     setError('');
     setLoading(true);
     try {
@@ -178,11 +175,9 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
       // 2. Sign via @solana/connector's wallet-standard signTransaction feature
       setPaymentStatus('signing');
       if (!connectorClient) throw new Error('Wallet client not available');
-      const state = connectorClient.getSnapshot();
-      if (state.wallet.status !== 'connected') throw new Error('Wallet not connected');
 
-      const connectorId = state.wallet.session.connectorId;
-      const wallet = connectorClient.getConnector(connectorId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wallet = connectorClient.getConnector(walletId as any);
       if (!wallet) throw new Error('Wallet not found');
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -192,8 +187,8 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
       const account = wallet.accounts.find((a) => {
         const accAddr = typeof a.address === 'string' ? a.address : String(a.address);
         return accAddr === walletAddress;
-      });
-      if (!account) throw new Error('Account not found in wallet');
+      }) || wallet.accounts[0];
+      if (!account) throw new Error('No account found in wallet');
 
       const txBytes = Uint8Array.from(atob(intent.transaction), (c) => c.charCodeAt(0));
 
@@ -229,28 +224,52 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
 
   const payNow = () => {
     setError('');
-    if (!connectedAddress) {
-      autoPayAfterConnectRef.current = true;
-      setWalletPickerOpen(true);
-      return;
-    }
-    runPaymentFlow(connectedAddress);
+    // Always present the picker. Disconnect any session @solana/connector auto-restored,
+    // so picking a wallet surfaces a fresh approval prompt.
+    try { disconnect(); } catch { /* nothing to disconnect */ }
+    setWalletPickerOpen(true);
   };
 
-  const onPickWallet = (walletId: string) => {
+  const onPickWallet = async (walletId: string) => {
     setWalletPickerOpen(false);
     setPaymentStatus('connecting');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    connect(walletId as any);
-  };
+    setError('');
 
-  // When a wallet connects after the user clicked "Claim my pass", auto-fire the payment
-  useEffect(() => {
-    if (!connectedAddress) return;
-    if (!autoPayAfterConnectRef.current) return;
-    autoPayAfterConnectRef.current = false;
-    runPaymentFlow(connectedAddress);
-  }, [connectedAddress, runPaymentFlow]);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      connect(walletId as any);
+
+      // Poll the connector client for the *specific* wallet the user just picked.
+      // We deliberately key off the picked walletId (not a generic connectedAddress)
+      // so that any leftover/auto-reconnected session from a different wallet
+      // doesn't spuriously trigger the payment flow.
+      const deadline = Date.now() + 45_000;
+      let pickedAddr: string | null = null;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 150));
+        if (!connectorClient) continue;
+        const snap = connectorClient.getSnapshot();
+        if (snap.wallet.status !== 'connected') continue;
+        if (snap.wallet.session?.connectorId !== walletId) continue;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = connectorClient.getConnector(walletId as any);
+        const acc = w?.accounts[0];
+        if (!acc) continue;
+        pickedAddr = typeof acc.address === 'string' ? acc.address : String(acc.address);
+        break;
+      }
+
+      if (!pickedAddr) {
+        throw new Error('Wallet connection timed out');
+      }
+
+      await runPaymentFlow(walletId, pickedAddr);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Wallet connection failed';
+      setError(/reject|cancel|deny|User|timed out/i.test(msg) ? 'Wallet connection cancelled.' : msg);
+      setPaymentStatus('idle');
+    }
+  };
 
   const skipPayment = () => {
     setPaid(false);
@@ -463,13 +482,6 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
               </div>
             </div>
 
-            {connectedAddress && (
-              <div className="fwl-wallet-chip">
-                <Wallet size={14} strokeWidth={2.2} />
-                Paying from <strong>{truncateAddr(connectedAddress)}</strong>
-              </div>
-            )}
-
             {error && <p className="waitlist-error fwl-pay-error">{error}</p>}
           </div>
         )}
@@ -560,7 +572,7 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
                     {paymentStatus === 'sending' && 'Sending…'}
                     {paymentStatus === 'idle' && (
                       <>
-                        {connectedAddress ? 'Pay 5 USDC' : 'Claim my pass'}
+                        Pay 5 USDC
                         <ArrowRight size={18} strokeWidth={2.4} />
                       </>
                     )}
@@ -570,7 +582,7 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
               {step === 'payment' && walletPickerOpen && (
                 <button
                   className="fwl-link fwl-link-subtle"
-                  onClick={() => { setWalletPickerOpen(false); autoPayAfterConnectRef.current = false; }}
+                  onClick={() => setWalletPickerOpen(false)}
                 >
                   ← Back
                 </button>
@@ -584,11 +596,6 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
 }
 
 // ── sub-components ──
-
-function truncateAddr(addr: string) {
-  if (!addr) return '';
-  return addr.length > 10 ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : addr;
-}
 
 function StepShell({ title, subtitle, children, compact }: {
   title: string; subtitle?: string; children?: React.ReactNode; compact?: boolean;
