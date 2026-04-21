@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router';
 import { AppProvider, getDefaultConfig } from '@solana/connector/react';
 import { PrivyProvider } from '@privy-io/react-auth';
 import LandingPage from './pages/LandingPage';
+import FamilySavingsPage from './pages/FamilySavingsPage';
 import RecoveryPage from './pages/RecoveryPage';
 import DownloadPage from './pages/DownloadPage';
 import LicencePage from './pages/LicencePage';
@@ -27,6 +28,7 @@ export default function App() {
       <AppProvider connectorConfig={connectorConfig}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/family" element={<FamilySavingsPage />} />
           <Route path="/recovery/:id" element={<RecoveryPage />} />
           <Route path="/download" element={<DownloadPage />} />
           <Route path="/licence" element={<LicencePage />} />
