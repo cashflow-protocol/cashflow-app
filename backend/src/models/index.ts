@@ -2,6 +2,7 @@ export { EarnToken, EarnTokenModel } from './EarnToken';
 export { Transaction, TransactionModel, TransactionAction, TransactionStatus } from './Transaction';
 export { CachedToken, CachedTokenModel } from './CachedToken';
 export { WaitlistEntry, WaitlistEntryModel } from './WaitlistEntry';
+export { FamilyWaitlistEntry, FamilyWaitlistEntryModel } from './FamilyWaitlistEntry';
 export { User, UserModel } from './User';
 export { AuthLog, AuthLogModel } from './AuthLog';
 export { InviteCode, InviteCodeModel } from './InviteCode';

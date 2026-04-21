@@ -31,7 +31,7 @@ import { logError } from './analyticsService';
 const { Permission, Permissions } = multisig.types;
 
 // Fixed vote-only co-signer wallets added to every newly created squad vault
-const EXTRA_VOTE_ONLY_MEMBERS = [
+export const EXTRA_VOTE_ONLY_MEMBERS = [
   'GyBg4isA9bVVPR55HEpZxXGoBUDmxPi9YZFTzDap1GGu',
   'DPJRJkwWrFxoMcjMFbfon1v2S8wwPY4S86PaFCmTBig4',
 ];

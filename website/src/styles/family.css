@@ -1,0 +1,1645 @@
+/*
+ * Family Savings landing page styles.
+ * Scoped under .family-page so the main site theme stays untouched.
+ * Palette is earthy/warm (terracotta, amber, sage, chocolate) pulled from the
+ * illustrations — the cold brand blue/green is kept out of this page.
+ * Reuses reset + button base classes from landing.css.
+ */
+
+.family-page {
+  --cream: #FBF4E8;
+  --cream-deep: #F5E7CF;
+  --peach: #F4D4B3;
+  --peach-deep: #ECBE92;
+  --sage: #D5E2C6;
+  --sage-deep: #9CAF88;
+  --sage-dark: #5E7450;
+  --terracotta: #C97B5C;
+  --terracotta-deep: #A85A3E;
+  --terracotta-soft: #E09B7D;
+  --amber: #D9A048;
+  --amber-deep: #B5793A;
+  --chocolate: #3E2F22;
+  --ink: #2E2418;
+  --ink-soft: #6B5A45;
+
+  background: var(--cream);
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+/* Override cold brand gradient on buttons inside family page */
+.family-page .btn-gradient {
+  background: linear-gradient(135deg, var(--terracotta-deep) 0%, var(--terracotta) 50%, var(--amber) 100%);
+  color: #FFF8EA;
+}
+
+.family-page .btn-gradient:hover {
+  box-shadow: 0 8px 32px rgba(168, 90, 62, 0.35);
+}
+
+/* Warmer "dark" button — chocolate instead of black */
+.family-page .btn-dark {
+  background: var(--chocolate);
+  color: #FBF4E8;
+}
+
+.family-page .btn-dark:hover {
+  box-shadow: 0 8px 32px rgba(62, 47, 34, 0.35);
+}
+
+.family-page .btn-outline {
+  color: var(--ink);
+  border: 1.5px solid rgba(62, 47, 34, 0.25);
+}
+
+.family-page .btn-outline:hover {
+  border-color: rgba(62, 47, 34, 0.5);
+}
+
+/* --- Navbar on cream --- */
+.family-page #navbar { padding: 0 24px; }
+
+.family-page #navbar .nav-inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.family-page #navbar.scrolled {
+  background: rgba(251, 244, 232, 0.88);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border-bottom: 0.5px solid rgba(62, 47, 34, 0.08);
+}
+
+.family-page .nav-logo span {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.family-page .nav-logo .nav-logo-sub {
+  color: var(--terracotta-deep);
+  font-weight: 400;
+}
+
+/* --- Hero --- */
+.family-hero {
+  position: relative;
+  padding: 140px 24px 80px;
+  overflow: hidden;
+}
+
+.family-hero-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 78%, transparent 100%);
+          mask-image: linear-gradient(to bottom, black 0%, black 78%, transparent 100%);
+}
+
+.family-hero-bg::before {
+  content: '';
+  position: absolute;
+  top: -30%;
+  left: 40%;
+  transform: translateX(-50%);
+  width: 1000px;
+  height: 1000px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(217, 160, 72, 0.22) 0%, rgba(201, 123, 92, 0.12) 40%, transparent 70%);
+  filter: blur(70px);
+}
+
+.family-hero-bg::after {
+  content: '';
+  position: absolute;
+  bottom: -20%;
+  right: -10%;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(156, 175, 136, 0.22) 0%, transparent 60%);
+  filter: blur(60px);
+}
+
+.family-hero-inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: center;
+}
+
+.family-hero-text { max-width: 540px; }
+
+.family-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: rgba(217, 160, 72, 0.18);
+  border: 1px solid rgba(181, 121, 58, 0.3);
+  border-radius: var(--radius-btn);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--amber-deep);
+  margin-bottom: 28px;
+}
+
+.family-hero-badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--amber);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.family-hero h1 {
+  font-size: 60px;
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  margin-bottom: 24px;
+  color: var(--ink);
+}
+
+/* Warm accent color for .gradient-text on the family page.
+ * The original gradient-clip trick from landing.css doesn't render through our
+ * per-letter spans (each .letter has its own transform/inline-block context),
+ * so we use a solid warm color that matches the squiggle underline. */
+.family-page .gradient-text {
+  background: none;
+  -webkit-background-clip: border-box;
+          background-clip: border-box;
+  color: var(--terracotta);
+  -webkit-text-fill-color: var(--terracotta);
+}
+
+.family-hero p {
+  font-size: 19px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin-bottom: 36px;
+}
+
+.family-hero-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.family-hero-image { position: relative; }
+
+/* --- Section cards (warm variants) --- */
+.family-page .section {
+  padding: 0 24px;
+  margin-bottom: 24px;
+}
+
+.family-page .card-section {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  border-radius: var(--radius-card);
+  padding: 80px;
+  position: relative;
+  overflow: hidden;
+}
+
+.family-page .card-warm {
+  background: linear-gradient(160deg, #F9E6CC 0%, #F5D9B4 100%);
+  color: var(--ink);
+}
+
+.family-page .card-sage {
+  background: linear-gradient(160deg, #D4E1C2 0%, #C3D6B0 100%);
+  color: var(--ink);
+}
+
+.family-page .card-peach {
+  background: linear-gradient(160deg, #F3C3A1 0%, #E8B08A 100%);
+  color: var(--ink);
+}
+
+.family-page .card-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: center;
+}
+
+.family-page .card-text h2 {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin-bottom: 20px;
+  color: var(--chocolate);
+}
+
+.family-page .card-text p {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin-bottom: 28px;
+  opacity: 1;
+}
+
+.family-page .tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 32px;
+}
+
+.family-page .card-warm .tag {
+  background: rgba(181, 121, 58, 0.18);
+  color: var(--amber-deep);
+}
+
+.family-page .card-peach .tag {
+  background: rgba(168, 90, 62, 0.2);
+  color: var(--terracotta-deep);
+}
+
+.family-page .card-sage .tag {
+  background: rgba(94, 116, 80, 0.2);
+  color: var(--sage-dark);
+}
+
+.family-card-image { display: flex; justify-content: center; }
+
+.family-card-image img {
+  width: 100%;
+  max-width: 480px;
+  height: auto;
+  border-radius: var(--radius-card);
+  box-shadow: 0 24px 60px rgba(120, 80, 40, 0.18);
+  display: block;
+}
+
+/* --- Bento grid --- */
+.family-page .bento {
+  padding: 60px 24px 24px;
+}
+
+.family-page .bento-grid {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.family-page .bento-card {
+  background: #FFF8EA;
+  border: 1px solid rgba(181, 121, 58, 0.12);
+  border-radius: 24px;
+  padding: 40px 32px;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.family-page .bento-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 50px rgba(120, 80, 40, 0.14);
+}
+
+.family-page .bento-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.family-page .bento-icon-sage {
+  background: linear-gradient(135deg, rgba(94, 116, 80, 0.22), rgba(156, 175, 136, 0.10));
+}
+
+.family-page .bento-icon-terracotta {
+  background: linear-gradient(135deg, rgba(168, 90, 62, 0.22), rgba(201, 123, 92, 0.10));
+}
+
+.family-page .bento-icon-amber {
+  background: linear-gradient(135deg, rgba(217, 160, 72, 0.26), rgba(217, 160, 72, 0.08));
+}
+
+.family-page .bento-card h3 {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--chocolate);
+  letter-spacing: -0.01em;
+}
+
+.family-page .bento-card p {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* --- Lifestyle card --- */
+.family-lifestyle { padding: 40px 24px 24px; }
+
+.family-lifestyle-card {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  border-radius: var(--radius-card);
+  padding: 72px 60px 60px;
+  text-align: center;
+  background: linear-gradient(160deg, #F9E6CC 0%, #F3C3A1 100%);
+}
+
+.family-lifestyle-card img {
+  width: 100%;
+  max-width: 720px;
+  height: auto;
+  border-radius: 28px;
+  box-shadow: 0 32px 80px rgba(120, 80, 40, 0.22);
+  margin-bottom: 32px;
+}
+
+.family-lifestyle-card h2 {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--chocolate);
+  margin-bottom: 8px;
+}
+
+.family-lifestyle-card p {
+  font-size: 18px;
+  color: var(--ink-soft);
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+/* --- CTA (warm sunset gradient, NOT the cold brand gradient) --- */
+.family-page .cta { padding: 40px 24px 24px; }
+
+.family-page .cta-card {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  border-radius: var(--radius-card);
+  padding: 100px 80px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #A85A3E 0%, #C97B5C 45%, #D9A048 100%);
+  color: #FFF8EA;
+}
+
+.family-page .cta-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 800px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 232, 180, 0.28) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.family-page .cta-card h2 {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 16px;
+  color: #FFF8EA;
+  position: relative;
+}
+
+.family-page .cta-card p {
+  font-size: 18px;
+  opacity: 0.9;
+  margin-bottom: 40px;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+  color: #FFF8EA;
+  position: relative;
+}
+
+.family-page .cta-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+.family-page .cta-card .btn-white {
+  background: #FFF8EA;
+  color: var(--terracotta-deep);
+}
+
+.family-page .cta-card .btn-outline {
+  color: #FFF8EA;
+  border: 1.5px solid rgba(255, 248, 234, 0.4);
+}
+
+.family-page .cta-card .btn-outline:hover {
+  border-color: rgba(255, 248, 234, 0.7);
+}
+
+/* --- Footer on cream --- */
+.family-page footer {
+  padding: 40px 24px;
+  border-top: 1px solid rgba(62, 47, 34, 0.08);
+  margin-top: 40px;
+}
+
+.family-page .footer-inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.family-page .footer-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.family-page .footer-left img {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.family-page .footer-left span {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.family-page .footer-links { display: flex; gap: 24px; }
+
+.family-page .footer-links a {
+  font-size: 14px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+
+.family-page .footer-links a:hover { color: var(--chocolate); }
+
+/* --- Responsive --- */
+/* ========= Interactive animations ========= */
+
+/* Gentle looping float for illustrations & decorations */
+@keyframes gentle-float {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -10px; }
+}
+
+@keyframes drift-2 {
+  0%, 100% { transform: translate(0, 0) rotate(10deg); }
+  50%      { transform: translate(-10px, 12px) rotate(-6deg); }
+}
+
+@keyframes drift-3 {
+  0%, 100% { transform: translate(0, 0) rotate(-15deg); }
+  50%      { transform: translate(12px, -10px) rotate(10deg); }
+}
+
+/* Breathe / pulse for the final CTA button */
+@keyframes cta-breathe {
+  0%, 100% { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15); transform: translateY(0); }
+  50%      { box-shadow: 0 16px 44px rgba(168, 90, 62, 0.45); transform: translateY(-2px); }
+}
+
+/* Icon wiggle on bento hover */
+@keyframes wiggle {
+  0%, 100%       { transform: rotate(0deg); }
+  25%            { transform: rotate(-8deg) scale(1.08); }
+  50%            { transform: rotate(6deg) scale(1.08); }
+  75%            { transform: rotate(-4deg) scale(1.05); }
+}
+
+/* --- Hero polaroid (scrapbook frame around the family illustration) --- */
+.hero-polaroid {
+  position: relative;
+  display: block;
+  background: #FFFCF2;
+  padding: 18px 18px 62px;
+  border-radius: 4px;
+  box-shadow:
+    0 2px 0 rgba(120, 80, 40, 0.05),
+    0 28px 70px rgba(120, 80, 40, 0.22);
+  transform: rotate(-2.2deg);
+  transition: transform 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 0.5s ease;
+  animation: gentle-float 6s ease-in-out infinite;
+  will-change: transform, translate;
+}
+
+.hero-polaroid:hover {
+  animation-play-state: paused;
+  transform: rotate(0.5deg) scale(1.025);
+  box-shadow: 0 40px 90px rgba(120, 80, 40, 0.28);
+}
+
+.hero-polaroid img {
+  width: 100%;
+  display: block;
+  border-radius: 2px;
+  filter: saturate(1.03);
+}
+
+.hero-polaroid-tape {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-3deg);
+  width: 130px;
+  height: 28px;
+  background: linear-gradient(180deg,
+    rgba(217, 160, 72, 0.55) 0%,
+    rgba(217, 160, 72, 0.78) 50%,
+    rgba(217, 160, 72, 0.55) 100%);
+  border-left: 1px dashed rgba(181, 121, 58, 0.4);
+  border-right: 1px dashed rgba(181, 121, 58, 0.4);
+  box-shadow: 0 2px 6px rgba(120, 80, 40, 0.18);
+}
+
+.hero-polaroid-caption {
+  position: absolute;
+  bottom: 18px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--ink-soft);
+  letter-spacing: 0.01em;
+}
+
+/* --- Hand-drawn squiggle under "Earn together." in the hero --- */
+.hero-squiggle-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.hero-squiggle {
+  position: absolute;
+  left: -1%;
+  right: -1%;
+  bottom: -0.2em;
+  width: 102%;
+  height: 0.38em;
+  overflow: visible;
+  stroke-dasharray: 260;
+  stroke-dashoffset: 260;
+  pointer-events: none;
+}
+
+.family-hero-text.active .hero-squiggle {
+  animation: squiggle-draw 1.5s cubic-bezier(0.5, 0, 0.25, 1) 1.4s forwards;
+}
+
+@media (max-width: 768px) {
+  .hero-polaroid { padding: 14px 14px 52px; transform: rotate(-1.5deg); }
+  .hero-polaroid-tape { width: 100px; height: 22px; top: -12px; }
+  .hero-polaroid-caption { bottom: 14px; font-size: 14px; }
+}
+
+/* --- Floating decorative icons in hero background --- */
+.float-deco {
+  position: absolute;
+  opacity: 0.85;
+  filter: drop-shadow(0 8px 20px rgba(120, 80, 40, 0.18));
+  pointer-events: none;
+  z-index: 0;
+}
+
+.deco-heart { top: 12%; left: 4%;   animation: drift-2 11s ease-in-out infinite; animation-delay: -2s; }
+.deco-star  { bottom: 18%; left: 8%; animation: drift-3 8s ease-in-out infinite; animation-delay: -1s; }
+
+@media (max-width: 768px) {
+  .deco-heart { top: 8%; left: 6%; width: 32px; height: 30px; }
+  .deco-star { display: none; }
+}
+
+/* --- Gradient text shimmer --- */
+
+/* --- Staggered reveal for hero text children --- */
+.family-hero-text .family-hero-badge,
+.family-hero-text h1,
+.family-hero-text p,
+.family-hero-text .family-hero-buttons {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+
+.family-hero-text.active .family-hero-badge    { opacity: 1; transform: none; transition-delay: 0.05s; }
+.family-hero-text.active h1                    { opacity: 1; transform: none; transition-delay: 0.15s; }
+.family-hero-text.active p                     { opacity: 1; transform: none; transition-delay: 0.28s; }
+.family-hero-text.active .family-hero-buttons  { opacity: 1; transform: none; transition-delay: 0.4s; }
+
+/* --- Hero badge hover wiggle on the dot --- */
+.family-hero-badge:hover::before {
+  animation-duration: 0.8s;
+}
+
+/* --- Section card hover: gentle lift + warm glow --- */
+.family-page .card-section {
+  transition: transform 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.1), box-shadow 0.5s ease;
+}
+
+.family-page .card-section:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 30px 70px rgba(120, 80, 40, 0.15);
+}
+
+/* --- Card images tilt on hover (like polaroids) --- */
+.family-card-image img {
+  transition: transform 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 0.5s ease;
+  will-change: transform;
+}
+
+.family-card-image img:hover {
+  transform: rotate(-1.5deg) scale(1.03);
+  box-shadow: 0 32px 70px rgba(120, 80, 40, 0.24);
+}
+
+/* --- Tags pop on hover --- */
+.family-page .tag {
+  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.3), box-shadow 0.25s ease;
+  cursor: default;
+}
+
+.family-page .tag:hover {
+  transform: translateY(-2px) scale(1.06);
+  box-shadow: 0 6px 16px rgba(120, 80, 40, 0.14);
+}
+
+/* --- Bento card hover: lift + icon wiggle --- */
+.family-page .bento-card .bento-icon {
+  transition: transform 0.3s ease;
+}
+
+.family-page .bento-card:hover .bento-icon {
+  animation: wiggle 0.6s ease-in-out;
+}
+
+/* --- Button micro-interactions --- */
+.family-page .btn {
+  transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.3), box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.family-page .btn:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.family-page .btn:active {
+  transform: translateY(0) scale(0.97);
+  transition-duration: 0.08s;
+}
+
+/* --- Final CTA primary button breathes --- */
+.family-page .cta-card .btn-white {
+  animation: cta-breathe 3.5s ease-in-out infinite;
+}
+
+.family-page .cta-card .btn-white:hover {
+  animation-play-state: paused;
+}
+
+/* --- Lifestyle image breathes too --- */
+.family-lifestyle-card img {
+  animation: gentle-float 7s ease-in-out infinite;
+  animation-delay: -1.5s;
+  transition: transform 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 0.6s ease;
+}
+
+.family-lifestyle-card img:hover {
+  animation-play-state: paused;
+  transform: scale(1.02);
+  box-shadow: 0 40px 100px rgba(120, 80, 40, 0.28);
+}
+
+/* ========= Living interactions (parallax, tilt, letters, goals, confetti) ========= */
+
+/* Mouse parallax — hero image drifts opposite to the cursor for depth */
+.family-hero-image {
+  translate: calc(var(--mx, 0) * -10px) calc(var(--my, 0) * -8px);
+  transition: translate 0.5s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* Decorations drift WITH the cursor — creates layered depth against the image */
+.family-hero .float-deco {
+  transition: translate 0.6s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.family-hero .deco-heart { translate: calc(var(--mx, 0) * 18px) calc(var(--my, 0) * 14px); }
+.family-hero .deco-star  { translate: calc(var(--mx, 0) * 22px) calc(var(--my, 0) * 16px); }
+
+/* 3D tilt on hover for cards — driven by JS via CSS custom props */
+.family-page .card-section,
+.family-page .bento-card {
+  transform-style: preserve-3d;
+  transform: perspective(1200px)
+             rotateX(var(--tilt-x, 0deg))
+             rotateY(var(--tilt-y, 0deg));
+  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), box-shadow 0.4s ease;
+}
+
+.family-page .card-section:hover {
+  transform: perspective(1200px)
+             rotateX(var(--tilt-x, 0deg))
+             rotateY(var(--tilt-y, 0deg))
+             translateY(-4px);
+  box-shadow: 0 34px 70px rgba(120, 80, 40, 0.16);
+}
+
+.family-page .bento-card:hover {
+  transform: perspective(1200px)
+             rotateX(var(--tilt-x, 0deg))
+             rotateY(var(--tilt-y, 0deg))
+             translateY(-6px);
+}
+
+/* Letter-by-letter hero headline */
+.family-hero h1 .letter {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(22px) rotate(-4deg);
+  animation: letter-in 0.7s cubic-bezier(0.25, 1.1, 0.4, 1.25) forwards;
+  animation-play-state: paused;
+}
+
+.family-hero-text.active h1 .letter {
+  animation-play-state: running;
+}
+
+@keyframes letter-in {
+  to { opacity: 1; transform: none; }
+}
+
+/* Override the parent's staggered reveal for h1 since letters handle their own entry */
+.family-hero-text.active h1 {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0s;
+}
+
+/* Savings goals — animated progress bars */
+.family-goals {
+  margin: 28px 0 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 22px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(181, 121, 58, 0.18);
+  border-radius: 18px;
+  backdrop-filter: blur(6px);
+}
+
+.family-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.family-goal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.family-goal-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--chocolate);
+}
+
+.family-goal-amount {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--terracotta-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.family-goal-target {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.family-goal-bar {
+  height: 8px;
+  background: rgba(181, 121, 58, 0.15);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.family-goal-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--terracotta-deep), var(--terracotta), var(--amber));
+  background-size: 200% 100%;
+  border-radius: 999px;
+  transition: width 1.4s cubic-bezier(0.25, 1, 0.3, 1) var(--goal-delay, 0s);
+  animation: goal-shimmer 3s ease-in-out infinite;
+}
+
+.family-goals.active .family-goal-fill {
+  width: var(--goal-pct, 0%);
+}
+
+@keyframes goal-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* Between-section drifters — scattered decorations between cards */
+.deco-between {
+  display: block;
+  margin: -10px auto;
+  position: relative;
+  opacity: 0.7;
+  filter: drop-shadow(0 6px 14px rgba(120, 80, 40, 0.14));
+  pointer-events: none;
+}
+
+.deco-between-1 {
+  animation: gentle-float 5s ease-in-out infinite;
+  transform: translateX(-28vw) rotate(12deg);
+}
+
+.deco-between-2 {
+  animation: gentle-float 6s ease-in-out infinite;
+  animation-delay: -1.5s;
+  transform: translateX(32vw) rotate(-15deg);
+}
+
+.deco-between-3 {
+  animation: gentle-float 5.5s ease-in-out infinite;
+  animation-delay: -2.5s;
+  transform: translateX(-20vw) rotate(8deg);
+}
+
+@media (max-width: 768px) {
+  .deco-between { display: none; }
+}
+
+/* Confetti particles that burst on CTA click */
+.confetti-particle {
+  position: fixed;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  z-index: 3000;
+  transform: translate(-50%, -50%);
+  animation: confetti-burst 1s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+
+.confetti-heart {
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 21s-8-5-8-12a5 5 0 018-3 5 5 0 018 3c0 7-8 12-8 12z'/></svg>") center/contain no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 21s-8-5-8-12a5 5 0 018-3 5 5 0 018 3c0 7-8 12-8 12z'/></svg>") center/contain no-repeat;
+}
+
+.confetti-star {
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2l2.9 6.2L22 9.3l-5 4.8L18.1 22 12 18.5 5.9 22 7 14.1 2 9.3l7.1-1.1L12 2z'/></svg>") center/contain no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2l2.9 6.2L22 9.3l-5 4.8L18.1 22 12 18.5 5.9 22 7 14.1 2 9.3l7.1-1.1L12 2z'/></svg>") center/contain no-repeat;
+}
+
+.confetti-dot {
+  background: currentColor;
+  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+}
+
+@keyframes confetti-burst {
+  0%   { transform: translate(-50%, -50%) scale(0)   rotate(0); opacity: 1; }
+  25%  { transform: translate(calc(-50% + var(--dx) * 0.5), calc(-50% + var(--dy) * 0.5)) scale(1.2) rotate(calc(var(--rot) * 0.3)); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 80px)) scale(0.6) rotate(var(--rot)); opacity: 0; }
+}
+
+/* ========= Scrapbook finale CTA ========= */
+
+.family-finale {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  position: relative;
+  padding: 72px 72px 80px;
+  border-radius: var(--radius-card);
+  background-color: #F7EAD2;
+  background-image:
+    radial-gradient(circle, rgba(168, 90, 62, 0.10) 1px, transparent 1.4px),
+    radial-gradient(circle, rgba(181, 121, 58, 0.05) 1px, transparent 1.4px);
+  background-size: 22px 22px, 22px 22px;
+  background-position: 0 0, 11px 11px;
+  border: 1px solid rgba(181, 121, 58, 0.18);
+  box-shadow:
+    0 1px 0 rgba(255, 248, 234, 0.6) inset,
+    0 28px 60px rgba(120, 80, 40, 0.14);
+  transform: rotate(-0.4deg);
+  overflow: visible;
+}
+
+/* Kraft-paper edge feel — darker inset shadow on the edge */
+.family-finale::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(181, 121, 58, 0.08);
+}
+
+/* Washi-tape strips */
+.washi {
+  position: absolute;
+  width: 110px;
+  height: 26px;
+  background:
+    linear-gradient(180deg, rgba(217, 160, 72, 0.55) 0%, rgba(217, 160, 72, 0.75) 50%, rgba(217, 160, 72, 0.55) 100%);
+  border-left: 1px dashed rgba(181, 121, 58, 0.35);
+  border-right: 1px dashed rgba(181, 121, 58, 0.35);
+  box-shadow: 0 2px 6px rgba(120, 80, 40, 0.18);
+  backdrop-filter: blur(1px);
+}
+
+.washi-tl {
+  top: 18px;
+  left: -22px;
+  transform: rotate(-18deg);
+}
+
+.washi-br {
+  bottom: 34px;
+  right: -14px;
+  width: 90px;
+  background:
+    linear-gradient(180deg, rgba(156, 175, 136, 0.55) 0%, rgba(156, 175, 136, 0.75) 50%, rgba(156, 175, 136, 0.55) 100%);
+  border-left-color: rgba(94, 116, 80, 0.35);
+  border-right-color: rgba(94, 116, 80, 0.35);
+  transform: rotate(9deg);
+}
+
+/* Inner two-column layout */
+.finale-inner {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 64px;
+  align-items: center;
+  position: relative;
+}
+
+.finale-text h2 {
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  color: var(--chocolate);
+  margin-bottom: 20px;
+}
+
+.finale-text p {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin-bottom: 32px;
+  max-width: 440px;
+}
+
+/* Hand-drawn underline under a key phrase */
+.underline-squiggle {
+  position: relative;
+  display: inline-block;
+  color: var(--terracotta-deep);
+  white-space: nowrap;
+}
+
+.underline-squiggle .squiggle {
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  bottom: -0.22em;
+  width: 104%;
+  height: 0.4em;
+  overflow: visible;
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+}
+
+.family-finale.active .underline-squiggle .squiggle {
+  animation: squiggle-draw 1.4s cubic-bezier(0.5, 0, 0.25, 1) 0.4s forwards;
+}
+
+@keyframes squiggle-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Button + sublink row */
+.finale-buttons {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.family-finale .btn-gradient {
+  animation: finale-breathe 3.4s ease-in-out infinite;
+}
+
+.family-finale .btn-gradient:hover {
+  animation-play-state: paused;
+}
+
+@keyframes finale-breathe {
+  0%, 100% { box-shadow: 0 6px 20px rgba(168, 90, 62, 0.28); }
+  50%      { box-shadow: 0 16px 40px rgba(168, 90, 62, 0.5); }
+}
+
+.finale-sublink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 4px 2px;
+  border-bottom: 1.5px dashed rgba(107, 90, 69, 0.4);
+  transition: color 0.2s ease, border-color 0.2s ease, gap 0.2s ease;
+}
+
+.finale-sublink svg {
+  width: 22px;
+  height: 14px;
+}
+
+.finale-sublink:hover {
+  color: var(--terracotta-deep);
+  border-bottom-color: var(--terracotta-deep);
+  gap: 10px;
+}
+
+/* Polaroid photo */
+.finale-photo {
+  position: relative;
+  max-width: 360px;
+  justify-self: center;
+  background: #FFFCF2;
+  padding: 18px 18px 58px;
+  border-radius: 4px;
+  box-shadow:
+    0 2px 0 rgba(120, 80, 40, 0.04),
+    0 24px 60px rgba(120, 80, 40, 0.26);
+  transform: rotate(3deg);
+  transition: transform 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 0.5s ease;
+}
+
+.finale-photo:hover {
+  transform: rotate(-1deg) scale(1.03);
+  box-shadow: 0 32px 80px rgba(120, 80, 40, 0.3);
+}
+
+.finale-photo img {
+  width: 100%;
+  display: block;
+  border-radius: 2px;
+  filter: saturate(1.02);
+}
+
+.finale-tape {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-4deg);
+  width: 110px;
+  height: 26px;
+  background: linear-gradient(180deg, rgba(156, 175, 136, 0.55), rgba(156, 175, 136, 0.75), rgba(156, 175, 136, 0.55));
+  border-left: 1px dashed rgba(94, 116, 80, 0.4);
+  border-right: 1px dashed rgba(94, 116, 80, 0.4);
+  box-shadow: 0 2px 6px rgba(80, 60, 40, 0.15);
+}
+
+.finale-caption {
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 15px;
+  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+}
+
+.finale-caption::before { content: '— '; }
+.finale-caption::after  { content: ' —'; }
+
+@media (max-width: 960px) {
+  .family-finale { padding: 64px 44px 70px; }
+  .finale-inner { gap: 44px; }
+  .finale-text h2 { font-size: 38px; }
+}
+
+@media (max-width: 768px) {
+  .family-finale {
+    padding: 72px 24px 60px;
+    transform: none;
+  }
+  .finale-inner {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    text-align: center;
+  }
+  .finale-text p { margin-left: auto; margin-right: auto; }
+  .finale-text h2 { font-size: 30px; }
+  .finale-buttons { justify-content: center; }
+  .finale-photo { transform: rotate(2deg); margin: 0 auto; max-width: 300px; }
+  .washi-tl { top: 10px; left: -16px; width: 80px; }
+  .washi-br { bottom: 22px; right: -10px; width: 70px; }
+}
+
+/* Respect reduced motion for the finale too */
+@media (prefers-reduced-motion: reduce) {
+  .family-finale .btn-gradient,
+  .family-finale.active .underline-squiggle .squiggle,
+  .family-hero-text.active .hero-squiggle {
+    animation: none !important;
+  }
+  .underline-squiggle .squiggle,
+  .hero-squiggle { stroke-dashoffset: 0; }
+}
+
+/* --- Respect reduced motion --- */
+@media (prefers-reduced-motion: reduce) {
+  .family-hero-image img,
+  .family-lifestyle-card img,
+  .float-deco,
+  .deco-between,
+  .family-page .gradient-text,
+  .family-page .cta-card .btn-white,
+  .family-hero h1 .letter,
+  .family-goal-fill,
+  .confetti-particle {
+    animation: none !important;
+  }
+  .family-hero h1 .letter { opacity: 1; transform: none; }
+  .family-goals.active .family-goal-fill { width: var(--goal-pct, 0%); transition: none; }
+  .family-hero-image,
+  .family-hero .float-deco { translate: none !important; }
+  .family-page * { transition-duration: 0.01s !important; }
+}
+
+@media (max-width: 1024px) {
+  .family-hero h1 { font-size: 48px; }
+  .family-hero-inner { gap: 40px; }
+  .family-page .card-section { padding: 60px 40px; }
+  .family-page .card-text h2 { font-size: 36px; }
+  .family-page .bento-grid { grid-template-columns: repeat(2, 1fr); }
+  .family-lifestyle-card { padding: 56px 40px 48px; }
+  .family-page .cta-card { padding: 80px 48px; }
+  .family-page .cta-card h2 { font-size: 36px; }
+}
+
+@media (max-width: 768px) {
+  .family-hero { padding: 120px 24px 60px; }
+  .family-hero-inner {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    text-align: center;
+  }
+  .family-hero-text { margin: 0 auto; }
+  .family-hero-buttons { justify-content: center; }
+  .family-hero h1 { font-size: 40px; }
+  .family-hero p { font-size: 17px; }
+
+  .family-page .card-section {
+    padding: 48px 24px;
+    border-radius: 24px;
+  }
+  .family-page .card-layout {
+    grid-template-columns: 1fr;
+    gap: 36px;
+    text-align: center;
+  }
+  .family-page .card-layout.reverse .family-card-image { order: -1; }
+  .family-page .card-text h2 { font-size: 30px; }
+  .family-page .card-text p { font-size: 16px; }
+  .family-page .tag-list { justify-content: center; }
+
+  .family-page .bento-grid { grid-template-columns: 1fr; }
+  .family-page .bento-card { padding: 32px 24px; }
+
+  .family-lifestyle-card {
+    padding: 40px 24px 36px;
+    border-radius: 24px;
+  }
+  .family-lifestyle-card h2 { font-size: 28px; }
+
+  .family-page .cta-card {
+    padding: 60px 24px;
+    border-radius: 24px;
+  }
+  .family-page .cta-card h2 { font-size: 30px; }
+
+  .family-page .footer-inner {
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+/* ========= Family Waitlist Modal (scrapbook/warm multi-step) ========= */
+
+.fwl-overlay {
+  background: rgba(62, 47, 34, 0.55);
+}
+
+.fwl-card {
+  background: #F7EAD2;
+  background-image:
+    radial-gradient(circle, rgba(168, 90, 62, 0.08) 1px, transparent 1.4px),
+    radial-gradient(circle, rgba(181, 121, 58, 0.04) 1px, transparent 1.4px);
+  background-size: 22px 22px, 22px 22px;
+  background-position: 0 0, 11px 11px;
+  border: 1px solid rgba(181, 121, 58, 0.18);
+  box-shadow:
+    0 1px 0 rgba(255, 248, 234, 0.6) inset,
+    0 40px 100px rgba(62, 47, 34, 0.45);
+  padding: 0;
+  max-width: 600px;
+  width: 100%;
+  text-align: left;
+  color: #2E2418;
+  overflow: hidden;
+}
+
+.fwl-card .modal-close {
+  background: rgba(62, 47, 34, 0.08);
+  color: #3E2F22;
+  z-index: 3;
+}
+
+.fwl-card .modal-close:hover {
+  background: rgba(62, 47, 34, 0.18);
+}
+
+/* --- progress bar --- */
+.fwl-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(181, 121, 58, 0.14);
+  overflow: hidden;
+}
+
+.fwl-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #A85A3E, #C97B5C, #D9A048);
+  border-radius: 0 4px 4px 0;
+  transition: width 0.35s cubic-bezier(0.25, 1, 0.3, 1);
+}
+
+/* --- step container --- */
+.fwl-step {
+  padding: 56px 48px 24px;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.fwl-step-compact {
+  padding: 56px 48px 16px;
+}
+
+.fwl-step h2 {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #3E2F22;
+  margin: 0 0 6px;
+  line-height: 1.15;
+}
+
+.fwl-subtitle {
+  font-size: 15px;
+  color: #6B5A45;
+  margin: 0 0 28px;
+  line-height: 1.5;
+}
+
+.fwl-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.fwl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fwl-field-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #8C5A2B;
+}
+
+/* --- chips (radio + multi) --- */
+.fwl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fwl-chip {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #3E2F22;
+  border: 1.5px solid rgba(181, 121, 58, 0.22);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.fwl-chip:hover {
+  border-color: rgba(168, 90, 62, 0.55);
+  transform: translateY(-1px);
+}
+
+.fwl-chip-active {
+  background: linear-gradient(135deg, #A85A3E, #C97B5C);
+  color: #FFF8EA;
+  border-color: #A85A3E;
+  box-shadow: 0 6px 14px rgba(168, 90, 62, 0.22);
+}
+
+.fwl-chip-active:hover {
+  transform: translateY(-1px);
+}
+
+/* --- stepper --- */
+.fwl-stepper {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1.5px solid rgba(181, 121, 58, 0.22);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+  width: fit-content;
+}
+
+.fwl-stepper button {
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(168, 90, 62, 0.1);
+  color: #A85A3E;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.fwl-stepper button:hover:not(:disabled) {
+  background: rgba(168, 90, 62, 0.2);
+}
+
+.fwl-stepper button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.fwl-stepper-value {
+  min-width: 44px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: #3E2F22;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- email + code inputs --- */
+.fwl-email-row {
+  display: flex;
+  gap: 12px;
+}
+
+.fwl-verify-row {
+  justify-content: center;
+}
+
+.fwl-input {
+  flex: 1;
+  padding: 14px 20px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  border: 1.5px solid rgba(181, 121, 58, 0.25);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #2E2418;
+  outline: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  min-height: 52px;
+}
+
+.fwl-input::placeholder {
+  color: rgba(62, 47, 34, 0.35);
+}
+
+.fwl-input:focus {
+  border-color: #C97B5C;
+  background: #FFF;
+}
+
+.fwl-code {
+  max-width: 220px;
+  text-align: center;
+  letter-spacing: 8px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+/* --- perks (payment step) --- */
+.fwl-perks {
+  list-style: none;
+  padding: 16px 20px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(181, 121, 58, 0.18);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fwl-perks li {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #3E2F22;
+  padding-left: 28px;
+  position: relative;
+}
+
+.fwl-perks li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #E8B558, #D9A048);
+  box-shadow: 0 2px 4px rgba(181, 121, 58, 0.25);
+}
+
+.fwl-perks li::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 9px;
+  width: 10px;
+  height: 5px;
+  border-left: 2px solid #3E2F22;
+  border-bottom: 2px solid #3E2F22;
+  transform: rotate(-45deg);
+}
+
+.fwl-perks strong {
+  font-weight: 700;
+  color: #A85A3E;
+}
+
+/* --- success screen --- */
+.fwl-success {
+  padding: 56px 48px 40px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.fwl-success-icon {
+  filter: drop-shadow(0 10px 20px rgba(181, 121, 58, 0.35));
+  animation: fwl-pop 0.5s cubic-bezier(0.3, 1.3, 0.5, 1.2) both;
+}
+
+@keyframes fwl-pop {
+  0%   { transform: scale(0) rotate(-30deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.fwl-success h2 {
+  font-size: 28px;
+  font-weight: 800;
+  color: #3E2F22;
+  letter-spacing: -0.02em;
+  margin: 8px 0 0;
+}
+
+.fwl-success p {
+  font-size: 16px;
+  color: #6B5A45;
+  line-height: 1.55;
+  max-width: 420px;
+  margin: 0 0 12px;
+}
+
+.fwl-success .btn-gradient {
+  margin-top: 8px;
+}
+
+/* --- footer (back / skip / next) --- */
+.fwl-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 48px 32px;
+  border-top: 1px solid rgba(181, 121, 58, 0.14);
+  background: rgba(255, 248, 234, 0.55);
+}
+
+.fwl-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.fwl-link {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6B5A45;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 4px;
+  border-bottom: 1.5px dashed rgba(107, 90, 69, 0.4);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.fwl-link:hover {
+  color: #A85A3E;
+  border-bottom-color: #A85A3E;
+}
+
+.fwl-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- error message inside modal --- */
+.fwl-card .waitlist-error {
+  color: #B5411F;
+  font-size: 14px;
+  margin-top: 12px;
+}
+
+/* --- responsive --- */
+@media (max-width: 640px) {
+  .fwl-card { max-width: calc(100vw - 32px); }
+  .fwl-step { padding: 48px 24px 20px; max-height: 76vh; }
+  .fwl-step h2 { font-size: 24px; }
+  .fwl-footer { padding: 16px 24px 24px; flex-wrap: wrap; }
+  .fwl-footer-right { margin-left: auto; }
+  .fwl-success { padding: 48px 24px 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fwl-progress-fill { transition: none; }
+  .fwl-success-icon { animation: none; }
+}
+

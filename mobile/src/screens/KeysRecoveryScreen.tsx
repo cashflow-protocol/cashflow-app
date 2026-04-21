@@ -17,7 +17,7 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { ArrowLeft, MoreHorizontal, ScanFace, Cloud, Wallet, Compass, Info, X, KeyRound, ShieldCheck, RotateCcw, Download, TriangleAlert, MessageSquareText, CircleCheck, ChevronRight, Mail, ClipboardPaste, Trash2, CirclePlus } from 'lucide-react-native';
 import BottomSheet from '../components/BottomSheet';
 import { useLoginWithEmail, useEmbeddedSolanaWallet, usePrivy } from '@privy-io/expo';
-import { getMultisigInfo, addMember, removeMember, type MultisigInfo } from '../services/squadsService';
+import { getMultisigInfo, addMember, removeMember, EXTRA_VOTE_ONLY_MEMBERS, type MultisigInfo } from '../services/squadsService';
 import { getCloudPublicKey, getDevicePublicKey, getCloudPrivateKey, getDevicePrivateKey } from '../services/keypairStorage';
 import { getVault, getRecoveryEmails, saveRecoveryEmail } from '../services/vaultStorage';
 import apiService from '../services/apiService';
@@ -488,6 +488,7 @@ export default function KeysRecoveryScreen({ onNavigate, onBack }: KeysRecoveryS
 
   const getRecoveryLabel = (address: string) => {
     if (emailMap[address]) return 'Email';
+    if (EXTRA_VOTE_ONLY_MEMBERS.includes(address)) return 'Vote-only recovery';
     return 'External Wallet';
   };
 

@@ -19,6 +19,7 @@ import {
 import walletService from './walletService';
 import apiService from './apiService';
 import { getRecoveryEmails } from './vaultStorage';
+import { EXTRA_VOTE_ONLY_MEMBERS } from './squadsService';
 
 function maskEmail(email: string): string {
   if (email.length <= 12) return email.slice(0, 2) + '...' + email.slice(-4);
@@ -188,6 +189,9 @@ export async function buildAndSubmitRecoveryProposal(
       type = 'privy';
       email = allEmails[addr];
       label = `Email (${maskEmail(email)})`;
+    } else if (EXTRA_VOTE_ONLY_MEMBERS.includes(addr)) {
+      type = 'external';
+      label = 'Vote-only recovery';
     } else {
       type = 'external';
       label = 'External Wallet';
