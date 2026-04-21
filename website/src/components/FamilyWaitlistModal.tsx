@@ -30,6 +30,17 @@ type Step =
 
 const SURVEY_STEPS: Step[] = ['about', 'family', 'saving', 'crypto', 'goals', 'challenge'];
 
+// GA4 analytics helper. Gracefully no-ops if gtag isn't loaded (ad blockers, etc.)
+// gtag is injected globally by the <script> tag in website/index.html.
+declare global {
+  interface Window {
+    gtag?: (command: 'event', event: string, params?: Record<string, unknown>) => void;
+  }
+}
+function track(event: string, params?: Record<string, unknown>) {
+  try { window.gtag?.('event', event, params); } catch { /* ignore */ }
+}
+
 interface FamilyWaitlistModalProps {
   open: boolean;
   onClose: () => void;
@@ -56,6 +67,8 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
   const connectorClient = useConnectorClient();
 
   const closeAndReset = useCallback(() => {
+    // Record where users abandon (anything other than the success screen)
+    if (step !== 'success') track('family_waitlist_closed', { at_step: step });
     overlayRef.current?.classList.remove('open');
     setTimeout(() => {
       onClose();
@@ -68,10 +81,11 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
       setPaid(false);
       setPaymentStatus('idle');
     }, 300);
-  }, [onClose]);
+  }, [onClose, step]);
 
   useEffect(() => {
     if (!open) return;
+    track('family_waitlist_opened');
     document.body.style.overflow = 'hidden';
     setTimeout(() => overlayRef.current?.classList.add('open'), 10);
     return () => { document.body.style.overflow = ''; };
@@ -92,16 +106,19 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
       ? 1
       : 1;
 
-  const goNext = () => {
+  const advance = (action: 'next' | 'skip' = 'next') => {
     setError('');
     const idx = SURVEY_STEPS.indexOf(step);
-    if (idx >= 0 && idx < SURVEY_STEPS.length - 1) setStep(SURVEY_STEPS[idx + 1]);
-    else if (step === SURVEY_STEPS[SURVEY_STEPS.length - 1]) setStep('email');
+    if (idx < 0) return;
+    track('family_waitlist_step_advanced', { step, action });
+    if (idx < SURVEY_STEPS.length - 1) setStep(SURVEY_STEPS[idx + 1]);
+    else setStep('email');
   };
 
   const goBack = () => {
     setError('');
     const idx = SURVEY_STEPS.indexOf(step);
+    track('family_waitlist_back', { step });
     if (idx > 0) setStep(SURVEY_STEPS[idx - 1]);
     else if (step === 'email') setStep(SURVEY_STEPS[SURVEY_STEPS.length - 1]);
   };
@@ -125,6 +142,7 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Something went wrong.'); return; }
+      track('family_waitlist_email_sent');
       setStep('verify');
     } catch {
       setError('Network error. Please try again.');
@@ -145,6 +163,7 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Verification failed.'); return; }
+      track('family_waitlist_email_verified', { already_paid: Boolean(data.paid) });
       if (data.paid) {
         setPaid(true);
         setStep('success');
@@ -210,10 +229,12 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
       const submitData = await submitRes.json();
       if (!submitRes.ok) throw new Error(submitData.error || 'Payment submission failed');
 
+      track('family_waitlist_paid', { wallet: walletId });
       setPaid(true);
       setStep('success');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Payment failed';
+      track('family_waitlist_payment_failed', { reason: msg.slice(0, 120) });
       // User-rejected signing comes through as a generic error — soften the wording.
       setError(/reject|cancel|deny|User/i.test(msg) ? 'Signing cancelled.' : msg);
     } finally {
@@ -224,6 +245,7 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
 
   const payNow = () => {
     setError('');
+    track('family_waitlist_payment_started');
     // Always present the picker. Disconnect any session @solana/connector auto-restored,
     // so picking a wallet surfaces a fresh approval prompt.
     try { disconnect(); } catch { /* nothing to disconnect */ }
@@ -234,6 +256,7 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
     setWalletPickerOpen(false);
     setPaymentStatus('connecting');
     setError('');
+    track('family_waitlist_wallet_picked', { wallet: walletId });
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -272,6 +295,7 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
   };
 
   const skipPayment = () => {
+    track('family_waitlist_payment_skipped');
     setPaid(false);
     setStep('success');
   };
@@ -539,10 +563,10 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
 
             <div className="fwl-footer-right">
               {showSkip && (
-                <button className="fwl-link" onClick={goNext}>Skip</button>
+                <button className="fwl-link" onClick={() => advance('skip')}>Skip</button>
               )}
               {isSurveyStep && (
-                <button className="btn btn-m btn-gradient" onClick={goNext}>Next</button>
+                <button className="btn btn-m btn-gradient" onClick={() => advance('next')}>Next</button>
               )}
               {step === 'email' && (
                 <button className="btn btn-m btn-gradient" onClick={submitEmail} disabled={loading}>

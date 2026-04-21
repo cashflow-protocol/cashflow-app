@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/family", "destination": "/family.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
