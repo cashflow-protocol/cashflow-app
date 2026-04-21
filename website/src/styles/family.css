@@ -1834,17 +1834,17 @@
   background: rgba(255, 248, 234, 0.2);
   border: 1px solid rgba(255, 248, 234, 0.28);
   color: #FFF8EA;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  /* 34 (outer) - 2 (borders) - 14 (padding) = 18 → exactly fits an 18px svg.
+   * Padding-based centering — no flex/grid edge cases. */
+  box-sizing: border-box;
+  padding: 7px;
+  display: block;
 }
 
 .fwl-perk-icon > svg {
   display: block;
   width: 18px;
   height: 18px;
-  flex: 0 0 auto;
 }
 
 .fwl-pass-perks li > div {

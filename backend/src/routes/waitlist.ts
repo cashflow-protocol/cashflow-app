@@ -2,7 +2,8 @@ import { Router, Request, Response } from 'express';
 import { BrevoClient } from '@getbrevo/brevo';
 import { randomBytes } from 'crypto';
 import { createSolanaRpc, type Rpc, type SolanaRpcApi, type Signature } from '@solana/kit';
-import { WaitlistEntryModel, FamilyWaitlistEntryModel } from '../models';
+import { WaitlistEntryModel, FamilyWaitlistEntryModel, type FamilyWaitlistEntry } from '../models';
+import { notifyAdmin } from '../services/telegramManager';
 
 const router = Router();
 
@@ -61,6 +62,42 @@ function sanitizeSurvey(raw: unknown): Record<string, unknown> {
     out.jointSavingsAccount = s.jointSavingsAccount;
   }
   return out;
+}
+
+// Telegram-safe HTML escape
+function esc(s: string): string {
+  return s.replace(/[<>&"']/g, (c) => ({
+    '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;',
+  }[c]!));
+}
+
+async function notifyFamilySignup(entry: FamilyWaitlistEntry) {
+  const lines: string[] = [];
+  lines.push('🎉 <b>New family waitlist signup</b>');
+  lines.push('');
+  lines.push(`<b>Email:</b> ${esc(entry.email)}`);
+
+  const fields: Array<[string, string | undefined]> = [
+    ['Gender',         entry.gender],
+    ['Age range',      entry.ageRange],
+    ['Family status',  entry.familyStatus],
+    ['Kids',           typeof entry.numberOfKids === 'number' ? String(entry.numberOfKids) : undefined],
+    ['Joint account',  typeof entry.jointSavingsAccount === 'boolean'
+                         ? (entry.jointSavingsAccount ? 'yes' : 'no')
+                         : undefined],
+    ['Saves via',      entry.savingsMethods?.join(', ')],
+    ['Monthly',        entry.monthlySavingsAmount],
+    ['Crypto comfort', entry.cryptoComfort],
+    ['DeFi protocols', entry.defiProtocols?.join(', ')],
+    ['Current goals',  entry.currentGoals?.join(', ')],
+    ['Future goals',   entry.futureGoals?.join(', ')],
+    ['Challenge',      entry.savingsChallenge],
+  ];
+  for (const [label, value] of fields) {
+    if (value) lines.push(`<b>${label}:</b> ${esc(value)}`);
+  }
+
+  await notifyAdmin(lines.join('\n'));
 }
 
 // POST /waitlist/v1/send-code
@@ -161,11 +198,23 @@ router.post('/verify', async (req: Request, res: Response) => {
     pendingCodes.delete(normalizedEmail);
 
     const Model = isFamily ? FamilyWaitlistEntryModel : WaitlistEntryModel;
+
+    // Check pre-update state so we can tell "first verification" from "re-verification"
+    const existing = await Model.findOne({ email: normalizedEmail });
+    const wasAlreadyVerified = Boolean(existing?.verified);
+
     const updated = await Model.findOneAndUpdate(
       { email: normalizedEmail },
       { $set: { email: normalizedEmail, verified: true } },
       { upsert: true, new: true },
     );
+
+    // Telegram ping for brand-new family signups only
+    if (isFamily && !wasAlreadyVerified && updated) {
+      notifyFamilySignup(updated as unknown as FamilyWaitlistEntry).catch((err) => {
+        console.error('[waitlist] notifyFamilySignup error:', err);
+      });
+    }
 
     try {
       const brevo = getBrevoClient();
