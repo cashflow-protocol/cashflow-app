@@ -1837,7 +1837,11 @@
   align-items: center;
   justify-content: center;
   color: #FFF8EA;
-  margin-top: 1px;
+  line-height: 0;
+}
+
+.fwl-perk-icon svg {
+  display: block;
 }
 
 .fwl-pass-perks li > div {

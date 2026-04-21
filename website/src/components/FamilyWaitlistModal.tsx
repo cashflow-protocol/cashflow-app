@@ -128,7 +128,6 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Something went wrong.'); return; }
-      if (data.message === 'Already on waitlist') { setStep('payment'); return; }
       setStep('verify');
     } catch {
       setError('Network error. Please try again.');
@@ -149,7 +148,12 @@ export default function FamilyWaitlistModal({ open, onClose }: FamilyWaitlistMod
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Verification failed.'); return; }
-      setStep('payment');
+      if (data.paid) {
+        setPaid(true);
+        setStep('success');
+      } else {
+        setStep('payment');
+      }
     } catch {
       setError('Network error. Please try again.');
     } finally {
