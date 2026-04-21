@@ -1833,15 +1833,19 @@
   border-radius: 10px;
   background: rgba(255, 248, 234, 0.2);
   border: 1px solid rgba(255, 248, 234, 0.28);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   color: #FFF8EA;
+  padding: 0;
   line-height: 0;
 }
 
-.fwl-perk-icon svg {
+.fwl-perk-icon > svg {
   display: block;
+  width: 18px;
+  height: 18px;
+  grid-area: 1 / 1;
+  place-self: center;
 }
 
 .fwl-pass-perks li > div {
