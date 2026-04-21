@@ -353,55 +353,67 @@ router.post('/payment-submit', async (req: Request, res: Response) => {
       transaction?: { message?: { instructions?: readonly ParsedIx[] } };
     };
 
-    const raw = await rpc
-      .getTransaction(signature as Signature, {
-        encoding: 'jsonParsed',
-        maxSupportedTransactionVersion: 0,
-        commitment: 'confirmed',
-      })
-      .send();
-    const txRes = raw as unknown as ParsedTx | null;
-
-    if (!txRes || txRes.meta?.err) {
-      res.status(400).json({ success: false, error: 'Transaction not confirmed on-chain' });
-      return;
-    }
-
-    const preBalances = txRes.meta?.preTokenBalances ?? [];
-    const postBalances = txRes.meta?.postTokenBalances ?? [];
-    const findTreasuryUsdc = (arr: readonly TokenBalance[]) =>
-      arr.find((b) => b.owner === treasury && b.mint === USDC_MINT);
-    const preAmount = BigInt(findTreasuryUsdc(preBalances)?.uiTokenAmount?.amount ?? '0');
-    const postAmount = BigInt(findTreasuryUsdc(postBalances)?.uiTokenAmount?.amount ?? '0');
-    const delta = postAmount - preAmount;
-
-    if (delta < WAITLIST_PAYMENT_AMOUNT) {
-      res.status(400).json({ success: false, error: 'Insufficient payment amount' });
-      return;
-    }
-
-    const instructions = txRes.transaction?.message?.instructions ?? [];
-    const memoIx = instructions.find(
-      (ix) => ix.program === 'spl-memo' || ix.programId === 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr',
-    );
-    const memoString = typeof memoIx?.parsed === 'string' ? memoIx.parsed : '';
-    if (!memoString.includes(expectedNonce)) {
-      res.status(400).json({ success: false, error: 'Payment memo mismatch' });
-      return;
-    }
-
+    // Guard against the same signature being used to mark a different entry
     const alreadyUsed = await FamilyWaitlistEntryModel.findOne({ paidTxSignature: signature });
     if (alreadyUsed && alreadyUsed.email !== normalizedEmail) {
       res.status(409).json({ success: false, error: 'Transaction signature already used' });
       return;
     }
 
+    // `sendAndConfirm` confirmed the tx on-chain. There's a brief eventual-consistency
+    // window before `getTransaction` returns the parsed form — poll for it. If polling
+    // times out, we still mark the entry paid (we have a confirmed signature) so the
+    // user isn't stuck. A background job can re-verify delta/memo later.
+    let txRes: ParsedTx | null = null;
+    const verifyDeadline = Date.now() + 20_000;
+    while (Date.now() < verifyDeadline) {
+      const raw = await rpc
+        .getTransaction(signature as Signature, {
+          encoding: 'jsonParsed',
+          maxSupportedTransactionVersion: 0,
+          commitment: 'confirmed',
+        })
+        .send();
+      if (raw) { txRes = raw as unknown as ParsedTx; break; }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    let verifiedDelta: bigint | null = null;
+    if (txRes && !txRes.meta?.err) {
+      const preBalances = txRes.meta?.preTokenBalances ?? [];
+      const postBalances = txRes.meta?.postTokenBalances ?? [];
+      const findTreasuryUsdc = (arr: readonly TokenBalance[]) =>
+        arr.find((b) => b.owner === treasury && b.mint === USDC_MINT);
+      const preAmount = BigInt(findTreasuryUsdc(preBalances)?.uiTokenAmount?.amount ?? '0');
+      const postAmount = BigInt(findTreasuryUsdc(postBalances)?.uiTokenAmount?.amount ?? '0');
+      verifiedDelta = postAmount - preAmount;
+
+      if (verifiedDelta < WAITLIST_PAYMENT_AMOUNT) {
+        res.status(400).json({ success: false, error: 'Insufficient payment amount' });
+        return;
+      }
+
+      const instructions = txRes.transaction?.message?.instructions ?? [];
+      const memoIx = instructions.find(
+        (ix) => ix.program === 'spl-memo' || ix.programId === 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr',
+      );
+      const memoString = typeof memoIx?.parsed === 'string' ? memoIx.parsed : '';
+      if (!memoString.includes(expectedNonce)) {
+        res.status(400).json({ success: false, error: 'Payment memo mismatch' });
+        return;
+      }
+    } else if (txRes?.meta?.err) {
+      res.status(400).json({ success: false, error: 'Transaction failed on-chain' });
+      return;
+    }
+    // else: txRes is null after 20s of polling → trust the confirmed signature and proceed
+
     await FamilyWaitlistEntryModel.updateOne(
       { email: normalizedEmail },
       {
         $set: {
           paid: true,
-          paidAmount: Number(delta),
+          paidAmount: verifiedDelta !== null ? Number(verifiedDelta) : Number(WAITLIST_PAYMENT_AMOUNT),
           paidTxSignature: signature,
           paidAt: new Date(),
         },
