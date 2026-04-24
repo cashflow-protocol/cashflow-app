@@ -361,7 +361,17 @@ export class JupiterManager {
 
     // Limit route complexity for Squads vault transactions — the inner message
     // and execute TX must both fit within Solana's 1232-byte transaction limit.
-    const params: Record<string, any> = { inputMint, outputMint, amount, slippageBps, maxAccounts: 20 };
+    // Exclude stake-pool DEXes: their instructions sometimes write-lock validator
+    // vote accounts, which Jito bundles reject with "bundles cannot lock any vote accounts".
+    const params: Record<string, any> = {
+      inputMint,
+      outputMint,
+      amount,
+      slippageBps,
+      maxAccounts: 20,
+      restrictIntermediateTokens: true,
+      excludeDexes: 'Stakedex,SPL Stake Pool,Sanctum Infinity,Marinade',
+    };
     if (PLATFORM_FEE_WALLET) {
       params.platformFeeBps = PLATFORM_FEE_BPS;
     }
