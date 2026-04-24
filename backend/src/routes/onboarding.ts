@@ -1130,7 +1130,7 @@ router.post('/create-vault', async (req, res) => {
 
       // Check user wallet balance — needs rent (~0.015 SOL) + creation fee (0.05 SOL) + tx fee
       const { VAULT_CREATION_FEE } = await import('../constants/vault');
-      const minRequired = VAULT_CREATION_FEE + 20_000_000; // fee + rent + buffer
+      const minRequired = VAULT_CREATION_FEE + 10_000_000; // fee + rent + buffer
       const userBalance = await conn.getBalance(feePayer);
       if (userBalance < minRequired) {
         res.status(400).json({
