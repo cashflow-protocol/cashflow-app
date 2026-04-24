@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { MouseEvent as ReactMouseEvent, CSSProperties, ComponentType } from 'react';
 import { Link } from 'react-router';
+import { useDisconnectWallet } from '@solana/connector/react';
 import { CarFront, Plane, House, ShieldCheck } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
 import FamilyWaitlistModal from '../components/FamilyWaitlistModal';
@@ -17,11 +18,17 @@ const GOALS: { Icon: ComponentType<LucideProps>; name: string; current: string; 
 export default function FamilySavingsPage() {
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   const heroRef = useRef<HTMLElement>(null);
+  const { disconnect } = useDisconnectWallet();
 
   useEffect(() => {
     document.title = 'Family Savings - Cashflow';
     window.scrollTo(0, 0);
   }, []);
+
+  // @solana/connector auto-restores the previously-connected wallet on AppProvider mount.
+  // Force-disconnect on page load so the user only connects via an explicit action
+  // (clicking "Pay 5 USDC" → wallet picker). Same pattern as RecoveryPage.
+  useEffect(() => { disconnect(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll reveal
   useEffect(() => {
