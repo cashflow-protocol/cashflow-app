@@ -7,6 +7,13 @@ interface CountGroup {
   yesterday: number;
 }
 
+interface TvlCoin {
+  mint: string;
+  symbol: string;
+  tvlUi: number;
+  tvlUsd: number;
+}
+
 interface StatsData {
   users: CountGroup;
   waitlist: {
@@ -24,6 +31,18 @@ interface StatsData {
     withdrawals: CountGroup;
     transfers: CountGroup;
   };
+  tvl: {
+    coins: TvlCoin[];
+    totalUsd: number;
+  };
+}
+
+function formatUsd(n: number): string {
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+}
+
+function formatAmount(n: number): string {
+  return n.toLocaleString('en-US', { maximumFractionDigits: n < 1 ? 6 : 2 });
 }
 
 const cardStyle: React.CSSProperties = {
@@ -82,6 +101,16 @@ function StatCard({ label, value }: { label: string; value: number }) {
   );
 }
 
+function TvlCard({ label, usd, amount }: { label: string; usd: number; amount?: string }) {
+  return (
+    <div style={cardStyle}>
+      <div style={valueStyle}>{formatUsd(usd)}</div>
+      <div style={labelStyle}>{label}</div>
+      {amount ? <div style={{ ...labelStyle, color: '#999', marginTop: 2 }}>{amount}</div> : null}
+    </div>
+  );
+}
+
 export default function StatsPage() {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -129,6 +158,29 @@ export default function StatsPage() {
       <div className="page-header">
         <h2>Stats</h2>
         <button className="btn-secondary" onClick={load}>Refresh</button>
+      </div>
+
+      {/* TVL */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>TVL</div>
+        <div style={rowStyle}>
+          <TvlCard label="Total TVL" usd={stats.tvl.totalUsd} />
+        </div>
+        {stats.tvl.coins.length > 0 ? (
+          <>
+            <div style={subLabelStyle}>By coin</div>
+            <div style={{ ...rowStyle, flexWrap: 'wrap' }}>
+              {stats.tvl.coins.map((c) => (
+                <TvlCard
+                  key={c.mint}
+                  label={c.symbol}
+                  usd={c.tvlUsd}
+                  amount={`${formatAmount(c.tvlUi)} ${c.symbol}`}
+                />
+              ))}
+            </div>
+          </>
+        ) : null}
       </div>
 
       {/* Users */}
