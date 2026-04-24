@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel } from '../models';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, UserCostBasisModel } from '../models';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { PriceManager } from '../managers';
 import { dispatchSystemNotification } from '../services/notificationService';
@@ -107,6 +107,7 @@ router.get('/stats', async (_req, res) => {
       transfersTotal,
       transfersToday,
       transfersYesterday,
+      costBasisRecords,
     ] = await Promise.all([
       // Users
       UserModel.countDocuments({}),
@@ -138,7 +139,28 @@ router.get('/stats', async (_req, res) => {
       TransactionModel.countDocuments({ action: 'transfer' }),
       TransactionModel.countDocuments({ action: 'transfer', createdAt: { $gte: startOfTodayUTC } }),
       TransactionModel.countDocuments({ action: 'transfer', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // TVL source: aggregate net deposits per mint from UserCostBasis
+      UserCostBasisModel.find({}, { mint: 1, totalDeposited: 1, totalWithdrawn: 1 }).lean(),
     ]);
+
+    // Compute TVL (net deposited - withdrawn) per mint, in UI units and USD
+    const netByMint = new Map<string, bigint>();
+    for (const cb of costBasisRecords) {
+      const net = BigInt(cb.totalDeposited || '0') - BigInt(cb.totalWithdrawn || '0');
+      netByMint.set(cb.mint, (netByMint.get(cb.mint) ?? 0n) + net);
+    }
+
+    const tvlCoins: Array<{ mint: string; symbol: string; tvlUi: number; tvlUsd: number }> = [];
+    for (const [mint, netRaw] of netByMint) {
+      if (netRaw <= 0n) continue;
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
+      if (!tokenInfo) continue;
+      const tvlUi = Number(netRaw) / 10 ** tokenInfo.decimals;
+      const tvlUsd = priceManager.getUsdValue(tokenInfo.symbol, tvlUi);
+      tvlCoins.push({ mint, symbol: tokenInfo.symbol, tvlUi, tvlUsd });
+    }
+    tvlCoins.sort((a, b) => b.tvlUsd - a.tvlUsd);
+    const tvlTotalUsd = tvlCoins.reduce((acc, c) => acc + c.tvlUsd, 0);
 
     res.json({
       success: true,
@@ -157,6 +179,10 @@ router.get('/stats', async (_req, res) => {
         deposits: { total: depositsTotal, today: depositsToday, yesterday: depositsYesterday },
         withdrawals: { total: withdrawalsTotal, today: withdrawalsToday, yesterday: withdrawalsYesterday },
         transfers: { total: transfersTotal, today: transfersToday, yesterday: transfersYesterday },
+      },
+      tvl: {
+        coins: tvlCoins,
+        totalUsd: tvlTotalUsd,
       },
     });
   } catch (error) {
