@@ -11,8 +11,35 @@ export interface SerializedInstruction {
   data: string; // base64-encoded
 }
 
+const JITO_TIP_FALLBACK_LAMPORTS = 500_000;
+const JITO_TIP_CACHE_MS = 15_000;
+
 class ApiService {
   private baseUrl = API_CONFIG.baseUrl;
+  private jitoTipCache: { lamports: number; fetchedAt: number } | null = null;
+
+  /**
+   * Fetch the current Jito tip (dynamic from backend, cached 15s).
+   * Falls back to 500k lamports on error.
+   */
+  async getJitoTipLamports(): Promise<number> {
+    const now = Date.now();
+    if (this.jitoTipCache && now - this.jitoTipCache.fetchedAt < JITO_TIP_CACHE_MS) {
+      return this.jitoTipCache.lamports;
+    }
+    try {
+      const r = await fetch(`${this.baseUrl}/solana/v1/jito-tip`);
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      const res = await r.json();
+      const lamports = Number(res.lamports);
+      if (!Number.isFinite(lamports) || lamports <= 0) throw new Error('Invalid tip response');
+      this.jitoTipCache = { lamports, fetchedAt: now };
+      return lamports;
+    } catch (err) {
+      console.warn('[apiService] jito-tip fetch failed, using fallback:', err);
+      return JITO_TIP_FALLBACK_LAMPORTS;
+    }
+  }
 
   private async get<T>(path: string, params?: Record<string, string>): Promise<T> {
     const url = new URL(`${this.baseUrl}${path}`);

@@ -1246,7 +1246,9 @@ router.post('/create-vault', async (req, res) => {
       // so mobile can sign everything in a single MWA prompt and send as one Jito bundle.
 
       const crypto = await import('crypto');
-      const { ADMIN_COVER_TARGET, GAS_COVER_SPENDING_LIMIT_SEED, JITO_TIP_LAMPORTS, JITO_TIP_ACCOUNTS } = await import('../constants/vault');
+      const { ADMIN_COVER_TARGET, GAS_COVER_SPENDING_LIMIT_SEED, JITO_TIP_ACCOUNTS } = await import('../constants/vault');
+      const { JitoManager } = await import('../managers/JitoManager');
+      const jitoTipLamports = await new JitoManager().getDynamicTipLamports();
       const { Period } = multisigLib.types;
 
       // Use the all-tx fee payer key for spending limit (must match cover instruction destination)
@@ -1348,7 +1350,7 @@ router.post('/create-vault', async (req, res) => {
         SystemProgram.transfer({
           fromPubkey: adminFeePayerPubkey,
           toPubkey: new PublicKey(tipAccount),
-          lamports: JITO_TIP_LAMPORTS,
+          lamports: jitoTipLamports,
         }),
         coverIx,
       ];

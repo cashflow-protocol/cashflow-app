@@ -43,6 +43,16 @@ const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
 const bigIntReplacer = (_key: string, value: unknown) =>
   typeof value === 'bigint' ? value.toString() : value;
 
+// GET /solana/v1/jito-tip - Current dynamic Jito tip amount (75th pct, floored at 500k, capped at 95th pct)
+router.get('/jito-tip', async (_req: Request, res: Response) => {
+  try {
+    const lamports = await jitoManager.getDynamicTipLamports();
+    res.json({ success: true, lamports });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Failed to fetch Jito tip' });
+  }
+});
+
 // POST /solana/v1/submit-bundle-signatures - Store bundle signatures for a transaction
 router.post('/submit-bundle-signatures', async (req: Request, res: Response) => {
   try {
