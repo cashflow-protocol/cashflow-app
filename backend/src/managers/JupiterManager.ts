@@ -371,6 +371,7 @@ export class JupiterManager {
       maxAccounts: 20,
       restrictIntermediateTokens: true,
       excludeDexes: [
+        // Stake-pool DEXes: writable vote accounts via stake programs
         'Stakedex',
         'SPL Stake Pool',
         'Sanctum',
@@ -378,6 +379,9 @@ export class JupiterManager {
         'Marinade',
         'Solayer',
         'FluxBeam Stake',
+        // Validator-linked RFQ/MEV DEXes: observed to write-lock vote accounts
+        'HumidiFi',
+        'AlphaQ',
       ].join(','),
     };
     if (PLATFORM_FEE_WALLET) {
