@@ -4,6 +4,8 @@ export const VAULT_CREATION_FEE = 500_000;
 /** Target balance for admin tx fee payer after gas cover (0.05 SOL) */
 export const ADMIN_COVER_TARGET = 50_000_000;
 
+export const DEFAULT_SPENDING_LIMIT = 500_000_000; // 0.5 SOL
+
 /** Jito tip amount in lamports (0.0005 SOL) */
 export const JITO_TIP_LAMPORTS = 500_000;
 

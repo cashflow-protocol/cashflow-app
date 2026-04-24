@@ -25,7 +25,7 @@ import {
 } from './keypairStorage';
 import { createCoverFromSquadInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
-import { IS_SOLANA_MOBILE, getVaultCreationFee, getAdminTxFeePayerPublicKey, ADMIN_COVER_TARGET, SQUAD_SPENDING_LIMIT } from '../config/constants';
+import { IS_SOLANA_MOBILE, getVaultCreationFee, getAdminTxFeePayerPublicKey, ADMIN_COVER_TARGET, DEFAULT_SPENDING_LIMIT } from '../config/constants';
 import { logError } from './analyticsService';
 
 const { Permission, Permissions } = multisig.types;
@@ -410,7 +410,7 @@ export async function addGasCoverSpendingLimit(
         createKey,
         vaultIndex: 0,
         mint: PublicKey.default, // native SOL
-        amount: SQUAD_SPENDING_LIMIT,
+        amount: DEFAULT_SPENDING_LIMIT,
         period: Period.Day,
         members: spendingLimitMembers,
         destinations: [adminFeePayerPubkey],
