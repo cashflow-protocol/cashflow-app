@@ -361,8 +361,8 @@ export class JupiterManager {
 
     // Limit route complexity for Squads vault transactions — the inner message
     // and execute TX must both fit within Solana's 1232-byte transaction limit.
-    // Exclude stake-pool DEXes: their instructions sometimes write-lock validator
-    // vote accounts, which Jito bundles reject with "bundles cannot lock any vote accounts".
+    // Exclude stake-pool DEXes: their instructions write-lock validator vote
+    // accounts, which Jito bundles reject with "bundles cannot lock any vote accounts".
     const params: Record<string, any> = {
       inputMint,
       outputMint,
@@ -370,7 +370,15 @@ export class JupiterManager {
       slippageBps,
       maxAccounts: 20,
       restrictIntermediateTokens: true,
-      excludeDexes: 'Stakedex,SPL Stake Pool,Sanctum Infinity,Marinade',
+      excludeDexes: [
+        'Stakedex',
+        'SPL Stake Pool',
+        'Sanctum',
+        'Sanctum Infinity',
+        'Marinade',
+        'Solayer',
+        'FluxBeam Stake',
+      ].join(','),
     };
     if (PLATFORM_FEE_WALLET) {
       params.platformFeeBps = PLATFORM_FEE_BPS;
@@ -378,6 +386,11 @@ export class JupiterManager {
     const response = await this.api.get('/swap/v1/quote', { params });
 
     const quote = response.data;
+
+    // Log route labels so we can spot any stake-pool DEX that slipped through the filter
+    const labels = (quote.routePlan || []).map((r: any) => r?.swapInfo?.label).filter(Boolean);
+    console.log(`[JupiterManager.getSwapQuote] route labels: ${labels.join(' → ') || '(none)'}`);
+
     return {
       outputAmount: quote.outAmount,
       priceImpactPct: parseFloat(quote.priceImpactPct || '0'),
