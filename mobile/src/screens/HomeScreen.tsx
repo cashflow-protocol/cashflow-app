@@ -15,15 +15,22 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { useWallet } from '../hooks/useWallet';
 import { useAssets } from '../hooks/useAssets';
 import { useEarnTokens } from '../hooks/useEarnTokens';
+import { useRewards, invalidateRewards } from '../hooks/useRewards';
+import { attestSeekerIfNeeded } from '../services/rewardsService';
+import { useToast } from '../contexts/ToastContext';
+import { logBadgeMintAttempt, logBadgeMintSuccess, logBadgeMintError } from '../services/analyticsService';
 import { useSolPrice } from '../hooks/useSolPrice';
 import { useSuggestions } from '../hooks/useSuggestions';
 import ActionButton from '../components/ActionButton';
 import AssetRow from '../components/AssetRow';
 import EarnTokenItem from '../components/EarnTokenItem';
+import RewardsHomeSection from '../components/RewardsHomeSection';
+import RewardBadgeSheet from '../components/RewardBadgeSheet';
 import SectionCard from '../components/SectionCard';
 import StatBox from '../components/StatBox';
+import type { TaskWithProgress } from '../types/rewards';
 import type { TabName } from '../components/TabBar';
-import { ReceiveIcon, SendIcon, ConvertIcon, RewardsIcon, ProfileIcon, SupportIcon, QuestionsIcon } from '../assets/home-icons';
+import { ReceiveIcon, SendIcon, ConvertIcon, ProfileIcon, SupportIcon, QuestionsIcon } from '../assets/home-icons';
 import { getTokenIcon } from '../assets/token-icons';
 import SuggestionCard from '../components/SuggestionCard';
 import ComingSoonModal from '../components/ComingSoonModal';
@@ -67,7 +74,11 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
   const { tokens, loading: earnLoading } = useEarnTokens();
   const { price: solPrice, loading: solPriceLoading } = useSolPrice();
   const { suggestions } = useSuggestions();
-  const [rewardsModalVisible, setRewardsModalVisible] = useState(false);
+  const [selectedRewardTask, setSelectedRewardTask] = useState<TaskWithProgress | null>(null);
+  const [mintingTaskSlug, setMintingTaskSlug] = useState<string | null>(null);
+  const [attestingSeeker, setAttestingSeeker] = useState(false);
+  const { mint: mintReward } = useRewards();
+  const { showToast } = useToast();
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [convertModalVisible, setConvertModalVisible] = useState(false);
   const [receiveModalVisible, setReceiveModalVisible] = useState(false);
@@ -163,12 +174,6 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
                   </View>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.rewardsIcon}
-                onPress={() => { logComingSoonView('rewards'); setRewardsModalVisible(true); }}
-              >
-                <RewardsIcon size={36} />
-              </TouchableOpacity>
             </View>
           </View>
         </SafeAreaView>
@@ -233,6 +238,9 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
             />
           </View>
         )}
+
+        {/* Rewards Section */}
+        <RewardsHomeSection onSelectTask={(task) => setSelectedRewardTask(task)} />
 
         {/* Assets Section — hidden when empty */}
         {(assetsLoading || topAssets.length > 0) && (
@@ -326,12 +334,39 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
 
       {/* Tab bar is rendered by App.tsx */}
 
-      <ComingSoonModal
-        visible={rewardsModalVisible}
-        onClose={() => setRewardsModalVisible(false)}
-        icon={<RewardsIcon size={48} color="#175DA3" />}
-        title="Rewards"
-        subtitle="Rewards are under development. You'll be able to get rewards for current Cashflow usage, so check it out and earn some yield."
+      <RewardBadgeSheet
+        task={selectedRewardTask}
+        visible={selectedRewardTask !== null}
+        onClose={() => setSelectedRewardTask(null)}
+        minting={mintingTaskSlug !== null && mintingTaskSlug === selectedRewardTask?.slug}
+        attesting={attestingSeeker}
+        onAttestSeeker={async () => {
+          if (attestingSeeker) return;
+          setAttestingSeeker(true);
+          try {
+            await attestSeekerIfNeeded();
+            invalidateRewards();
+          } finally {
+            setAttestingSeeker(false);
+          }
+        }}
+        onMint={async (task) => {
+          if (mintingTaskSlug) return; // already minting
+          logBadgeMintAttempt(task.slug);
+          setMintingTaskSlug(task.slug);
+          try {
+            await mintReward(task.slug);
+            logBadgeMintSuccess(task.slug);
+            showToast('Badge minted', task.title, 'success');
+            setSelectedRewardTask(null);
+          } catch (err: any) {
+            const msg = err?.message ?? 'Mint failed';
+            logBadgeMintError(task.slug, msg);
+            showToast('Mint failed', msg, 'error');
+          } finally {
+            setMintingTaskSlug(null);
+          }
+        }}
       />
       <ComingSoonModal
         visible={profileModalVisible}

@@ -229,3 +229,95 @@ export async function updateEarnTokenConfig(id: string, config: { minDepositAmou
 export async function getStats() {
   return apiFetch('/stats');
 }
+
+// Rewards
+export type RewardVerifierType =
+  | 'onchain_deposit'
+  | 'onchain_swap_volume'
+  | 'onchain_transfer_out'
+  | 'device_seeker'
+  | 'social_twitter_follow'
+  | 'social_twitter_retweet'
+  | 'manual';
+
+export interface RewardTask {
+  _id: string;
+  slug: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  metadataUri: string;
+  active: boolean;
+  sortOrder: number;
+  availableFrom?: string;
+  availableUntil?: string;
+  requiresTaskSlug?: string;
+  mintFeeLamports: string;
+  maxSupply?: number;
+  mintedCount: number;
+  verifierType: RewardVerifierType;
+  verifierConfig?: Record<string, any>;
+  createdAt?: string;
+}
+
+export interface RewardSettings {
+  rewardsCollectionAddress: string | null;
+  envDefaultCollectionAddress: string | null;
+  treasuryWallet: string | null;
+  cdnBaseUrl: string | null;
+  storageConfigured: boolean;
+}
+
+export async function getRewardSettings(): Promise<{ success: boolean; settings: RewardSettings; error?: string }> {
+  return apiFetch('/rewards/settings');
+}
+
+export async function updateRewardSettings(updates: { rewardsCollectionAddress?: string }) {
+  return apiFetch('/rewards/settings', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function getRewardTasks(): Promise<{ success: boolean; tasks: RewardTask[]; error?: string }> {
+  return apiFetch('/rewards/tasks');
+}
+
+export async function createRewardTask(task: Partial<RewardTask>) {
+  return apiFetch('/rewards/tasks', {
+    method: 'POST',
+    body: JSON.stringify(task),
+  });
+}
+
+export async function updateRewardTask(slug: string, updates: Partial<RewardTask>) {
+  return apiFetch(`/rewards/tasks/${slug}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function uploadRewardImage(file: File, slug?: string): Promise<{ success: boolean; url: string; key: string; error?: string }> {
+  const token = sessionStorage.getItem('admin_token');
+  const form = new FormData();
+  form.append('image', file);
+  if (slug) form.append('slug', slug);
+  const res = await fetch(`${getApiBase()}/admin/v1/rewards/upload-image`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (res.status === 401) {
+    clearPassword();
+    window.location.reload();
+    throw new Error('Unauthorized');
+  }
+  return res.json();
+}
+
+export async function uploadRewardMetadata(slug: string, metadata: Record<string, any>) {
+  return apiFetch('/rewards/upload-metadata', {
+    method: 'POST',
+    body: JSON.stringify({ slug, metadata }),
+  });
+}

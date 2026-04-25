@@ -1,10 +1,12 @@
 import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, UserCostBasisModel } from '../models';
+import multer from 'multer';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, UserCostBasisModel, RewardTaskModel, RewardVerifierType, UserRewardProgressModel, RewardProgressStatus, MintedBadgeModel, getSetting, setSetting, APP_SETTING_KEYS } from '../models';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { PriceManager } from '../managers';
 import { dispatchSystemNotification } from '../services/notificationService';
+import * as storage from '../services/storageManager';
 
 const priceManager = new PriceManager();
 
@@ -963,6 +965,307 @@ router.patch('/earn-tokens/:id/config', async (req, res) => {
   } catch (error) {
     console.error('Admin update earn token config error:', error);
     res.status(500).json({ success: false, error: 'Failed to update config' });
+  }
+});
+
+// ─── Rewards (admin) ───
+
+/**
+ * GET /rewards/tasks
+ * List all reward tasks (active and inactive) for the admin dashboard.
+ */
+router.get('/rewards/tasks', async (_req, res) => {
+  try {
+    const tasks = await RewardTaskModel.find().sort({ sortOrder: 1, createdAt: 1 }).lean();
+    res.json({ success: true, tasks });
+  } catch (error) {
+    console.error('Admin list reward tasks error:', error);
+    res.status(500).json({ success: false, error: 'Failed to list reward tasks' });
+  }
+});
+
+/**
+ * POST /rewards/tasks
+ * Create a new reward task.
+ */
+router.post('/rewards/tasks', async (req, res) => {
+  try {
+    const {
+      slug, title, description, imageUrl, metadataUri,
+      active, sortOrder, availableFrom, availableUntil, requiresTaskSlug,
+      mintFeeLamports, maxSupply, verifierType, verifierConfig,
+    } = req.body;
+    if (!slug || !title || !description || !imageUrl || !metadataUri || !verifierType) {
+      res.status(400).json({ success: false, error: 'slug, title, description, imageUrl, metadataUri, and verifierType are required' });
+      return;
+    }
+    if (!Object.values(RewardVerifierType).includes(verifierType)) {
+      res.status(400).json({ success: false, error: `Invalid verifierType: ${verifierType}` });
+      return;
+    }
+
+    const task = await RewardTaskModel.create({
+      slug,
+      title,
+      description,
+      imageUrl,
+      metadataUri,
+      active: active !== false,
+      sortOrder: Number(sortOrder) || 0,
+      availableFrom: availableFrom ? new Date(availableFrom) : undefined,
+      availableUntil: availableUntil ? new Date(availableUntil) : undefined,
+      requiresTaskSlug: requiresTaskSlug || undefined,
+      mintFeeLamports: mintFeeLamports ? String(mintFeeLamports) : '20000000',
+      maxSupply: maxSupply != null ? Number(maxSupply) : undefined,
+      verifierType,
+      verifierConfig: verifierConfig || {},
+    });
+
+    res.json({ success: true, task: { id: task._id, slug: task.slug } });
+  } catch (error: any) {
+    if (error?.code === 11000) {
+      res.status(409).json({ success: false, error: 'Slug already exists' });
+      return;
+    }
+    console.error('Admin create reward task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create reward task' });
+  }
+});
+
+/**
+ * PATCH /rewards/tasks/:slug
+ * Partial update.
+ */
+router.patch('/rewards/tasks/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const update: Record<string, any> = {};
+    const allowed = [
+      'title', 'description', 'imageUrl', 'metadataUri', 'active', 'sortOrder',
+      'availableFrom', 'availableUntil', 'requiresTaskSlug', 'mintFeeLamports',
+      'maxSupply', 'verifierConfig',
+    ];
+    for (const key of allowed) {
+      if (key in req.body) update[key] = req.body[key];
+    }
+    if (update.availableFrom) update.availableFrom = new Date(update.availableFrom);
+    if (update.availableUntil) update.availableUntil = new Date(update.availableUntil);
+    if (update.mintFeeLamports != null) update.mintFeeLamports = String(update.mintFeeLamports);
+
+    const task = await RewardTaskModel.findOneAndUpdate({ slug }, { $set: update }, { new: true });
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    res.json({ success: true, task });
+  } catch (error) {
+    console.error('Admin patch reward task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update reward task' });
+  }
+});
+
+/**
+ * POST /rewards/manual-verify
+ * Body: { vaultAddress, taskSlug }
+ * Marks a manual-verifier progress entry as approved (sets attestations.manualApprovedAt).
+ */
+router.post('/rewards/manual-verify', async (req, res) => {
+  try {
+    const { vaultAddress, taskSlug } = req.body;
+    if (!vaultAddress || !taskSlug) {
+      res.status(400).json({ success: false, error: 'vaultAddress and taskSlug are required' });
+      return;
+    }
+
+    const task = await RewardTaskModel.findOne({ slug: taskSlug }).lean();
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    await UserRewardProgressModel.findOneAndUpdate(
+      { vaultAddress, taskSlug },
+      {
+        $set: {
+          'attestations.manualApprovedAt': new Date(),
+          status: RewardProgressStatus.CLAIMABLE,
+          currentValue: '1',
+          targetValue: '1',
+          completedAt: new Date(),
+          lastEvaluatedAt: new Date(),
+        },
+        $setOnInsert: { vaultAddress, taskSlug },
+      },
+      { upsert: true },
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin manual-verify reward error:', error);
+    res.status(500).json({ success: false, error: 'Failed to manual-verify' });
+  }
+});
+
+/**
+ * GET /rewards/badges?taskSlug=&status=
+ * Browse minted badges.
+ */
+router.get('/rewards/badges', async (req, res) => {
+  try {
+    const filter: Record<string, any> = {};
+    if (req.query.taskSlug) filter.taskSlug = req.query.taskSlug;
+    if (req.query.status) filter.status = req.query.status;
+
+    const badges = await MintedBadgeModel.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean();
+    res.json({ success: true, badges });
+  } catch (error) {
+    console.error('Admin list minted badges error:', error);
+    res.status(500).json({ success: false, error: 'Failed to list badges' });
+  }
+});
+
+/**
+ * GET /rewards/settings
+ * Returns runtime-configurable reward settings (collection address + env defaults).
+ */
+router.get('/rewards/settings', async (_req, res) => {
+  try {
+    const collectionAddress = await getSetting(
+      APP_SETTING_KEYS.REWARDS_COLLECTION_ADDRESS,
+      process.env.REWARDS_COLLECTION_ADDRESS ?? null,
+    );
+    res.json({
+      success: true,
+      settings: {
+        rewardsCollectionAddress: collectionAddress,
+        envDefaultCollectionAddress: process.env.REWARDS_COLLECTION_ADDRESS ?? null,
+        treasuryWallet: process.env.TREASURY_WALLET_ADDRESS ?? null,
+        cdnBaseUrl: process.env.DO_SPACES_CDN_URL ?? null,
+        storageConfigured: storage.isConfigured(),
+      },
+    });
+  } catch (error) {
+    console.error('Admin get reward settings error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load settings' });
+  }
+});
+
+/**
+ * PUT /rewards/settings
+ * Body: { rewardsCollectionAddress?: string }
+ * Updates runtime settings. Set to empty string to clear (env fallback applies).
+ */
+router.put('/rewards/settings', async (req, res) => {
+  try {
+    const { rewardsCollectionAddress } = req.body ?? {};
+    if (typeof rewardsCollectionAddress === 'string') {
+      const trimmed = rewardsCollectionAddress.trim();
+      if (trimmed.length === 0) {
+        // Treat empty as "fall back to env" — store empty string so we know admin opted in
+        await setSetting(APP_SETTING_KEYS.REWARDS_COLLECTION_ADDRESS, '');
+      } else {
+        // Light validation: base58 32-44 chars
+        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) {
+          res.status(400).json({ success: false, error: 'Invalid Solana address format' });
+          return;
+        }
+        await setSetting(APP_SETTING_KEYS.REWARDS_COLLECTION_ADDRESS, trimmed);
+      }
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin update reward settings error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update settings' });
+  }
+});
+
+// ─── Reward asset uploads (DigitalOcean Spaces) ───
+
+const rewardImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (_req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPEG, PNG, WebP, and GIF images are allowed'));
+    }
+  },
+});
+
+/**
+ * POST /rewards/upload-image
+ * Multipart form with field "image". Optional "slug" for stable filenames.
+ * Returns { url } for use as RewardTask.imageUrl or inside metadata JSON.
+ */
+router.post('/rewards/upload-image', rewardImageUpload.single('image'), async (req, res) => {
+  try {
+    if (!storage.isConfigured()) {
+      res.status(503).json({ success: false, error: 'Storage is not configured' });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ success: false, error: 'Image file is required' });
+      return;
+    }
+
+    const slug = (req.body?.slug ?? '').toString().trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 64);
+    const ext =
+      req.file.mimetype === 'image/png' ? 'png' :
+      req.file.mimetype === 'image/webp' ? 'webp' :
+      req.file.mimetype === 'image/gif' ? 'gif' : 'jpg';
+
+    const filename = slug ? `${slug}.${ext}` : `${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
+    const key = `rewards/badges/${filename}`;
+    const url = await storage.uploadFile(req.file.buffer, key, req.file.mimetype);
+
+    res.json({ success: true, url, key });
+  } catch (error: any) {
+    if (error?.message?.includes('Only JPEG')) {
+      res.status(400).json({ success: false, error: error.message });
+      return;
+    }
+    console.error('Admin upload reward image error:', error);
+    res.status(500).json({ success: false, error: 'Failed to upload image' });
+  }
+});
+
+/**
+ * POST /rewards/upload-metadata
+ * Body: { slug: string, metadata: object }
+ * Uploads the metadata JSON to DO Spaces under /rewards/metadata/<slug>.json.
+ * Returns { url } for use as RewardTask.metadataUri.
+ */
+router.post('/rewards/upload-metadata', async (req, res) => {
+  try {
+    if (!storage.isConfigured()) {
+      res.status(503).json({ success: false, error: 'Storage is not configured' });
+      return;
+    }
+    const { slug, metadata } = req.body ?? {};
+    if (!slug || typeof slug !== 'string') {
+      res.status(400).json({ success: false, error: 'slug is required' });
+      return;
+    }
+    if (!metadata || typeof metadata !== 'object') {
+      res.status(400).json({ success: false, error: 'metadata object is required' });
+      return;
+    }
+    const safeSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 64);
+    if (!safeSlug) {
+      res.status(400).json({ success: false, error: 'Invalid slug' });
+      return;
+    }
+    const buffer = Buffer.from(JSON.stringify(metadata, null, 2), 'utf-8');
+    const key = `rewards/metadata/${safeSlug}.json`;
+    const url = await storage.uploadFile(buffer, key, 'application/json');
+    res.json({ success: true, url, key });
+  } catch (error) {
+    console.error('Admin upload reward metadata error:', error);
+    res.status(500).json({ success: false, error: 'Failed to upload metadata' });
   }
 });
 

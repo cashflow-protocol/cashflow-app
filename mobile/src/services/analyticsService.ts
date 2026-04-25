@@ -387,6 +387,20 @@ export function logError(context: string, error: string) {
   analytics().logEvent('app_error', { context, error: error.slice(0, 100) });
 }
 
+// ── Rewards ──
+
+export function logBadgeMintAttempt(slug: string) {
+  analytics().logEvent('badge_mint_attempt', { slug });
+}
+
+export function logBadgeMintSuccess(slug: string) {
+  analytics().logEvent('badge_mint_success', { slug });
+}
+
+export function logBadgeMintError(slug: string, error: string) {
+  analytics().logEvent('badge_mint_error', { slug, error: error.slice(0, 100) });
+}
+
 // ── Push Notification Permission ──
 
 export function logPushPermissionGranted() {

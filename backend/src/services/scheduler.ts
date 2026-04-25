@@ -5,6 +5,9 @@ import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
 import { JupiterManager, KaminoManager, DriftManager, PerenaManager, SolomonManager, OnreManager, DBManager, PriceManager, TokenManager } from '../managers';
 import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from '../models';
 import { NotificationType } from '../models';
+import { MintedBadgeModel, MintedBadgeStatus } from '../models/MintedBadge';
+import { UserRewardProgressModel, RewardProgressStatus } from '../models/UserRewardProgress';
+import { RewardTaskModel } from '../models/RewardTask';
 import { dispatchSystemNotification } from './notificationService';
 import { sendWaitlistPushNotification, cleanupExpiredRTDBNotifications } from './firebaseManager';
 import { updateCostBasisOnConfirm, markFeeTransactionFailed } from './feeService';
@@ -231,6 +234,98 @@ async function approveTopWaitlistUsers() {
 }
 
 /**
+ * Recover pending Metaplex Core badge mints. For each MintedBadge in pending
+ * status older than the grace window, query its bundleSignatures on-chain.
+ * Promote to confirmed (and update UserRewardProgress) or failed (rolling
+ * back the slot + resetting progress to claimable).
+ */
+const RECOVER_GRACE_MS = 10 * 60 * 1000;
+const RECOVER_FAIL_AFTER_MS = 30 * 60 * 1000;
+
+async function recoverPendingMints() {
+  try {
+    const cutoff = new Date(Date.now() - RECOVER_GRACE_MS);
+    const pending = await MintedBadgeModel.find({
+      status: MintedBadgeStatus.PENDING,
+      createdAt: { $lte: cutoff },
+    }).limit(100);
+
+    if (pending.length === 0) return;
+    console.log(`[Cron] recoverPendingMints: ${pending.length} pending mint(s)`);
+
+    for (const badge of pending) {
+      const createdAt = (badge as any).createdAt as Date | undefined;
+      try {
+        const sigs = badge.bundleSignatures.filter((s): s is string => !!s);
+        if (sigs.length === 0) {
+          // No signatures recorded — if old enough, fail it.
+          if (createdAt && Date.now() - createdAt.getTime() > RECOVER_FAIL_AFTER_MS) {
+            await failMint(badge);
+          }
+          continue;
+        }
+
+        const statuses = await rpc
+          .getSignatureStatuses(sigs as Signature[], { searchTransactionHistory: true })
+          .send();
+
+        let anyFailed = false;
+        let allConfirmed = true;
+        let allUnknown = true;
+
+        for (const status of statuses.value) {
+          if (!status) continue;
+          allUnknown = false;
+          if (status.err) anyFailed = true;
+          if (status.confirmationStatus !== 'confirmed' && status.confirmationStatus !== 'finalized') {
+            allConfirmed = false;
+          }
+        }
+
+        if (anyFailed) {
+          await failMint(badge);
+        } else if (!allUnknown && allConfirmed) {
+          badge.status = MintedBadgeStatus.CONFIRMED;
+          await badge.save();
+          await UserRewardProgressModel.updateOne(
+            { vaultAddress: badge.vaultAddress, taskSlug: badge.taskSlug },
+            { $set: { status: RewardProgressStatus.MINTED, completedAt: new Date(), mintedBadgeId: String(badge._id) } },
+          );
+          console.log(`[Cron] Mint ${badge.assetAddress} CONFIRMED`);
+
+          dispatchSystemNotification(
+            badge.vaultAddress,
+            'Badge minted',
+            `Your "${badge.taskSlug}" badge is now in your vault.`,
+            NotificationType.BADGE_MINTED,
+          ).catch((err) => console.error('Badge minted notification error:', err));
+        } else if (allUnknown && createdAt && Date.now() - createdAt.getTime() > RECOVER_FAIL_AFTER_MS) {
+          // Bundle signatures never landed.
+          await failMint(badge);
+        }
+      } catch (err) {
+        console.error(`[Cron] Recovery error for badge ${badge._id}:`, err);
+      }
+    }
+  } catch (error) {
+    console.error('[Cron] Failed to recover pending mints:', error);
+  }
+}
+
+async function failMint(badge: any): Promise<void> {
+  badge.status = MintedBadgeStatus.FAILED;
+  await badge.save();
+  // Reset progress to claimable so user can retry
+  await UserRewardProgressModel.updateOne(
+    { vaultAddress: badge.vaultAddress, taskSlug: badge.taskSlug, status: RewardProgressStatus.MINT_PENDING },
+    { $set: { status: RewardProgressStatus.CLAIMABLE } },
+  );
+  // Roll back the slot
+  await RewardTaskModel.updateOne({ slug: badge.taskSlug }, { $inc: { mintedCount: -1 } });
+  console.log(`[Cron] Mint ${badge.assetAddress} FAILED — rolled back`);
+}
+
+/**
  * Initialize all scheduled tasks
  */
 export async function initializeScheduler() {
@@ -300,6 +395,11 @@ export async function initializeScheduler() {
 
   // Clean up expired RTDB notifications every 15 minutes
   cron.schedule('*/15 * * * *', () => cleanupExpiredRTDBNotifications(5 * 60 * 1000), {
+    timezone: 'UTC',
+  });
+
+  // Recover stuck reward badge mints every 5 minutes
+  cron.schedule('*/5 * * * *', recoverPendingMints, {
     timezone: 'UTC',
   });
 

@@ -7,6 +7,7 @@ export enum NotificationType {
   WITHDRAW = 'withdraw',
   WAITLIST_APPROVED = 'waitlist_approved',
   SYSTEM = 'system',
+  BADGE_MINTED = 'badge_minted',
 }
 
 @modelOptions({

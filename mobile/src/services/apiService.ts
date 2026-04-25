@@ -2,6 +2,7 @@ import { API_CONFIG } from '../config/api';
 import { BUILD_NUMBER } from '../config/version';
 import type { EarnToken, EarnPosition, WalletAsset, Suggestion } from '../types/earn';
 import type { AppNotification } from '../types/notification';
+import type { TaskWithProgress } from '../types/rewards';
 import authService from './authService';
 import { verifyResponseSignature } from './responseVerifier';
 
@@ -72,6 +73,8 @@ class ApiService {
     vaultCreationFee: number | null;
     supportUrl: string | null;
     adminTxFeePayerPublicKey: string | null;
+    rewardsCollectionAddress: string | null;
+    rewardsBadgeMintFeeLamports: number | null;
   }> {
     // Config is needed during vault creation (before auth is available) — bypass auth
     const r = await fetch(`${this.baseUrl}/config/v1`);
@@ -283,6 +286,51 @@ class ApiService {
 
   async notifyInterest(protocol: string, protocolName: string): Promise<void> {
     await this.post<{ success: boolean }>('/earn/v2/notify-interest', { protocol, protocolName });
+  }
+
+  async getRewardTasks(): Promise<TaskWithProgress[]> {
+    const res = await this.get<{ success: boolean; data: { tasks: TaskWithProgress[] } }>('/rewards/v2/tasks');
+    return res.data.tasks;
+  }
+
+  async getSeekerAttestChallenge(walletAddress: string): Promise<{ challenge: string; expiresAt: string }> {
+    const res = await this.get<{ success: boolean; challenge: string; expiresAt: string }>(
+      '/rewards/v2/attest-seeker/challenge',
+      { walletAddress },
+    );
+    return { challenge: res.challenge, expiresAt: res.expiresAt };
+  }
+
+  async attestSeeker(params: { walletAddress: string; challenge: string; signature: string }): Promise<void> {
+    await this.post<{ success: boolean }>('/rewards/v2/attest-seeker', params);
+  }
+
+  async mintRewardBadge(taskSlug: string): Promise<{
+    mintedBadgeId: string;
+    assetAddress: string;
+    innerInstructions: SerializedInstruction[];
+    mintTransactionBase64: string;
+    blockhash: string;
+    collectionAddress: string;
+    mintFeeLamports: string;
+  }> {
+    const res = await this.signedPost<{
+      success: boolean;
+      data: {
+        mintedBadgeId: string;
+        assetAddress: string;
+        innerInstructions: SerializedInstruction[];
+        mintTransactionBase64: string;
+        blockhash: string;
+        collectionAddress: string;
+        mintFeeLamports: string;
+      };
+    }>('/rewards/v2/mint', { taskSlug });
+    return res.data;
+  }
+
+  async confirmRewardMint(mintedBadgeId: string, bundleSignatures: string[]): Promise<void> {
+    await this.post<{ success: boolean }>('/rewards/v2/mint/confirm', { mintedBadgeId, bundleSignatures });
   }
 
   async deposit(params: {
