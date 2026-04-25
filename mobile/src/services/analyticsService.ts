@@ -269,6 +269,10 @@ export function logEarnRefresh() {
   analytics().logEvent('earn_refresh');
 }
 
+export function logHomeRefresh() {
+  analytics().logEvent('home_refresh');
+}
+
 export function logVaultModalOpen(symbol: string, mode: string) {
   analytics().logEvent('vault_modal_open', { symbol, mode });
 }

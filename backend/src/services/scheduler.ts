@@ -10,7 +10,7 @@ import { UserRewardProgressModel, RewardProgressStatus } from '../models/UserRew
 import { RewardTaskModel } from '../models/RewardTask';
 import { dispatchSystemNotification } from './notificationService';
 import { sendWaitlistPushNotification, cleanupExpiredRTDBNotifications } from './firebaseManager';
-import { updateCostBasisOnConfirm, markFeeTransactionFailed } from './feeService';
+import { onTransactionConfirmed, markFeeTransactionFailed } from './feeService';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
@@ -158,17 +158,8 @@ async function confirmTransactions() {
       } else if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') {
         const transitioned = await dbManager.confirmTransaction(String(tx._id), TransactionStatus.CONFIRMED);
         if (transitioned) {
-          await updateCostBasisOnConfirm(String(tx._id));
+          await onTransactionConfirmed(String(tx._id));
           console.log(`[Cron] Transaction ${tx.signature} CONFIRMED`);
-
-          // Force reward verifiers to re-evaluate this vault's in-progress tasks
-          // on the next read (clears the lastEvaluatedAt TTL cache).
-          if (tx.vaultAddress) {
-            await UserRewardProgressModel.updateMany(
-              { vaultAddress: tx.vaultAddress, status: RewardProgressStatus.IN_PROGRESS },
-              { $unset: { lastEvaluatedAt: '' } },
-            ).catch((err) => console.error('[Cron] reward progress invalidation error:', err));
-          }
         }
       }
     }

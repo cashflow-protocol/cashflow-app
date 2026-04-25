@@ -1,4 +1,4 @@
-import { UserCostBasisModel, FeeTransactionModel, FeeTransactionStatus, FeeType, TransactionModel, TransactionAction } from '../models';
+import { UserCostBasisModel, FeeTransactionModel, FeeTransactionStatus, FeeType, TransactionModel, TransactionAction, UserRewardProgressModel, RewardProgressStatus } from '../models';
 import { TransferManager } from '../managers/TransferManager';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import type { SerializedInstruction } from '../types';
@@ -144,9 +144,11 @@ async function casIncrementCostBasis(
 }
 
 /**
- * Update cost basis when a transaction is confirmed onchain.
+ * Run all post-confirm side effects for a transaction: cost basis updates and
+ * reward verifier cache invalidation. Called from both the scheduler poll and
+ * the Helius webhook path so behavior stays in sync.
  */
-export async function updateCostBasisOnConfirm(transactionId: string): Promise<void> {
+export async function onTransactionConfirmed(transactionId: string): Promise<void> {
   const tx = await TransactionModel.findById(transactionId).lean();
   if (!tx) return;
 
@@ -171,7 +173,17 @@ export async function updateCostBasisOnConfirm(transactionId: string): Promise<v
       { $set: { status: FeeTransactionStatus.CONFIRMED } },
     );
   }
+
+  // Invalidate reward verifier TTL cache so the next read re-evaluates
+  // progress against the freshly-confirmed transaction.
+  await UserRewardProgressModel.updateMany(
+    { vaultAddress, status: RewardProgressStatus.IN_PROGRESS },
+    { $unset: { lastEvaluatedAt: '' } },
+  ).catch((err) => console.error('[onTransactionConfirmed] reward cache invalidation error:', err));
 }
+
+/** @deprecated use onTransactionConfirmed */
+export const updateCostBasisOnConfirm = onTransactionConfirmed;
 
 /**
  * Mark fee transaction as failed when the withdrawal transaction fails.

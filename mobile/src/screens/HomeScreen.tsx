@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   FlatList,
+  RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
   Linking,
@@ -16,6 +17,7 @@ import { useWallet } from '../hooks/useWallet';
 import { useAssets } from '../hooks/useAssets';
 import { useEarnTokens } from '../hooks/useEarnTokens';
 import { useRewards, invalidateRewards } from '../hooks/useRewards';
+import { invalidateEarnTokens } from '../hooks/useEarnTokens';
 import { attestSeekerIfNeeded } from '../services/rewardsService';
 import { useToast } from '../contexts/ToastContext';
 import { logBadgeMintAttempt, logBadgeMintSuccess, logBadgeMintError } from '../services/analyticsService';
@@ -52,6 +54,7 @@ import {
   logSwapModalOpen,
   logReceiveFundFromSeeker,
   logSectionMorePress,
+  logHomeRefresh,
 } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -71,9 +74,10 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
   const { colors } = useTheme();
   const { wallet, balance, connect } = useWallet();
   const { assets, totalUsdValue: assetsTotalUsd, loading: assetsLoading, refresh: refreshAssets } = useAssets();
-  const { tokens, loading: earnLoading } = useEarnTokens();
-  const { price: solPrice, loading: solPriceLoading } = useSolPrice();
-  const { suggestions } = useSuggestions();
+  const { tokens, loading: earnLoading, refresh: refreshEarn } = useEarnTokens();
+  const { price: solPrice, loading: solPriceLoading, refresh: refreshSolPrice } = useSolPrice();
+  const { suggestions, refresh: refreshSuggestions } = useSuggestions();
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedRewardTask, setSelectedRewardTask] = useState<TaskWithProgress | null>(null);
   const [mintingTaskSlug, setMintingTaskSlug] = useState<string | null>(null);
   const [attestingSeeker, setAttestingSeeker] = useState(false);
@@ -87,6 +91,22 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
   const { unreadCount } = useNotifications();
 
   React.useEffect(() => { logScreenView('HomeScreen'); }, []);
+
+  const handleRefresh = useCallback(async () => {
+    logHomeRefresh();
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refreshAssets(),
+        refreshEarn(),
+        refreshSolPrice(),
+        refreshSuggestions(),
+      ]);
+      invalidateRewards();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshAssets, refreshEarn, refreshSolPrice, refreshSuggestions]);
 
   // Top 3 assets sorted by USD value descending
   const topAssets = useMemo(() => {
@@ -151,6 +171,14 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#fff"
+            colors={['#fff']}
+          />
+        }
       >
         {/* Status Bar Area */}
         <SafeAreaView edges={['top']} style={styles.statusBar}>
