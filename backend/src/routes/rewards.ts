@@ -178,7 +178,15 @@ router.post('/mint', async (req: AuthenticatedRequest, res: Response) => {
       { new: true },
     );
     if (!claimedTask) {
-      res.status(409).json({ success: false, error: 'Sold out' });
+      // Diagnose the failure so the user gets a meaningful error.
+      const existing = await RewardTaskModel.findOne({ slug: taskSlug }).lean();
+      let reason = 'Sold out';
+      if (!existing) reason = 'Task not found';
+      else if (!existing.active) reason = 'Task is not active';
+      else if (existing.maxSupply != null && existing.mintedCount >= existing.maxSupply) reason = 'Sold out';
+      else reason = `Slot claim failed (mintedCount=${existing.mintedCount}, maxSupply=${existing.maxSupply ?? '∞'}, active=${existing.active})`;
+      console.warn(`[mint] slot claim failed for ${taskSlug}:`, reason, existing);
+      res.status(409).json({ success: false, error: reason });
       return;
     }
     claimedSlot = true;
