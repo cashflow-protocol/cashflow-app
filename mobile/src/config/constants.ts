@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 export const IS_SOLANA_MOBILE = Platform.OS === 'android' && Platform.constants.Brand == 'solanamobile' && Platform.constants.Model == 'Seeker';
 console.log('IS_SOLANA_MOBILE:', IS_SOLANA_MOBILE);
 
+
 // ── Remote-configurable values ──
 // Defaults match the backend. applyRemoteConfig() overwrites them
 // once GET /config/v1 returns.
