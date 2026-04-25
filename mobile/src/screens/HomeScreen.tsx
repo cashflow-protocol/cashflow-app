@@ -13,11 +13,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
-import { useWallet } from '../hooks/useWallet';
 import { useAssets } from '../hooks/useAssets';
 import { useEarnTokens } from '../hooks/useEarnTokens';
 import { useRewards, invalidateRewards } from '../hooks/useRewards';
-import { invalidateEarnTokens } from '../hooks/useEarnTokens';
 import { attestSeekerIfNeeded } from '../services/rewardsService';
 import { useToast } from '../contexts/ToastContext';
 import { logBadgeMintAttempt, logBadgeMintSuccess, logBadgeMintError } from '../services/analyticsService';
@@ -72,7 +70,6 @@ interface HomeScreenProps {
 
 export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenProps) {
   const { colors } = useTheme();
-  const { wallet, balance, connect } = useWallet();
   const { assets, totalUsdValue: assetsTotalUsd, loading: assetsLoading, refresh: refreshAssets } = useAssets();
   const { tokens, loading: earnLoading, refresh: refreshEarn } = useEarnTokens();
   const { price: solPrice, loading: solPriceLoading, refresh: refreshSolPrice } = useSolPrice();
@@ -372,8 +369,14 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
           if (attestingSeeker) return;
           setAttestingSeeker(true);
           try {
-            await attestSeekerIfNeeded();
+            const ok = await attestSeekerIfNeeded();
             invalidateRewards();
+            if (ok) {
+              showToast('Seeker verified', 'You can now claim this badge', 'success');
+              setSelectedRewardTask(null);
+            }
+          } catch (err: any) {
+            showToast('Verification failed', err?.message ?? 'Please try again', 'error');
           } finally {
             setAttestingSeeker(false);
           }

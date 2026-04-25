@@ -9,17 +9,18 @@ let _attesting = false;
 
 /**
  * If the user is on Seeker and hasn't attested yet, prompt MWA to sign a
- * server-issued challenge proving possession of the wallet. No-op otherwise.
+ * server-issued challenge proving possession of the wallet.
  *
+ * Returns true if the attestation completed (or was a no-op — wrong device or
+ * already in progress); throws on failure so the caller can show feedback.
  * Idempotent within a single app session (won't double-prompt).
- * Best-effort — failures are logged but don't propagate.
  */
-export async function attestSeekerIfNeeded(): Promise<void> {
-  if (!IS_SOLANA_MOBILE) return;
-  if (_attesting) return;
+export async function attestSeekerIfNeeded(): Promise<boolean> {
+  if (!IS_SOLANA_MOBILE) return false;
+  if (_attesting) return false;
 
   const vault = await getVault();
-  if (!vault?.walletAddress) return;
+  if (!vault?.walletAddress) return false;
 
   _attesting = true;
   try {
@@ -33,8 +34,10 @@ export async function attestSeekerIfNeeded(): Promise<void> {
       challenge,
       signature: signatureBase64,
     });
+    return true;
   } catch (err: any) {
     logError('seeker_attest', err?.message ?? 'unknown');
+    throw err;
   } finally {
     _attesting = false;
   }
