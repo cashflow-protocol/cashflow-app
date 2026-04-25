@@ -16,7 +16,9 @@ let _attesting = false;
  * Idempotent within a single app session (won't double-prompt).
  */
 export async function attestSeekerIfNeeded(): Promise<boolean> {
-  if (!IS_SOLANA_MOBILE) return false;
+  if (!IS_SOLANA_MOBILE) {
+    throw new Error('This badge is claimable only on Solana Mobile');
+  }
   if (_attesting) return false;
 
   const vault = await getVault();
