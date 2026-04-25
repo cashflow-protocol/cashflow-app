@@ -34,16 +34,15 @@ export default function RewardsHomeSection({ onSelectTask }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Rewards</Text>
-        {claimableCount > 0 && (
+      {claimableCount > 0 && (
+        <View style={styles.header}>
           <View style={[styles.claimablePill, { backgroundColor: colors.accentGreen }]}>
             <Text style={styles.claimablePillText}>
               {claimableCount} claimable
             </Text>
           </View>
-        )}
-      </View>
+        </View>
+      )}
 
       {loading ? (
         <ActivityIndicator size="small" color={colors.accentBlueDark} style={styles.loader} />
@@ -77,10 +76,6 @@ const styles = StyleSheet.create({
   },
   listWrapper: {
     marginHorizontal: -14,
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: '700',
   },
   claimablePill: {
     paddingHorizontal: 10,

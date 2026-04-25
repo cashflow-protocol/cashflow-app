@@ -150,13 +150,26 @@ async function confirmTransactions() {
       }
 
       if (status.err) {
-        await dbManager.confirmTransaction(String(tx._id), TransactionStatus.FAILED);
-        await markFeeTransactionFailed(String(tx._id));
-        console.log(`[Cron] Transaction ${tx.signature} FAILED`);
+        const transitioned = await dbManager.confirmTransaction(String(tx._id), TransactionStatus.FAILED);
+        if (transitioned) {
+          await markFeeTransactionFailed(String(tx._id));
+          console.log(`[Cron] Transaction ${tx.signature} FAILED`);
+        }
       } else if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') {
-        await dbManager.confirmTransaction(String(tx._id), TransactionStatus.CONFIRMED);
-        await updateCostBasisOnConfirm(String(tx._id));
-        console.log(`[Cron] Transaction ${tx.signature} CONFIRMED`);
+        const transitioned = await dbManager.confirmTransaction(String(tx._id), TransactionStatus.CONFIRMED);
+        if (transitioned) {
+          await updateCostBasisOnConfirm(String(tx._id));
+          console.log(`[Cron] Transaction ${tx.signature} CONFIRMED`);
+
+          // Force reward verifiers to re-evaluate this vault's in-progress tasks
+          // on the next read (clears the lastEvaluatedAt TTL cache).
+          if (tx.vaultAddress) {
+            await UserRewardProgressModel.updateMany(
+              { vaultAddress: tx.vaultAddress, status: RewardProgressStatus.IN_PROGRESS },
+              { $unset: { lastEvaluatedAt: '' } },
+            ).catch((err) => console.error('[Cron] reward progress invalidation error:', err));
+          }
+        }
       }
     }
   } catch (error) {

@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, UserCostBasisModel, RewardTaskModel, RewardVerifierType, UserRewardProgressModel, RewardProgressStatus, MintedBadgeModel, getSetting, setSetting, APP_SETTING_KEYS } from '../models';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, TransactionStatus, RewardTaskModel, RewardVerifierType, UserRewardProgressModel, RewardProgressStatus, MintedBadgeModel, getSetting, setSetting, APP_SETTING_KEYS } from '../models';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { PriceManager } from '../managers';
 import { dispatchSystemNotification } from '../services/notificationService';
@@ -125,31 +125,36 @@ router.get('/stats', async (_req, res) => {
       // Waitlist today
       WaitlistUserModel.countDocuments({ createdAt: { $gte: startOfTodayUTC }, approvedAt: { $exists: true } }),
       WaitlistUserModel.countDocuments({ createdAt: { $gte: startOfTodayUTC }, approvedAt: { $exists: false } }),
-      // Transactions totals
-      TransactionModel.countDocuments({}),
-      TransactionModel.countDocuments({ createdAt: { $gte: startOfTodayUTC } }),
-      TransactionModel.countDocuments({ createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
-      // Deposits
-      TransactionModel.countDocuments({ action: 'deposit' }),
-      TransactionModel.countDocuments({ action: 'deposit', createdAt: { $gte: startOfTodayUTC } }),
-      TransactionModel.countDocuments({ action: 'deposit', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
-      // Withdrawals
-      TransactionModel.countDocuments({ action: 'withdraw' }),
-      TransactionModel.countDocuments({ action: 'withdraw', createdAt: { $gte: startOfTodayUTC } }),
-      TransactionModel.countDocuments({ action: 'withdraw', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
-      // Transfers
-      TransactionModel.countDocuments({ action: 'transfer' }),
-      TransactionModel.countDocuments({ action: 'transfer', createdAt: { $gte: startOfTodayUTC } }),
-      TransactionModel.countDocuments({ action: 'transfer', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
-      // TVL source: aggregate net deposits per mint from UserCostBasis
-      UserCostBasisModel.find({}, { mint: 1, totalDeposited: 1, totalWithdrawn: 1 }).lean(),
+      // Transactions totals (confirmed only)
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // Deposits (confirmed only)
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'deposit' }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'deposit', createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'deposit', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // Withdrawals (confirmed only)
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'withdraw' }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'withdraw', createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'withdraw', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // Transfers (confirmed only)
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'transfer' }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'transfer', createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'transfer', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // TVL source: aggregate confirmed deposit/withdraw transactions directly
+      // (more accurate than UserCostBasis, which can drift if confirm hooks fail)
+      TransactionModel.find(
+        { status: TransactionStatus.CONFIRMED, action: { $in: ['deposit', 'withdraw'] } },
+        { mint: 1, action: 1, amount: 1 },
+      ).lean(),
     ]);
 
     // Compute TVL (net deposited - withdrawn) per mint, in UI units and USD
     const netByMint = new Map<string, bigint>();
-    for (const cb of costBasisRecords) {
-      const net = BigInt(cb.totalDeposited || '0') - BigInt(cb.totalWithdrawn || '0');
-      netByMint.set(cb.mint, (netByMint.get(cb.mint) ?? 0n) + net);
+    for (const tx of costBasisRecords) {
+      const amt = BigInt(tx.amount || '0');
+      const delta = tx.action === 'deposit' ? amt : -amt;
+      netByMint.set(tx.mint, (netByMint.get(tx.mint) ?? 0n) + delta);
     }
 
     const tvlCoins: Array<{ mint: string; symbol: string; tvlUi: number; tvlUsd: number }> = [];

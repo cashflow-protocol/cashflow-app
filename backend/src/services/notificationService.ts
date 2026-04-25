@@ -48,9 +48,12 @@ async function tryMatchStoredTransaction(
     return null;
   }
 
-  // Mark the transaction as confirmed and update cost basis
-  await dbManager.confirmTransaction(String(record._id), TransactionStatus.CONFIRMED);
-  await updateCostBasisOnConfirm(String(record._id));
+  // Mark the transaction as confirmed and update cost basis (idempotent —
+  // confirmTransaction returns null if status already advanced past SUBMITTED).
+  const transitioned = await dbManager.confirmTransaction(String(record._id), TransactionStatus.CONFIRMED);
+  if (transitioned) {
+    await updateCostBasisOnConfirm(String(record._id));
+  }
 
   return { title, type: notifType, transactionId: String(record._id) };
 }

@@ -110,8 +110,41 @@ export async function createVaultCreationFeeRecord(params: {
 }
 
 /**
+ * Atomically increment a string-typed BigInt counter on a UserCostBasis doc
+ * using compare-and-swap. The field stays a string (BigInt-safe), so MongoDB's
+ * native $inc isn't usable — we retry on lost updates instead.
+ */
+async function casIncrementCostBasis(
+  vaultAddress: string,
+  mint: string,
+  increments: Partial<Record<'totalDeposited' | 'totalWithdrawn' | 'totalFeesCollected', bigint>>,
+): Promise<void> {
+  const fields = Object.keys(increments) as Array<keyof typeof increments>;
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const doc = await UserCostBasisModel.findOneAndUpdate(
+      { vaultAddress, mint },
+      { $setOnInsert: { totalDeposited: '0', totalWithdrawn: '0', totalFeesCollected: '0' } },
+      { upsert: true, new: true },
+    ).lean();
+
+    const filter: Record<string, unknown> = { vaultAddress, mint };
+    const setFields: Record<string, string> = {};
+    for (const field of fields) {
+      const currentStr = (doc as unknown as Record<string, string>)[field] ?? '0';
+      filter[field] = currentStr;
+      setFields[field] = (BigInt(currentStr) + (increments[field] ?? 0n)).toString();
+    }
+
+    const result = await UserCostBasisModel.updateOne(filter, { $set: setFields });
+    if (result.matchedCount === 1) return;
+  }
+
+  throw new Error(`casIncrementCostBasis: exceeded retries for ${vaultAddress}/${mint}`);
+}
+
+/**
  * Update cost basis when a transaction is confirmed onchain.
- * Uses atomic $inc to avoid race conditions.
  */
 export async function updateCostBasisOnConfirm(transactionId: string): Promise<void> {
   const tx = await TransactionModel.findById(transactionId).lean();
@@ -121,31 +154,16 @@ export async function updateCostBasisOnConfirm(transactionId: string): Promise<v
 
   if (!vaultAddress) return;
 
-  // Fields are stored as strings (BigInt-safe), so use read-modify-write instead of $inc
-  const costBasis = await UserCostBasisModel.findOne({ vaultAddress, mint }).lean();
-
   if (action === TransactionAction.DEPOSIT) {
-    const prev = BigInt(costBasis?.totalDeposited ?? '0');
-    const newVal = (prev + BigInt(amount)).toString();
-    await UserCostBasisModel.findOneAndUpdate(
-      { vaultAddress, mint },
-      { $set: { totalDeposited: newVal } },
-      { upsert: true },
-    );
+    await casIncrementCostBasis(vaultAddress, mint, { totalDeposited: BigInt(amount) });
   } else if (action === TransactionAction.WITHDRAW) {
-    const prevWithdrawn = BigInt(costBasis?.totalWithdrawn ?? '0');
-    const setFields: Record<string, string> = {
-      totalWithdrawn: (prevWithdrawn + BigInt(amount)).toString(),
+    const increments: Parameters<typeof casIncrementCostBasis>[2] = {
+      totalWithdrawn: BigInt(amount),
     };
     if (feeAmount) {
-      const prevFees = BigInt(costBasis?.totalFeesCollected ?? '0');
-      setFields.totalFeesCollected = (prevFees + BigInt(feeAmount)).toString();
+      increments.totalFeesCollected = BigInt(feeAmount);
     }
-    await UserCostBasisModel.findOneAndUpdate(
-      { vaultAddress, mint },
-      { $set: setFields },
-      { upsert: true },
-    );
+    await casIncrementCostBasis(vaultAddress, mint, increments);
 
     // Update the associated FeeTransaction status
     await FeeTransactionModel.findOneAndUpdate(

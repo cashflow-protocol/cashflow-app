@@ -239,9 +239,6 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
           </View>
         )}
 
-        {/* Rewards Section */}
-        <RewardsHomeSection onSelectTask={(task) => setSelectedRewardTask(task)} />
-
         {/* Assets Section — hidden when empty */}
         {(assetsLoading || topAssets.length > 0) && (
         <SectionCard
@@ -302,6 +299,9 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
           )}
         </SectionCard>
         )}
+
+        {/* Rewards Section */}
+        <RewardsHomeSection onSelectTask={(task) => setSelectedRewardTask(task)} />
 
         {/* Useful Section */}
         <SectionCard title="Useful">
