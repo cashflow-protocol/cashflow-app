@@ -321,3 +321,16 @@ export async function uploadRewardMetadata(slug: string, metadata: Record<string
     body: JSON.stringify({ slug, metadata }),
   });
 }
+
+export async function createRewardsCollection(input: {
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  externalUrl?: string;
+  metadata?: Record<string, any>;
+}): Promise<{ success: boolean; address?: string; metadataUri?: string; signature?: string; error?: string }> {
+  return apiFetch('/rewards/create-collection', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}

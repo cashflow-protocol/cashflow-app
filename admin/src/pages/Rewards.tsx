@@ -7,6 +7,7 @@ import {
   updateRewardTask,
   uploadRewardImage,
   uploadRewardMetadata,
+  createRewardsCollection,
   type RewardTask,
   type RewardSettings,
   type RewardVerifierType,
@@ -153,6 +154,7 @@ function SettingsCard({ settings, onSaved }: { settings: RewardSettings | null; 
   const [collectionAddress, setCollectionAddress] = useState(settings?.rewardsCollectionAddress ?? '');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [showCreateCollection, setShowCreateCollection] = useState(false);
 
   useEffect(() => {
     setCollectionAddress(settings?.rewardsCollectionAddress ?? '');
@@ -178,7 +180,16 @@ function SettingsCard({ settings, onSaved }: { settings: RewardSettings | null; 
 
   return (
     <div className="table-container" style={{ padding: 20 }}>
-      <h3 style={{ marginTop: 0 }}>Settings</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <h3 style={{ margin: 0 }}>Settings</h3>
+        <button
+          className="btn-secondary"
+          style={{ width: 'auto' }}
+          onClick={() => setShowCreateCollection(true)}
+        >
+          Create Collection
+        </button>
+      </div>
 
       {settings && !settings.storageConfigured && (
         <p className="error-text" style={{ marginBottom: 12 }}>
@@ -191,7 +202,7 @@ function SettingsCard({ settings, onSaved }: { settings: RewardSettings | null; 
         <input
           value={collectionAddress}
           onChange={(e) => setCollectionAddress(e.target.value)}
-          placeholder="e.g. 7xKX...4dF (run scripts/createRewardsCollection.ts to create)"
+          placeholder="Paste address — or click Create Collection above"
           className="mono"
           style={{ fontSize: 13 }}
         />
@@ -208,6 +219,210 @@ function SettingsCard({ settings, onSaved }: { settings: RewardSettings | null; 
         </button>
         {msg && (
           <span style={{ fontSize: 13, color: msg.kind === 'ok' ? '#19C394' : '#F95357' }}>{msg.text}</span>
+        )}
+      </div>
+
+      {showCreateCollection && (
+        <CreateCollectionModal
+          onClose={() => setShowCreateCollection(false)}
+          onCreated={() => { setShowCreateCollection(false); onSaved(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateCollectionModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [name, setName] = useState('Cashflow Rewards');
+  const [description, setDescription] = useState('Soulbound badges earned for using Cashflow.');
+  const [externalUrl, setExternalUrl] = useState('https://cashflow.fun');
+  const [imageUrl, setImageUrl] = useState('');
+  const [metadataStr, setMetadataStr] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{ address: string; metadataUri: string; signature: string } | null>(null);
+
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  const buildDefaultMetadata = (img: string) => ({
+    name,
+    description,
+    image: img,
+    ...(externalUrl ? { external_url: externalUrl } : {}),
+  });
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError('');
+    try {
+      const res = await uploadRewardImage(file, 'collection');
+      if (res.success) {
+        setImageUrl(res.url);
+        // If user hasn't customized metadata yet, refresh the JSON preview
+        if (!metadataStr.trim()) {
+          setMetadataStr(JSON.stringify(buildDefaultMetadata(res.url), null, 2));
+        }
+      } else {
+        setError(res.error ?? 'Upload failed');
+      }
+    } catch (err: any) {
+      setError(err?.message ?? 'Upload failed');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleCreate = async () => {
+    setError('');
+
+    if (!name.trim()) { setError('Name is required'); return; }
+    if (!imageUrl.trim()) { setError('Upload an image (or paste an image URL into the JSON)'); return; }
+
+    // If user typed custom JSON, validate it; otherwise use the field-built object.
+    let metadata: Record<string, any> | undefined;
+    if (metadataStr.trim()) {
+      try {
+        metadata = JSON.parse(metadataStr);
+      } catch {
+        setError('Invalid JSON in metadata');
+        return;
+      }
+    }
+
+    setCreating(true);
+    try {
+      const res = await createRewardsCollection({
+        name: name.trim(),
+        description: description.trim(),
+        imageUrl: imageUrl.trim(),
+        externalUrl: externalUrl.trim() || undefined,
+        metadata,
+      });
+      if (res.success && res.address && res.metadataUri && res.signature) {
+        setResult({ address: res.address, metadataUri: res.metadataUri, signature: res.signature });
+      } else {
+        setError(res.error ?? 'Failed to create collection');
+      }
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to create collection');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={result ? undefined : onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '90vh', overflowY: 'auto' }}>
+        <h3>Create Rewards Collection</h3>
+
+        {result ? (
+          <>
+            <p style={{ fontSize: 13, color: '#19C394', marginBottom: 16 }}>
+              Collection created on-chain and saved to settings.
+            </p>
+            <div className="form-group">
+              <label>Collection address</label>
+              <input value={result.address} readOnly className="mono" style={{ fontSize: 12 }} />
+            </div>
+            <div className="form-group">
+              <label>Metadata URI</label>
+              <input value={result.metadataUri} readOnly className="mono" style={{ fontSize: 12 }} />
+            </div>
+            <div className="form-group">
+              <label>Signature (base64)</label>
+              <input value={result.signature} readOnly className="mono" style={{ fontSize: 12 }} />
+            </div>
+            <div className="modal-actions">
+              <button className="btn-primary" style={{ width: 'auto' }} onClick={onCreated}>
+                Done
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
+              Uploads metadata to DO Spaces, runs Metaplex Core <span className="mono">createCollection</span> on-chain (signed by the admin keypair), and saves the resulting address to settings.
+            </p>
+
+            <div className="form-group">
+              <label>Image</label>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                {imageUrl ? (
+                  <img src={imageUrl} alt="" style={{ width: 96, height: 96, borderRadius: 12, objectFit: 'cover', border: '1px solid #ddd' }} />
+                ) : (
+                  <div style={{ width: 96, height: 96, borderRadius: 12, background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: 12 }}>
+                    no image
+                  </div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <input
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="https://...png — or upload below"
+                    className="mono"
+                    style={{ fontSize: 12 }}
+                  />
+                  <input ref={imageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ marginTop: 8, width: 'auto' }}
+                    disabled={uploading}
+                    onClick={() => imageInputRef.current?.click()}
+                  >
+                    {uploading ? 'Uploading...' : 'Upload to DO Spaces'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="form-group">
+                <label>Name</label>
+                <input value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>External URL</label>
+                <input value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://cashflow.fun" />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Metadata JSON (optional override)</label>
+              <textarea
+                value={metadataStr}
+                onChange={(e) => setMetadataStr(e.target.value)}
+                placeholder={`Leave blank to auto-build from fields above. Or paste full JSON, e.g.:\n${JSON.stringify({ name: 'Cashflow Rewards', description: '...', image: 'https://.../collection.png', external_url: 'https://cashflow.fun' }, null, 2)}`}
+                rows={8}
+                style={{ fontFamily: 'monospace', fontSize: 12 }}
+              />
+              <p style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                Uploaded to <span className="mono">/rewards/metadata/collection.json</span>.
+              </p>
+            </div>
+
+            {error && <p className="error-text">{error}</p>}
+
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={onClose} disabled={creating}>Cancel</button>
+              <button className="btn-primary" style={{ width: 'auto' }} onClick={handleCreate} disabled={creating || uploading}>
+                {creating ? 'Creating on-chain…' : 'Upload & Create Collection'}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>

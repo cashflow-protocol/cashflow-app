@@ -1234,6 +1234,85 @@ router.post('/rewards/upload-image', rewardImageUpload.single('image'), async (r
 });
 
 /**
+ * POST /rewards/create-collection
+ * Body: { name, description, imageUrl, externalUrl?, metadata? }
+ * One-shot: uploads collection metadata JSON to DO Spaces, runs Metaplex Core
+ * createCollection on-chain (admin keypair signs), saves the resulting collection
+ * address into AppSettings, and returns { address, metadataUri, signature }.
+ *
+ * If `metadata` (object) is provided, it overrides the auto-generated JSON.
+ */
+router.post('/rewards/create-collection', async (req, res) => {
+  try {
+    if (!storage.isConfigured()) {
+      res.status(503).json({ success: false, error: 'Storage is not configured' });
+      return;
+    }
+
+    const rpcUrl = process.env.SOLANA_RPC_URL;
+    if (!rpcUrl) {
+      res.status(503).json({ success: false, error: 'SOLANA_RPC_URL not configured' });
+      return;
+    }
+
+    const { name, description, imageUrl, externalUrl, metadata } = req.body ?? {};
+    if (!name || typeof name !== 'string') {
+      res.status(400).json({ success: false, error: 'name is required' });
+      return;
+    }
+
+    // Build / accept the metadata JSON
+    const metadataObj = (metadata && typeof metadata === 'object')
+      ? metadata
+      : {
+          name,
+          description: description ?? '',
+          image: imageUrl ?? '',
+          ...(externalUrl ? { external_url: externalUrl } : {}),
+        };
+
+    // Upload metadata to DO Spaces under /rewards/metadata/collection.json
+    const metadataKey = `rewards/metadata/collection.json`;
+    const metadataUri = await storage.uploadFile(
+      Buffer.from(JSON.stringify(metadataObj, null, 2), 'utf-8'),
+      metadataKey,
+      'application/json',
+    );
+
+    // Run Metaplex Core createCollection server-side
+    const { createUmi } = await import('@metaplex-foundation/umi-bundle-defaults');
+    const { keypairIdentity, generateSigner } = await import('@metaplex-foundation/umi');
+    const { mplCore, createCollection } = await import('@metaplex-foundation/mpl-core');
+    const { getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
+
+    const umi = createUmi(rpcUrl).use(mplCore());
+    const adminKeypair = getAdminTxFeePayerKeypair();
+    const umiAdminKeypair = umi.eddsa.createKeypairFromSecretKey(adminKeypair.secretKey);
+    umi.use(keypairIdentity(umiAdminKeypair));
+
+    const collectionSigner = generateSigner(umi);
+
+    const result = await createCollection(umi, {
+      collection: collectionSigner,
+      name,
+      uri: metadataUri,
+      plugins: [],
+    }).sendAndConfirm(umi);
+
+    const address = collectionSigner.publicKey.toString();
+    const signature = Buffer.from(result.signature).toString('base64');
+
+    // Save into AppSetting so RewardMintBuilder + /config pick it up immediately
+    await setSetting(APP_SETTING_KEYS.REWARDS_COLLECTION_ADDRESS, address);
+
+    res.json({ success: true, address, metadataUri, signature });
+  } catch (error: any) {
+    console.error('Admin create-collection error:', error);
+    res.status(500).json({ success: false, error: error?.message ?? 'Failed to create collection' });
+  }
+});
+
+/**
  * POST /rewards/upload-metadata
  * Body: { slug: string, metadata: object }
  * Uploads the metadata JSON to DO Spaces under /rewards/metadata/<slug>.json.
