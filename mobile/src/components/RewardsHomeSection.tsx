@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useRewards } from '../hooks/useRewards';
 import RewardBadgeCard from './RewardBadgeCard';
@@ -28,22 +28,10 @@ export default function RewardsHomeSection({ onSelectTask }: Props) {
     });
   }, [tasks]);
 
-  const claimableCount = ordered.filter((t) => t.status === 'claimable').length;
-
   if (!loading && ordered.length === 0) return null;
 
   return (
     <View style={styles.container}>
-      {claimableCount > 0 && (
-        <View style={styles.header}>
-          <View style={[styles.claimablePill, { backgroundColor: colors.accentGreen }]}>
-            <Text style={styles.claimablePillText}>
-              {claimableCount} claimable
-            </Text>
-          </View>
-        </View>
-      )}
-
       {loading ? (
         <ActivityIndicator size="small" color={colors.accentBlueDark} style={styles.loader} />
       ) : (
@@ -69,23 +57,8 @@ const styles = StyleSheet.create({
   container: {
     gap: 12,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
   listWrapper: {
     marginHorizontal: -14,
-  },
-  claimablePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  claimablePillText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
   },
   listContent: {
     paddingHorizontal: 14,

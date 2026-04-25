@@ -44,7 +44,7 @@ export default function RewardBadgeSheet({ task, visible, onClose, onMint, minti
   const claimable = task.status === 'claimable';
   const minted = task.status === 'minted';
   const pending = task.status === 'mint_pending' || minting;
-  const feeSol = (Number(task.mintFeeLamports) / 1_000_000_000).toFixed(2);
+  const feeSol = ((Number(task.mintFeeLamports) + 1_000_000) / 1_000_000_000).toFixed(3);
   const needsSeekerAttest = task.verifierType === 'device_seeker' && task.status === 'in_progress';
 
   return (
@@ -118,7 +118,7 @@ export default function RewardBadgeSheet({ task, visible, onClose, onMint, minti
                   { color: claimable ? '#fff' : colors.textSecondary },
                 ]}
               >
-                {minted ? 'Already minted' : claimable ? `Mint badge for ${feeSol} SOL` : 'Keep using Cashflow to unlock'}
+                {minted ? 'Already minted' : claimable ? `Mint badge (~${feeSol} SOL fees)` : 'Keep using Cashflow to unlock'}
               </Text>
             )}
           </TouchableOpacity>

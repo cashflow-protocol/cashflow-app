@@ -43,7 +43,7 @@ function progressFraction(task: TaskWithProgress): number {
 function ctaLabel(task: TaskWithProgress): string {
   switch (task.status) {
     case 'claimable':
-      return `Mint ${(Number(task.mintFeeLamports) / 1_000_000_000).toFixed(2)} SOL`;
+      return `Mint`;
     case 'mint_pending':
       return 'Minting…';
     case 'minted':
