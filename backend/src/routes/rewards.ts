@@ -163,16 +163,17 @@ router.post('/mint', async (req: AuthenticatedRequest, res: Response) => {
     }
 
     // 2. Atomic slot claim — increment mintedCount only if still under maxSupply.
+    // Use a standard $or with the regular `null` operator (which matches missing
+    // fields too) for the unlimited case, and $expr only for the field-vs-field
+    // comparison. $expr's $eq-vs-null is inconsistent across server versions.
     const claimedTask = await RewardTaskModel.findOneAndUpdate(
       {
         slug: taskSlug,
         active: true,
-        $expr: {
-          $or: [
-            { $eq: ['$maxSupply', null] },
-            { $lt: ['$mintedCount', '$maxSupply'] },
-          ],
-        },
+        $or: [
+          { maxSupply: null },
+          { $expr: { $lt: ['$mintedCount', '$maxSupply'] } },
+        ],
       },
       { $inc: { mintedCount: 1 } },
       { new: true },
