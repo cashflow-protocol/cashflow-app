@@ -66,7 +66,7 @@ export default function RewardBadgeSheet({ task, visible, onClose, onMint, minti
           <View style={[styles.statusBox, { backgroundColor: colors.cardSecondary }]}>
             <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Supply</Text>
             <Text style={[styles.statusValue, { color: colors.textPrimary }]}>
-              {task.mintedCount.toLocaleString('en-US')} / {task.maxSupply.toLocaleString('en-US')} minted
+              {task.maxSupply.toLocaleString('en-US')}
             </Text>
           </View>
         )}

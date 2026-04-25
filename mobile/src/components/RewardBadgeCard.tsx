@@ -119,7 +119,7 @@ export default function RewardBadgeCard({ task, onPress, compact }: Props) {
 
       {task.maxSupply != null && (
         <Text style={[styles.supply, { color: colors.textSecondary }]} numberOfLines={1}>
-          {task.mintedCount.toLocaleString('en-US')} / {task.maxSupply.toLocaleString('en-US')} minted
+          Supply: {task.maxSupply.toLocaleString('en-US')}
         </Text>
       )}
     </TouchableOpacity>
