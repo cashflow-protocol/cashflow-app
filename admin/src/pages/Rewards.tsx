@@ -8,6 +8,7 @@ import {
   uploadRewardImage,
   uploadRewardMetadata,
   createRewardsCollection,
+  diagnoseReward,
   type RewardTask,
   type RewardSettings,
   type RewardVerifierType,
@@ -67,6 +68,8 @@ export default function RewardsPage() {
       </div>
 
       <SettingsCard settings={settings} onSaved={load} />
+
+      <DiagnoseCard tasks={tasks} />
 
       <div className="table-container" style={{ marginTop: 24 }}>
         <table>
@@ -146,6 +149,166 @@ export default function RewardsPage() {
           onSaved={() => { setEditTask(null); load(); }}
         />
       )}
+    </div>
+  );
+}
+
+function DiagnoseCard({ tasks }: { tasks: RewardTask[] }) {
+  const [vaultAddress, setVaultAddress] = useState('');
+  const [taskSlug, setTaskSlug] = useState(tasks[0]?.slug ?? '');
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!taskSlug && tasks.length > 0) setTaskSlug(tasks[0].slug);
+  }, [tasks, taskSlug]);
+
+  const handleRun = async () => {
+    if (!vaultAddress.trim() || !taskSlug) {
+      setError('Vault address and task are required');
+      return;
+    }
+    setRunning(true);
+    setError('');
+    setResult(null);
+    try {
+      const res = await diagnoseReward(vaultAddress.trim(), taskSlug);
+      if (res.success) setResult(res);
+      else setError(res.error ?? 'Diagnose failed');
+    } catch (err: any) {
+      setError(err?.message ?? 'Diagnose failed');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 12, padding: 20, marginTop: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+      <h3 style={{ marginTop: 0, marginBottom: 12 }}>Diagnose reward progress</h3>
+      <p style={{ color: '#666', fontSize: 13, marginTop: 0 }}>
+        Inspect a vault's transactions, what the verifier matches, and the resulting USD progress.
+      </p>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="Vault address"
+          value={vaultAddress}
+          onChange={(e) => setVaultAddress(e.target.value)}
+          style={{ flex: '1 1 320px', padding: '8px 10px', border: '1px solid #ddd', borderRadius: 6 }}
+        />
+        <select
+          value={taskSlug}
+          onChange={(e) => setTaskSlug(e.target.value)}
+          style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 6 }}
+        >
+          {tasks.map((t) => (
+            <option key={t.slug} value={t.slug}>{t.slug}</option>
+          ))}
+        </select>
+        <button className="btn-primary" style={{ width: 'auto' }} onClick={handleRun} disabled={running}>
+          {running ? 'Running…' : 'Run'}
+        </button>
+      </div>
+      {error && <p className="error-text" style={{ marginTop: 12 }}>{error}</p>}
+      {result && <DiagnoseResult result={result} />}
+    </div>
+  );
+}
+
+function DiagnoseResult({ result }: { result: any }) {
+  const cellStyle: React.CSSProperties = { padding: '6px 10px', fontSize: 12, borderTop: '1px solid #f0f2f5' };
+  const headStyle: React.CSSProperties = { ...cellStyle, fontWeight: 600, color: '#666', background: '#fafbfc', borderTop: 'none' };
+  return (
+    <div style={{ marginTop: 16, fontSize: 13 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 16 }}>
+        <div>
+          <div style={{ color: '#666', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Task</div>
+          <div style={{ fontWeight: 600 }}>{result.task.title} <span style={{ color: '#888', fontWeight: 400 }}>({result.task.slug})</span></div>
+          <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>verifier: {result.task.verifierType}</div>
+          <pre style={{ background: '#f5f6f8', padding: 8, borderRadius: 6, fontSize: 11, marginTop: 6, overflow: 'auto' }}>
+            {JSON.stringify(result.task.verifierConfig ?? {}, null, 2)}
+          </pre>
+        </div>
+        <div>
+          <div style={{ color: '#666', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Verifier query</div>
+          <pre style={{ background: '#f5f6f8', padding: 8, borderRadius: 6, fontSize: 11, marginTop: 0, overflow: 'auto' }}>
+            {JSON.stringify(result.txQuery, null, 2)}
+          </pre>
+          <div style={{ color: '#666', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 12, marginBottom: 4 }}>Total USD</div>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>${result.totalUsd.toFixed(2)}</div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 8, fontWeight: 600 }}>Matching transactions ({result.matchingTransactions.length})</div>
+      {result.matchingTransactions.length === 0 ? (
+        <div style={{ color: '#999', fontStyle: 'italic', padding: '12px 0' }}>No transactions matched the verifier filter.</div>
+      ) : (
+        <div style={{ overflow: 'auto', border: '1px solid #f0f2f5', borderRadius: 6 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ ...headStyle, textAlign: 'left' }}>When</th>
+                <th style={{ ...headStyle, textAlign: 'left' }}>Action</th>
+                <th style={{ ...headStyle, textAlign: 'left' }}>Type</th>
+                <th style={{ ...headStyle, textAlign: 'left' }}>Symbol</th>
+                <th style={{ ...headStyle, textAlign: 'right' }}>Amount</th>
+                <th style={{ ...headStyle, textAlign: 'right' }}>Price</th>
+                <th style={{ ...headStyle, textAlign: 'right' }}>USD</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.matchingTransactions.map((tx: any) => (
+                <tr key={tx.id}>
+                  <td style={cellStyle}>{tx.createdAt ? new Date(tx.createdAt).toLocaleString() : '—'}</td>
+                  <td style={cellStyle}>{tx.action}</td>
+                  <td style={cellStyle}>{tx.type ?? '—'}</td>
+                  <td style={cellStyle}>{tx.symbol}</td>
+                  <td style={{ ...cellStyle, textAlign: 'right' }}>{tx.uiAmount.toFixed(6)}</td>
+                  <td style={{ ...cellStyle, textAlign: 'right' }}>${tx.priceUsd.toFixed(2)}</td>
+                  <td style={{ ...cellStyle, textAlign: 'right', fontWeight: 600 }}>${tx.usd.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16, marginBottom: 8, fontWeight: 600 }}>All recent vault transactions ({result.allRecentTransactions.length})</div>
+      <div style={{ overflow: 'auto', border: '1px solid #f0f2f5', borderRadius: 6 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ ...headStyle, textAlign: 'left' }}>When</th>
+              <th style={{ ...headStyle, textAlign: 'left' }}>Action</th>
+              <th style={{ ...headStyle, textAlign: 'left' }}>Type</th>
+              <th style={{ ...headStyle, textAlign: 'left' }}>Status</th>
+              <th style={{ ...headStyle, textAlign: 'left' }}>Mint</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.allRecentTransactions.map((tx: any) => (
+              <tr key={tx.id}>
+                <td style={cellStyle}>{tx.createdAt ? new Date(tx.createdAt).toLocaleString() : '—'}</td>
+                <td style={cellStyle}>{tx.action}</td>
+                <td style={cellStyle}>{tx.type ?? '—'}</td>
+                <td style={cellStyle}>
+                  <span style={{
+                    fontSize: 11,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    background: tx.status === 'confirmed' ? '#d4edda' : tx.status === 'failed' ? '#f8d7da' : '#fff3cd',
+                    color: tx.status === 'confirmed' ? '#155724' : tx.status === 'failed' ? '#721c24' : '#856404',
+                  }}>
+                    {tx.status}
+                  </span>
+                </td>
+                <td style={{ ...cellStyle, fontFamily: 'monospace', fontSize: 11 }}>{tx.mint.slice(0, 8)}…{tx.mint.slice(-4)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
