@@ -65,8 +65,10 @@ export function useRewards() {
       [built.mintTransactionBase64],
     );
 
-    // Best-effort confirmation hint to backend (recovery cron is the failsafe)
-    apiService.confirmRewardMint(built.mintedBadgeId, result.bundleSignatures).catch(() => {});
+    // Confirm with backend — server verifies onchain status synchronously,
+    // so by the time this resolves the badge is usually already MINTED. The
+    // recovery cron remains the failsafe for the slow path.
+    await apiService.confirmRewardMint(built.mintedBadgeId, result.bundleSignatures).catch(() => {});
 
     invalidateRewards();
     return { assetAddress: built.assetAddress, signature: result.signature };

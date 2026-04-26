@@ -116,12 +116,6 @@ export default function RewardBadgeCard({ task, onPress, compact }: Props) {
           </Text>
         )}
       </View>
-
-      {task.maxSupply != null && (
-        <Text style={[styles.supply, { color: colors.textSecondary }]} numberOfLines={1}>
-          Supply: {task.maxSupply.toLocaleString('en-US')}
-        </Text>
-      )}
     </TouchableOpacity>
   );
 }
@@ -198,9 +192,5 @@ const styles = StyleSheet.create({
   },
   ctaTextClaimable: {
     color: '#fff',
-  },
-  supply: {
-    fontSize: 11,
-    textAlign: 'center',
   },
 });

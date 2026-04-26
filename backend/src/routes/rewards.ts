@@ -17,6 +17,7 @@ import {
 } from '../models/MintedBadge';
 import { isValidSolanaAddress } from '../utils/validation';
 import { createChallenge, consumeChallenge } from '../services/challengeStore';
+import { tryConfirmBadgeMint } from '../services/badgeMintConfirmation';
 
 const router = Router();
 
@@ -296,12 +297,18 @@ router.post('/mint/confirm', async (req: AuthenticatedRequest, res: Response) =>
       return;
     }
 
-    // Optimistically record signatures; recovery cron will verify on-chain.
     badge.bundleSignatures = bundleSignatures;
     badge.status = MintedBadgeStatus.PENDING;
     await badge.save();
 
-    res.json({ success: true });
+    // Try to verify on-chain immediately so the UI doesn't sit on
+    // mint_pending while waiting for the recovery cron's grace window.
+    const outcome = await tryConfirmBadgeMint(badge).catch((err) => {
+      console.error('mint/confirm: tryConfirmBadgeMint error:', err);
+      return 'pending' as const;
+    });
+
+    res.json({ success: true, status: outcome });
   } catch (err) {
     console.error('POST /rewards/v2/mint/confirm error:', err);
     res.status(500).json({ success: false, error: 'Failed to record confirmation' });
