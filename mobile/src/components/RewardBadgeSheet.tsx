@@ -28,7 +28,10 @@ function formatProgressLabel(task: TaskWithProgress): string {
   if (isUsdBased(task.verifierType)) {
     const currentCents = Number(task.currentValue || '0');
     const targetCents = Number(task.targetValue || '0');
-    const fmt = (cents: number) => '$' + Math.floor(cents / 100).toLocaleString('en-US');
+    const fmt = (cents: number) => {
+      const truncated = Math.floor(cents / 10) / 10;
+      return '$' + truncated.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+    };
     return `${fmt(currentCents)} of ${fmt(targetCents)}`;
   }
   if (task.targetValue === '1') {

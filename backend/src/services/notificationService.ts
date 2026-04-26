@@ -84,6 +84,11 @@ export async function dispatchOnchainNotification(
     const inBundle = await dbManager.isSignatureInBundle(tx.signature);
     if (inBundle) return;
 
+    // Badge mint bundles are handled by the badge confirmation flow, which
+    // dispatches its own notification with the badge title.
+    const inBadgeBundle = await dbManager.isSignatureInBadgeBundle(tx.signature);
+    if (inBadgeBundle) return;
+
     // Fall back to parsing the Helius transaction data
     const parsed = parseTransaction(tx, vaultAddress);
     if (!parsed) return;
