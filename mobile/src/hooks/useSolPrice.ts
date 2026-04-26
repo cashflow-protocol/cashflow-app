@@ -24,5 +24,5 @@ export function useSolPrice() {
     return () => clearInterval(interval);
   }, [fetchPrice]);
 
-  return { price, loading };
+  return { price, loading, refresh: fetchPrice };
 }

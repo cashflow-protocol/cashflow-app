@@ -21,8 +21,16 @@ import {
 } from '@solana-program/address-lookup-table';
 import type { AddressLookupTable } from '@solana-program/address-lookup-table';
 import { getSetComputeUnitPriceInstruction } from '@solana-program/compute-budget';
-import { TOKEN_PROGRAM_ADDRESS, ASSOCIATED_TOKEN_PROGRAM_ADDRESS } from '@solana-program/token';
-import { TOKEN_2022_PROGRAM_ADDRESS } from '@solana-program/token-2022';
+import {
+    TOKEN_PROGRAM_ADDRESS,
+    ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
+    findAssociatedTokenPda,
+} from '@solana-program/token';
+import {
+    TOKEN_2022_PROGRAM_ADDRESS,
+    findAssociatedTokenPda as findAssociatedTokenPda2022,
+} from '@solana-program/token-2022';
+import { SUPPORTED_TOKEN_MINTS } from '../constants/tokens';
 
 export async function initialiseLookupManager() {
     try {
@@ -87,10 +95,36 @@ export class LookupManager {
         this.accounts.push(this.owner.address);
 
         if (process.env.TREASURY_WALLET_ADDRESS) {
-            this.accounts.push(address(process.env.TREASURY_WALLET_ADDRESS));
+            const treasury = address(process.env.TREASURY_WALLET_ADDRESS);
+            this.accounts.push(treasury);
+
+            const treasuryAtas = await this.deriveTreasuryAtas(treasury);
+            this.accounts.push(...treasuryAtas);
         }
 
         console.log('[LookupManager] Accounts:', this.accounts);
+    }
+
+    private async getTokenProgramForMint(mint: Address): Promise<Address> {
+        const accountInfo = await this.rpc.getAccountInfo(mint, { encoding: 'base64' }).send();
+        if (accountInfo.value?.owner === TOKEN_2022_PROGRAM_ADDRESS) {
+            return TOKEN_2022_PROGRAM_ADDRESS;
+        }
+        return TOKEN_PROGRAM_ADDRESS;
+    }
+
+    private async deriveTreasuryAtas(treasury: Address): Promise<Address[]> {
+        return Promise.all(
+            SUPPORTED_TOKEN_MINTS.map(async (mintStr) => {
+                const mint = address(mintStr);
+                const tokenProgram = await this.getTokenProgramForMint(mint);
+                const findAta = tokenProgram === TOKEN_2022_PROGRAM_ADDRESS
+                    ? findAssociatedTokenPda2022
+                    : findAssociatedTokenPda;
+                const [ata] = await findAta({ owner: treasury, mint, tokenProgram });
+                return ata;
+            }),
+        );
     }
 
     private async buildAndSendTx(instructions: any[]): Promise<string> {

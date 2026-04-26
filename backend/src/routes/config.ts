@@ -3,11 +3,16 @@ import { LookupManager } from '../managers/LookupManager';
 import { createVaultCreationFeeRecord } from '../services/feeService';
 import { VAULT_CREATION_FEE } from '../constants';
 import { getAdminTxFeePayerPublicKeyBase58 } from '../services/adminFeePayer';
+import { getSetting, APP_SETTING_KEYS } from '../models/AppSetting';
 
 const router = Router();
 
 // GET /config/v1 - App configuration for mobile clients
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
+  const rewardsCollectionAddress = await getSetting(
+    APP_SETTING_KEYS.REWARDS_COLLECTION_ADDRESS,
+    process.env.REWARDS_COLLECTION_ADDRESS ?? null,
+  );
   res.json({
     success: true,
     data: {
@@ -17,6 +22,8 @@ router.get('/', (req: Request, res: Response) => {
       vaultCreationFee: VAULT_CREATION_FEE,
       supportUrl: process.env.SUPPORT_URL ?? 'https://t.me/mike_cashflow',
       adminTxFeePayerPublicKey: getAdminTxFeePayerPublicKeyBase58(),
+      rewardsCollectionAddress,
+      rewardsBadgeMintFeeLamports: 20_000_000,
     },
   });
 });

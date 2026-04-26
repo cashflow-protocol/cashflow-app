@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type CSSProperties, type ReactNode } from 'react';
 import { getStats } from '../api';
 
 interface CountGroup {
@@ -37,79 +37,295 @@ interface StatsData {
   };
 }
 
+// ─── Formatters ───
+
 function formatUsd(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+}
+
+function formatUsdCompact(n: number): string {
+  if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n / 1e3).toFixed(2) + 'K';
+  return formatUsd(n);
 }
 
 function formatAmount(n: number): string {
   return n.toLocaleString('en-US', { maximumFractionDigits: n < 1 ? 6 : 2 });
 }
 
-const cardStyle: React.CSSProperties = {
+function coinColor(symbol: string): string {
+  const known: Record<string, string> = {
+    USDC: '#2775ca',
+    USDT: '#26a17b',
+    SOL: '#9945FF',
+    JupUSD: '#ff9900',
+    USDG: '#14b8a6',
+    USDS: '#627eea',
+    PYUSD: '#0070E0',
+    EURC: '#0052FF',
+    'USD*': '#8B5CF6',
+    sUSDv: '#EC4899',
+    ONyc: '#F59E0B',
+  };
+  if (known[symbol]) return known[symbol];
+  const palette = ['#3985D8', '#9945FF', '#26a17b', '#f0b90b', '#627eea', '#ec407a', '#14b8a6'];
+  let hash = 0;
+  for (let i = 0; i < symbol.length; i++) hash = (hash * 31 + symbol.charCodeAt(i)) >>> 0;
+  return palette[hash % palette.length];
+}
+
+// ─── Styles ───
+
+const cardStyle: CSSProperties = {
   background: '#fff',
   borderRadius: 12,
   padding: '20px 24px',
   boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-  flex: 1,
-  minWidth: 0,
 };
 
-const valueStyle: React.CSSProperties = {
+const heroCardStyle: CSSProperties = {
+  ...cardStyle,
+  background: 'linear-gradient(135deg, #3985D8 0%, #5B9FE8 100%)',
+  color: '#fff',
+  boxShadow: '0 4px 16px rgba(57,133,216,0.25)',
+  padding: '24px 28px',
+  gridColumn: 'span 2',
+};
+
+const kpiValue: CSSProperties = {
   fontSize: 28,
   fontWeight: 700,
   color: '#1a1a1a',
-  lineHeight: 1.2,
+  lineHeight: 1.1,
+  letterSpacing: '-0.02em',
 };
 
-const labelStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: '#666',
-  marginTop: 4,
+const kpiLabel: CSSProperties = {
+  fontSize: 12,
+  color: '#999',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  marginBottom: 8,
 };
 
-const rowStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: 12,
-};
-
-const sectionStyle: React.CSSProperties = {
+const sectionStyle: CSSProperties = {
   marginBottom: 28,
 };
 
-const sectionTitleStyle: React.CSSProperties = {
+const sectionTitleStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 600,
-  color: '#999',
+  color: '#666',
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
-  marginBottom: 10,
+  marginBottom: 12,
 };
 
-const subLabelStyle: React.CSSProperties = {
-  fontSize: 12,
-  color: '#999',
-  marginBottom: 6,
-  marginTop: 10,
-};
+// ─── Delta indicator ───
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function Delta({ today, yesterday }: { today: number; yesterday: number }) {
+  if (today === yesterday) {
+    return <span style={{ color: '#999', fontSize: 12, fontWeight: 600 }}>— no change</span>;
+  }
+  if (yesterday === 0) {
+    return <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 600 }}>▲ new</span>;
+  }
+  const diff = today - yesterday;
+  const pct = (diff / yesterday) * 100;
+  const isUp = diff > 0;
+  const color = isUp ? '#16a34a' : '#e53e3e';
+  const arrow = isUp ? '▲' : '▼';
   return (
-    <div style={cardStyle}>
-      <div style={valueStyle}>{value.toLocaleString()}</div>
-      <div style={labelStyle}>{label}</div>
+    <span style={{ color, fontSize: 12, fontWeight: 600 }}>
+      {arrow} {Math.abs(pct).toFixed(0)}%
+    </span>
+  );
+}
+
+// ─── Hero TVL card ───
+
+function HeroTvl({ totalUsd, coinCount }: { totalUsd: number; coinCount: number }) {
+  return (
+    <div style={heroCardStyle}>
+      <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', opacity: 0.85 }}>
+        Total Value Locked
+      </div>
+      <div style={{ fontSize: 42, fontWeight: 700, lineHeight: 1.1, letterSpacing: '-0.02em', marginTop: 8 }}>
+        {formatUsd(totalUsd)}
+      </div>
+      <div style={{ fontSize: 13, marginTop: 8, opacity: 0.85 }}>
+        Across {coinCount} {coinCount === 1 ? 'coin' : 'coins'} · Net of deposits − withdrawals (confirmed)
+      </div>
     </div>
   );
 }
 
-function TvlCard({ label, usd, amount }: { label: string; usd: number; amount?: string }) {
+// ─── KPI card with today/yesterday delta ───
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  today,
+  yesterday,
+}: {
+  label: string;
+  value: ReactNode;
+  sub?: string;
+  today?: number;
+  yesterday?: number;
+}) {
   return (
     <div style={cardStyle}>
-      <div style={valueStyle}>{formatUsd(usd)}</div>
-      <div style={labelStyle}>{label}</div>
-      {amount ? <div style={{ ...labelStyle, color: '#999', marginTop: 2 }}>{amount}</div> : null}
+      <div style={kpiLabel}>{label}</div>
+      <div style={kpiValue}>{value}</div>
+      {sub ? <div style={{ fontSize: 13, color: '#666', marginTop: 6 }}>{sub}</div> : null}
+      {today !== undefined && yesterday !== undefined ? (
+        <div style={{ fontSize: 13, color: '#666', marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span>
+            Today <strong style={{ color: '#1a1a1a' }}>{today.toLocaleString()}</strong>
+          </span>
+          <Delta today={today} yesterday={yesterday} />
+        </div>
+      ) : null}
     </div>
   );
 }
+
+// ─── TVL coin row with progress bar ───
+
+function CoinRow({ coin, pctOfTotal, isFirst }: { coin: TvlCoin; pctOfTotal: number; isFirst: boolean }) {
+  const color = coinColor(coin.symbol);
+  const initials = coin.symbol.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || coin.symbol.slice(0, 3);
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '40px 1fr auto',
+        alignItems: 'center',
+        gap: 16,
+        padding: '14px 20px',
+        borderTop: isFirst ? 'none' : '1px solid #f0f2f5',
+      }}
+    >
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: '50%',
+          background: color,
+          color: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: '0.3px',
+        }}
+      >
+        {initials}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1a1a1a' }}>{coin.symbol}</span>
+          <span style={{ fontSize: 12, color: '#999' }}>{formatAmount(coin.tvlUi)}</span>
+        </div>
+        <div
+          style={{
+            position: 'relative',
+            height: 6,
+            background: '#f0f2f5',
+            borderRadius: 3,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: '0 auto 0 0',
+              width: `${Math.max(2, pctOfTotal)}%`,
+              background: color,
+              borderRadius: 3,
+              transition: 'width 0.3s ease',
+            }}
+          />
+        </div>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a' }}>{formatUsdCompact(coin.tvlUsd)}</div>
+        <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>{pctOfTotal.toFixed(1)}%</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Comparison table (rows × timeframes) ───
+
+interface ComparisonRow {
+  label: string;
+  total: number;
+  today: number;
+  yesterday: number;
+  emphasize?: boolean;
+}
+
+function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
+  const cellStyle: CSSProperties = { padding: '12px 20px', fontSize: 14, color: '#1a1a1a' };
+  const headStyle: CSSProperties = {
+    padding: '10px 20px',
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#999',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    textAlign: 'right',
+    background: '#fafbfc',
+  };
+  return (
+    <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={{ ...headStyle, textAlign: 'left' }}></th>
+            <th style={headStyle}>Today</th>
+            <th style={headStyle}>Yesterday</th>
+            <th style={headStyle}>Change</th>
+            <th style={headStyle}>All time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr
+              key={row.label}
+              style={{
+                borderTop: i === 0 ? 'none' : '1px solid #f0f2f5',
+                background: row.emphasize ? '#fafbfc' : 'transparent',
+              }}
+            >
+              <td style={{ ...cellStyle, fontWeight: row.emphasize ? 700 : 500 }}>{row.label}</td>
+              <td style={{ ...cellStyle, textAlign: 'right', fontWeight: row.emphasize ? 700 : 400 }}>
+                {row.today.toLocaleString()}
+              </td>
+              <td style={{ ...cellStyle, textAlign: 'right', color: '#666', fontWeight: row.emphasize ? 700 : 400 }}>
+                {row.yesterday.toLocaleString()}
+              </td>
+              <td style={{ ...cellStyle, textAlign: 'right' }}>
+                <Delta today={row.today} yesterday={row.yesterday} />
+              </td>
+              <td style={{ ...cellStyle, textAlign: 'right', fontWeight: row.emphasize ? 700 : 500 }}>
+                {row.total.toLocaleString()}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Page ───
 
 export default function StatsPage() {
   const [stats, setStats] = useState<StatsData | null>(null);
@@ -130,12 +346,16 @@ export default function StatsPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   if (loading) {
     return (
       <div>
-        <div className="page-header"><h2>Stats</h2></div>
+        <div className="page-header">
+          <h2>Stats</h2>
+        </div>
         <p style={{ textAlign: 'center', padding: 40, color: '#999' }}>Loading...</p>
       </div>
     );
@@ -146,102 +366,134 @@ export default function StatsPage() {
       <div>
         <div className="page-header">
           <h2>Stats</h2>
-          <button className="btn-primary" onClick={load}>Retry</button>
+          <button className="btn-primary" onClick={load}>
+            Retry
+          </button>
         </div>
-        <p className="error-text" style={{ textAlign: 'center', padding: 40 }}>{error}</p>
+        <p className="error-text" style={{ textAlign: 'center', padding: 40 }}>
+          {error}
+        </p>
       </div>
     );
   }
+
+  const waitlistToday = stats.waitlist.today.approved + stats.waitlist.today.notApproved;
+  const waitlistYesterday = stats.waitlist.yesterday.approved + stats.waitlist.yesterday.notApproved;
+
+  const txRows: ComparisonRow[] = [
+    {
+      label: 'Deposits',
+      total: stats.transactions.deposits.total,
+      today: stats.transactions.deposits.today,
+      yesterday: stats.transactions.deposits.yesterday,
+    },
+    {
+      label: 'Withdrawals',
+      total: stats.transactions.withdrawals.total,
+      today: stats.transactions.withdrawals.today,
+      yesterday: stats.transactions.withdrawals.yesterday,
+    },
+    {
+      label: 'Transfers',
+      total: stats.transactions.transfers.total,
+      today: stats.transactions.transfers.today,
+      yesterday: stats.transactions.transfers.yesterday,
+    },
+    {
+      label: 'Total',
+      total: stats.transactions.total,
+      today: stats.transactions.today,
+      yesterday: stats.transactions.yesterday,
+      emphasize: true,
+    },
+  ];
+
+  const waitlistRows: ComparisonRow[] = [
+    {
+      label: 'Approved',
+      total: stats.waitlist.approved,
+      today: stats.waitlist.today.approved,
+      yesterday: stats.waitlist.yesterday.approved,
+    },
+    {
+      label: 'Not approved',
+      total: stats.waitlist.notApproved,
+      today: stats.waitlist.today.notApproved,
+      yesterday: stats.waitlist.yesterday.notApproved,
+    },
+    {
+      label: 'Total',
+      total: stats.waitlist.total,
+      today: waitlistToday,
+      yesterday: waitlistYesterday,
+      emphasize: true,
+    },
+  ];
 
   return (
     <div>
       <div className="page-header">
         <h2>Stats</h2>
-        <button className="btn-secondary" onClick={load}>Refresh</button>
+        <button className="btn-secondary" onClick={load}>
+          Refresh
+        </button>
       </div>
 
-      {/* TVL */}
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>TVL</div>
-        <div style={rowStyle}>
-          <TvlCard label="Total TVL" usd={stats.tvl.totalUsd} />
-        </div>
-        {stats.tvl.coins.length > 0 ? (
-          <>
-            <div style={subLabelStyle}>By coin</div>
-            <div style={{ ...rowStyle, flexWrap: 'wrap' }}>
-              {stats.tvl.coins.map((c) => (
-                <TvlCard
-                  key={c.mint}
-                  label={c.symbol}
-                  usd={c.tvlUsd}
-                  amount={`${formatAmount(c.tvlUi)} ${c.symbol}`}
-                />
-              ))}
-            </div>
-          </>
-        ) : null}
+      {/* Top KPI grid */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+          gap: 16,
+          marginBottom: 28,
+        }}
+      >
+        <HeroTvl totalUsd={stats.tvl.totalUsd} coinCount={stats.tvl.coins.length} />
+        <KpiCard
+          label="Users"
+          value={stats.users.total.toLocaleString()}
+          today={stats.users.today}
+          yesterday={stats.users.yesterday}
+        />
+        <KpiCard
+          label="Transactions"
+          value={stats.transactions.total.toLocaleString()}
+          today={stats.transactions.today}
+          yesterday={stats.transactions.yesterday}
+        />
       </div>
 
-      {/* Users */}
+      {/* TVL by coin */}
       <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Users</div>
-        <div style={rowStyle}>
-          <StatCard label="Total" value={stats.users.total} />
-          <StatCard label="Today (UTC)" value={stats.users.today} />
-          <StatCard label="Yesterday (UTC)" value={stats.users.yesterday} />
-        </div>
-      </div>
-
-      {/* Waitlist */}
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Waitlist</div>
-        <div style={rowStyle}>
-          <StatCard label="Total" value={stats.waitlist.total} />
-          <StatCard label="Approved" value={stats.waitlist.approved} />
-          <StatCard label="Not Approved" value={stats.waitlist.notApproved} />
-        </div>
-        <div style={subLabelStyle}>Yesterday (UTC)</div>
-        <div style={rowStyle}>
-          <StatCard label="Approved" value={stats.waitlist.yesterday.approved} />
-          <StatCard label="Not Approved" value={stats.waitlist.yesterday.notApproved} />
-        </div>
-        <div style={subLabelStyle}>Today (UTC)</div>
-        <div style={rowStyle}>
-          <StatCard label="Approved" value={stats.waitlist.today.approved} />
-          <StatCard label="Not Approved" value={stats.waitlist.today.notApproved} />
-        </div>
+        <div style={sectionTitleStyle}>TVL by coin</div>
+        {stats.tvl.coins.length === 0 ? (
+          <div style={{ ...cardStyle, color: '#999', textAlign: 'center', padding: '32px 20px' }}>
+            No deposits yet
+          </div>
+        ) : (
+          <div style={{ ...cardStyle, padding: '6px 0', overflow: 'hidden' }}>
+            {stats.tvl.coins.map((c, i) => (
+              <CoinRow
+                key={c.mint}
+                coin={c}
+                pctOfTotal={stats.tvl.totalUsd > 0 ? (c.tvlUsd / stats.tvl.totalUsd) * 100 : 0}
+                isFirst={i === 0}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Transactions */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Transactions</div>
-        <div style={rowStyle}>
-          <StatCard label="Total" value={stats.transactions.total} />
-          <StatCard label="Today (UTC)" value={stats.transactions.today} />
-          <StatCard label="Yesterday (UTC)" value={stats.transactions.yesterday} />
-        </div>
+        <ComparisonTable rows={txRows} />
+      </div>
 
-        <div style={subLabelStyle}>Deposits</div>
-        <div style={rowStyle}>
-          <StatCard label="Total" value={stats.transactions.deposits.total} />
-          <StatCard label="Today" value={stats.transactions.deposits.today} />
-          <StatCard label="Yesterday" value={stats.transactions.deposits.yesterday} />
-        </div>
-
-        <div style={subLabelStyle}>Withdrawals</div>
-        <div style={rowStyle}>
-          <StatCard label="Total" value={stats.transactions.withdrawals.total} />
-          <StatCard label="Today" value={stats.transactions.withdrawals.today} />
-          <StatCard label="Yesterday" value={stats.transactions.withdrawals.yesterday} />
-        </div>
-
-        <div style={subLabelStyle}>Transfers</div>
-        <div style={rowStyle}>
-          <StatCard label="Total" value={stats.transactions.transfers.total} />
-          <StatCard label="Today" value={stats.transactions.transfers.today} />
-          <StatCard label="Yesterday" value={stats.transactions.transfers.yesterday} />
-        </div>
+      {/* Waitlist */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Waitlist</div>
+        <ComparisonTable rows={waitlistRows} />
       </div>
     </div>
   );

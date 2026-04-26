@@ -28,6 +28,9 @@ export class User {
 
   @prop({ type: () => [String], default: [] })
   public fcmTokens!: string[];
+
+  @prop()
+  public seekerAttestedAt?: Date;
 }
 
 export const UserModel = getModelForClass(User);

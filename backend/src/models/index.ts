@@ -15,3 +15,7 @@ export { FeeTransaction, FeeTransactionModel, FeeTransactionStatus, FeeType } fr
 export { RecoveryProposal, RecoveryProposalModel, RecoveryProposalStatus } from './RecoveryProposal';
 export { NotifyInterest, NotifyInterestModel } from './NotifyInterest';
 export { VaultPayment, VaultPaymentModel, VaultPaymentStatus, VaultMode } from './VaultPayment';
+export { RewardTask, RewardTaskModel, RewardVerifierType } from './RewardTask';
+export { UserRewardProgress, UserRewardProgressModel, RewardProgressStatus } from './UserRewardProgress';
+export { MintedBadge, MintedBadgeModel, MintedBadgeStatus } from './MintedBadge';
+export { AppSetting, AppSettingModel, APP_SETTING_KEYS, getSetting, setSetting, invalidateSettingCache } from './AppSetting';

@@ -20,6 +20,7 @@ import { initialiseLookupManager } from './managers/LookupManager';
 import notificationsRouter from './routes/notifications';
 import recoveryRouter from './routes/recovery';
 import vaultRecoveryRouter from './routes/vault-recovery';
+import rewardsRouter from './routes/rewards';
 import { initializeFirebase } from './services/firebaseManager';
 import { initializeHeliusListener, verifyWebhookAuth, handleWebhookPayload } from './services/heliusListener';
 
@@ -34,6 +35,7 @@ const allowedOrigins = [
   'https://www.cashflow.fun',
   'https://dev.cashflow.fun',
   'https://admin.cashflow.fun',
+  'https://admin-dev.cashflow.fun',
   ...(process.env.NODE_ENV !== 'production' ? ['http://localhost:3000', 'http://localhost:5173'] : []),
 ];
 app.use(cors({ origin: allowedOrigins }));
@@ -65,6 +67,7 @@ app.use('/solana/v2', apiLimiter, requireAuth, signResponseMiddleware, solanaRou
 app.use('/suggestions/v2', apiLimiter, requireAuth, signResponseMiddleware, suggestionsRouter);
 app.use('/notifications/v2', apiLimiter, requireAuth, notificationsRouter);
 app.use('/recovery/v1', apiLimiter, requireAuth, recoveryRouter);
+app.use('/rewards/v2', apiLimiter, requireAuth, signResponseMiddleware, rewardsRouter);
 
 // Helius webhook — receives enhanced transaction data (no JWT, secured by auth header)
 app.post('/helius/webhook', async (req, res) => {

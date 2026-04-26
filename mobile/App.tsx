@@ -44,6 +44,7 @@ import { initializeRealtimeNotifications, stopRealtimeNotifications } from './sr
 import { ToastProvider, useToast } from './src/contexts/ToastContext';
 import { invalidateAssets } from './src/hooks/useAssets';
 import { invalidateEarnTokens } from './src/hooks/useEarnTokens';
+import { invalidateRewards } from './src/hooks/useRewards';
 import {
   logScreenView,
   logTabPress,
@@ -156,9 +157,13 @@ function App() {
     const type = data?.type;
     if (type === 'transfer_in' || type === 'transfer_out') {
       invalidateAssets();
+      invalidateRewards();
     } else if (type === 'deposit' || type === 'withdraw') {
       invalidateAssets();
       invalidateEarnTokens();
+      invalidateRewards();
+    } else if (type === 'badge_minted') {
+      invalidateRewards();
     }
   }, [showToast]);
 

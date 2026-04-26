@@ -25,7 +25,7 @@ import {
 } from './keypairStorage';
 import { createCoverFromSquadInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
-import { IS_SOLANA_MOBILE, getVaultCreationFee, getAdminTxFeePayerPublicKey, ADMIN_COVER_TARGET, SQUAD_SPENDING_LIMIT } from '../config/constants';
+import { IS_SOLANA_MOBILE, getVaultCreationFee, getAdminTxFeePayerPublicKey, ADMIN_COVER_TARGET, DEFAULT_SPENDING_LIMIT } from '../config/constants';
 import { logError } from './analyticsService';
 
 const { Permission, Permissions } = multisig.types;
@@ -48,7 +48,7 @@ const JITO_TIP_ACCOUNTS = [
   '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT',
 ];
 
-const JITO_TIP_LAMPORTS = 500_000; // 0.0005 SOL
+const JITO_TIP_FALLBACK_LAMPORTS = 500_000; // 0.0005 SOL
 
 // Address Lookup Table for transaction compression (fetched from backend config)
 let cachedLuts: AddressLookupTableAccount[] | null = null;
@@ -333,13 +333,20 @@ function kitIxToWeb3(ix: Awaited<ReturnType<typeof createCoverFromSquadInstructi
   });
 }
 
-/** Build a Jito tip instruction for the fee payer → random tip account. */
-function jitoTipIx(feePayer: PublicKey): TransactionInstruction {
+/** Build a Jito tip instruction for the fee payer → random tip account.
+ *  Fetches the current dynamic tip (cached 15s on the backend + client). */
+async function jitoTipIx(feePayer: PublicKey): Promise<TransactionInstruction> {
   const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
+  let lamports = JITO_TIP_FALLBACK_LAMPORTS;
+  try {
+    lamports = await apiService.getJitoTipLamports();
+  } catch {
+    // fall through to fallback
+  }
   return SystemProgram.transfer({
     fromPubkey: feePayer,
     toPubkey: new PublicKey(tipAccount),
-    lamports: JITO_TIP_LAMPORTS,
+    lamports,
   });
 }
 
@@ -403,7 +410,7 @@ export async function addGasCoverSpendingLimit(
         createKey,
         vaultIndex: 0,
         mint: PublicKey.default, // native SOL
-        amount: SQUAD_SPENDING_LIMIT,
+        amount: DEFAULT_SPENDING_LIMIT,
         period: Period.Day,
         members: spendingLimitMembers,
         destinations: [adminFeePayerPubkey],
@@ -432,7 +439,7 @@ export async function addGasCoverSpendingLimit(
       multisigPda, transactionIndex, rentCollector: new PublicKey(multisigAccount.rentCollector),
     }));
   }
-  tx2Instructions.push(jitoTipIx(feePayer));
+  tx2Instructions.push(await jitoTipIx(feePayer));
   // No cover here — this function *creates* the spending limit, so it can't use it yet
 
   const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: tx2Instructions }).compileToV0Message(luts);
@@ -587,7 +594,7 @@ export async function updateSpendingLimit(
       multisigPda, transactionIndex: addTxIndex, rentCollector: new PublicKey(multisigAccount.rentCollector),
     }));
   }
-  tx4Ixs.push(jitoTipIx(feePayer));
+  tx4Ixs.push(await jitoTipIx(feePayer));
   // Reimburse admin gas from vault via the newly created spending limit
   tx4Ixs.push(
     kitIxToWeb3(await createCoverFromSquadInstruction(
@@ -1156,7 +1163,7 @@ export async function addMember(
       multisigPda, transactionIndex, rentCollector: new PublicKey(multisigAccount.rentCollector),
     }));
   }
-  tx2Instructions.push(jitoTipIx(feePayer));
+  tx2Instructions.push(await jitoTipIx(feePayer));
   const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
   const coverMember = ctx.seekerMode ? ctx.walletPubkey! : ctx.cloudPubkey!;
   tx2Instructions.push(
@@ -1215,7 +1222,7 @@ export async function removeMember(
       multisigPda, transactionIndex, rentCollector: new PublicKey(multisigAccount.rentCollector),
     }));
   }
-  tx2Instructions.push(jitoTipIx(feePayer));
+  tx2Instructions.push(await jitoTipIx(feePayer));
   const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
   const coverMember = ctx.seekerMode ? ctx.walletPubkey! : ctx.cloudPubkey!;
   tx2Instructions.push(
@@ -1246,6 +1253,8 @@ export async function executeVaultTransaction(
   instructions: Array<{ programId: string; accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; data: string }>,
   extraLookupTables?: string[],
   transactionId?: string,
+  /** Pre-signed base64 transactions to append to the Jito bundle (e.g. Metaplex Core mint). */
+  extraSignedTransactions?: string[],
 ): Promise<{ signature: string; bundleSignatures: string[] }> {
   const multisigPda = new PublicKey(multisigAddress);
   const vaultData = await getVault();
@@ -1416,7 +1425,7 @@ export async function executeVaultTransaction(
       }),
     );
   }
-  tx4Instructions.push(jitoTipIx(feePayer));
+  tx4Instructions.push(await jitoTipIx(feePayer));
   // Reimburse admin gas from vault via spending limit
   const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
   const coverMember = seekerMode ? walletPubkey! : cloudPubkey!;
@@ -1526,7 +1535,8 @@ export async function executeVaultTransaction(
       console.log(`[VaultTx] sizes: TX1=${tx1Base64.length}, TX2=${tx2Base64.length}, TX3=${tx3Base64.length}, TX4=${tx4Base64.length}`);
 
       console.log('[VaultTx] sending bundle...');
-      const bundleResult = await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64], transactionId);
+      const bundleTxs = [tx1Base64, tx2Base64, tx3Base64, tx4Base64, ...(extraSignedTransactions ?? [])];
+      const bundleResult = await apiService.sendBundle(bundleTxs, transactionId);
       console.log(`[VaultTx] bundle result: id=${bundleResult.bundleId}, status=${bundleResult.status}`);
 
       // Use real transaction signatures from Jito (local tx.signatures[0] may be zeros)
@@ -1572,7 +1582,8 @@ export async function executeVaultTransaction(
     console.log(`[VaultTx] sizes: TX1=${tx1Base64.length}, TX2=${tx2Base64.length}, TX3=${tx3Base64.length}, TX4=${tx4Base64.length}`);
 
     console.log('[VaultTx] sending bundle...');
-    const bundleResult = await apiService.sendBundle([tx1Base64, tx2Base64, tx3Base64, tx4Base64], transactionId);
+    const bundleTxs = [tx1Base64, tx2Base64, tx3Base64, tx4Base64, ...(extraSignedTransactions ?? [])];
+    const bundleResult = await apiService.sendBundle(bundleTxs, transactionId);
     console.log(`[VaultTx] bundle result: id=${bundleResult.bundleId}, status=${bundleResult.status}`);
 
     // Use real transaction signatures from Jito (local tx.signatures[0] may be zeros)
@@ -1624,7 +1635,8 @@ async function setRentCollector(
   const tx1 = new VersionedTransaction(msg1);
 
   const executeIx = multisig.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: creator, rentPayer: feePayer });
-  const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: [executeIx, jitoTipIx(feePayer)] }).compileToV0Message(luts);
+  const tipIx = await jitoTipIx(feePayer);
+  const msg2 = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: [executeIx, tipIx] }).compileToV0Message(luts);
   const tx2 = new VersionedTransaction(msg2);
 
   await signAndSendConfigBundle(ctx, tx1, tx2);
@@ -1713,7 +1725,7 @@ export async function reclaimRent(
             cancelIxs.push(multisig.instructions.proposalCancel({ multisigPda, transactionIndex: txIndex, member: ctx.walletPubkey }));
           }
         }
-        cancelIxs.push(jitoTipIx(feePayer));
+        cancelIxs.push(await jitoTipIx(feePayer));
 
         const { blockhash } = await connection.getLatestBlockhash('confirmed');
         const msg = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: cancelIxs }).compileToV0Message(luts);
@@ -1776,7 +1788,7 @@ export async function reclaimRent(
           ? multisig.instructions.vaultTransactionAccountsClose({ multisigPda, transactionIndex: txIndex, rentCollector })
           : multisig.instructions.configTransactionAccountsClose({ multisigPda, transactionIndex: txIndex, rentCollector });
 
-        const ixs = t === batch.length - 1 ? [closeIx, jitoTipIx(feePayer)] : [closeIx];
+        const ixs = t === batch.length - 1 ? [closeIx, await jitoTipIx(feePayer)] : [closeIx];
 
         const msg = new TransactionMessage({ payerKey: feePayer, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message(luts);
         const tx = new VersionedTransaction(msg);

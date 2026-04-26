@@ -3,7 +3,7 @@ import { DBManager } from '../managers';
 import { parseTransaction } from './transactionParser';
 import { sendPushNotification, writeNotificationToRTDB } from './firebaseManager';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants/tokens';
-import { updateCostBasisOnConfirm } from './feeService';
+import { onTransactionConfirmed } from './feeService';
 import type { HeliusEnhancedTransaction } from './transactionParser';
 
 async function getFcmTokensForUser(userId: string): Promise<string[]> {
@@ -48,9 +48,13 @@ async function tryMatchStoredTransaction(
     return null;
   }
 
-  // Mark the transaction as confirmed and update cost basis
-  await dbManager.confirmTransaction(String(record._id), TransactionStatus.CONFIRMED);
-  await updateCostBasisOnConfirm(String(record._id));
+  // Mark the transaction as confirmed and run post-confirm side effects
+  // (cost basis + reward cache invalidation). Idempotent — confirmTransaction
+  // returns null if status already advanced past SUBMITTED.
+  const transitioned = await dbManager.confirmTransaction(String(record._id), TransactionStatus.CONFIRMED);
+  if (transitioned) {
+    await onTransactionConfirmed(String(record._id));
+  }
 
   return { title, type: notifType, transactionId: String(record._id) };
 }

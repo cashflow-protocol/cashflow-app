@@ -1,4 +1,4 @@
-import { UserCostBasisModel, FeeTransactionModel, FeeTransactionStatus, FeeType, TransactionModel, TransactionAction } from '../models';
+import { UserCostBasisModel, FeeTransactionModel, FeeTransactionStatus, FeeType, TransactionModel, TransactionAction, UserRewardProgressModel, RewardProgressStatus } from '../models';
 import { TransferManager } from '../managers/TransferManager';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import type { SerializedInstruction } from '../types';
@@ -110,42 +110,62 @@ export async function createVaultCreationFeeRecord(params: {
 }
 
 /**
- * Update cost basis when a transaction is confirmed onchain.
- * Uses atomic $inc to avoid race conditions.
+ * Atomically increment a string-typed BigInt counter on a UserCostBasis doc
+ * using compare-and-swap. The field stays a string (BigInt-safe), so MongoDB's
+ * native $inc isn't usable — we retry on lost updates instead.
  */
-export async function updateCostBasisOnConfirm(transactionId: string): Promise<void> {
+async function casIncrementCostBasis(
+  vaultAddress: string,
+  mint: string,
+  increments: Partial<Record<'totalDeposited' | 'totalWithdrawn' | 'totalFeesCollected', bigint>>,
+): Promise<void> {
+  const fields = Object.keys(increments) as Array<keyof typeof increments>;
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const doc = await UserCostBasisModel.findOneAndUpdate(
+      { vaultAddress, mint },
+      { $setOnInsert: { totalDeposited: '0', totalWithdrawn: '0', totalFeesCollected: '0' } },
+      { upsert: true, new: true },
+    ).lean();
+
+    const filter: Record<string, unknown> = { vaultAddress, mint };
+    const setFields: Record<string, string> = {};
+    for (const field of fields) {
+      const currentStr = (doc as unknown as Record<string, string>)[field] ?? '0';
+      filter[field] = currentStr;
+      setFields[field] = (BigInt(currentStr) + (increments[field] ?? 0n)).toString();
+    }
+
+    const result = await UserCostBasisModel.updateOne(filter, { $set: setFields });
+    if (result.matchedCount === 1) return;
+  }
+
+  throw new Error(`casIncrementCostBasis: exceeded retries for ${vaultAddress}/${mint}`);
+}
+
+/**
+ * Run all post-confirm side effects for a transaction: cost basis updates and
+ * reward verifier cache invalidation. Called from both the scheduler poll and
+ * the Helius webhook path so behavior stays in sync.
+ */
+export async function onTransactionConfirmed(transactionId: string): Promise<void> {
   const tx = await TransactionModel.findById(transactionId).lean();
   if (!tx) return;
 
-  const { vaultAddress, mint, amount, action, feeAmount } = tx;
+  const { userVaultAddress, mint, amount, action, feeAmount } = tx;
 
-  if (!vaultAddress) return;
-
-  // Fields are stored as strings (BigInt-safe), so use read-modify-write instead of $inc
-  const costBasis = await UserCostBasisModel.findOne({ vaultAddress, mint }).lean();
+  if (!userVaultAddress) return;
 
   if (action === TransactionAction.DEPOSIT) {
-    const prev = BigInt(costBasis?.totalDeposited ?? '0');
-    const newVal = (prev + BigInt(amount)).toString();
-    await UserCostBasisModel.findOneAndUpdate(
-      { vaultAddress, mint },
-      { $set: { totalDeposited: newVal } },
-      { upsert: true },
-    );
+    await casIncrementCostBasis(userVaultAddress, mint, { totalDeposited: BigInt(amount) });
   } else if (action === TransactionAction.WITHDRAW) {
-    const prevWithdrawn = BigInt(costBasis?.totalWithdrawn ?? '0');
-    const setFields: Record<string, string> = {
-      totalWithdrawn: (prevWithdrawn + BigInt(amount)).toString(),
+    const increments: Parameters<typeof casIncrementCostBasis>[2] = {
+      totalWithdrawn: BigInt(amount),
     };
     if (feeAmount) {
-      const prevFees = BigInt(costBasis?.totalFeesCollected ?? '0');
-      setFields.totalFeesCollected = (prevFees + BigInt(feeAmount)).toString();
+      increments.totalFeesCollected = BigInt(feeAmount);
     }
-    await UserCostBasisModel.findOneAndUpdate(
-      { vaultAddress, mint },
-      { $set: setFields },
-      { upsert: true },
-    );
+    await casIncrementCostBasis(userVaultAddress, mint, increments);
 
     // Update the associated FeeTransaction status
     await FeeTransactionModel.findOneAndUpdate(
@@ -153,7 +173,17 @@ export async function updateCostBasisOnConfirm(transactionId: string): Promise<v
       { $set: { status: FeeTransactionStatus.CONFIRMED } },
     );
   }
+
+  // Invalidate reward verifier TTL cache so the next read re-evaluates
+  // progress against the freshly-confirmed transaction.
+  await UserRewardProgressModel.updateMany(
+    { vaultAddress: userVaultAddress, status: RewardProgressStatus.IN_PROGRESS },
+    { $unset: { lastEvaluatedAt: '' } },
+  ).catch((err) => console.error('[onTransactionConfirmed] reward cache invalidation error:', err));
 }
+
+/** @deprecated use onTransactionConfirmed */
+export const updateCostBasisOnConfirm = onTransactionConfirmed;
 
 /**
  * Mark fee transaction as failed when the withdrawal transaction fails.

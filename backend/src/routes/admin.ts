@@ -1,10 +1,13 @@
 import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, UserCostBasisModel } from '../models';
+import multer from 'multer';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, TransactionStatus, RewardTaskModel, RewardVerifierType, UserRewardProgressModel, RewardProgressStatus, MintedBadgeModel, getSetting, setSetting, APP_SETTING_KEYS } from '../models';
+import { VaultPaymentModel } from '../models/VaultPayment';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { PriceManager } from '../managers';
 import { dispatchSystemNotification } from '../services/notificationService';
+import * as storage from '../services/storageManager';
 
 const priceManager = new PriceManager();
 
@@ -123,31 +126,36 @@ router.get('/stats', async (_req, res) => {
       // Waitlist today
       WaitlistUserModel.countDocuments({ createdAt: { $gte: startOfTodayUTC }, approvedAt: { $exists: true } }),
       WaitlistUserModel.countDocuments({ createdAt: { $gte: startOfTodayUTC }, approvedAt: { $exists: false } }),
-      // Transactions totals
-      TransactionModel.countDocuments({}),
-      TransactionModel.countDocuments({ createdAt: { $gte: startOfTodayUTC } }),
-      TransactionModel.countDocuments({ createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
-      // Deposits
-      TransactionModel.countDocuments({ action: 'deposit' }),
-      TransactionModel.countDocuments({ action: 'deposit', createdAt: { $gte: startOfTodayUTC } }),
-      TransactionModel.countDocuments({ action: 'deposit', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
-      // Withdrawals
-      TransactionModel.countDocuments({ action: 'withdraw' }),
-      TransactionModel.countDocuments({ action: 'withdraw', createdAt: { $gte: startOfTodayUTC } }),
-      TransactionModel.countDocuments({ action: 'withdraw', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
-      // Transfers
-      TransactionModel.countDocuments({ action: 'transfer' }),
-      TransactionModel.countDocuments({ action: 'transfer', createdAt: { $gte: startOfTodayUTC } }),
-      TransactionModel.countDocuments({ action: 'transfer', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
-      // TVL source: aggregate net deposits per mint from UserCostBasis
-      UserCostBasisModel.find({}, { mint: 1, totalDeposited: 1, totalWithdrawn: 1 }).lean(),
+      // Transactions totals (confirmed only)
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // Deposits (confirmed only)
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'deposit' }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'deposit', createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'deposit', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // Withdrawals (confirmed only)
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'withdraw' }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'withdraw', createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'withdraw', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // Transfers (confirmed only)
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'transfer' }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'transfer', createdAt: { $gte: startOfTodayUTC } }),
+      TransactionModel.countDocuments({ status: TransactionStatus.CONFIRMED, action: 'transfer', createdAt: { $gte: startOfYesterdayUTC, $lt: startOfTodayUTC } }),
+      // TVL source: aggregate confirmed deposit/withdraw transactions directly
+      // (more accurate than UserCostBasis, which can drift if confirm hooks fail)
+      TransactionModel.find(
+        { status: TransactionStatus.CONFIRMED, action: { $in: ['deposit', 'withdraw'] } },
+        { mint: 1, action: 1, amount: 1 },
+      ).lean(),
     ]);
 
     // Compute TVL (net deposited - withdrawn) per mint, in UI units and USD
     const netByMint = new Map<string, bigint>();
-    for (const cb of costBasisRecords) {
-      const net = BigInt(cb.totalDeposited || '0') - BigInt(cb.totalWithdrawn || '0');
-      netByMint.set(cb.mint, (netByMint.get(cb.mint) ?? 0n) + net);
+    for (const tx of costBasisRecords) {
+      const amt = BigInt(tx.amount || '0');
+      const delta = tx.action === 'deposit' ? amt : -amt;
+      netByMint.set(tx.mint, (netByMint.get(tx.mint) ?? 0n) + delta);
     }
 
     const tvlCoins: Array<{ mint: string; symbol: string; tvlUi: number; tvlUsd: number }> = [];
@@ -963,6 +971,541 @@ router.patch('/earn-tokens/:id/config', async (req, res) => {
   } catch (error) {
     console.error('Admin update earn token config error:', error);
     res.status(500).json({ success: false, error: 'Failed to update config' });
+  }
+});
+
+// ─── Rewards (admin) ───
+
+/**
+ * GET /rewards/tasks
+ * List all reward tasks (active and inactive) for the admin dashboard.
+ */
+router.get('/rewards/tasks', async (_req, res) => {
+  try {
+    const tasks = await RewardTaskModel.find().sort({ sortOrder: 1, createdAt: 1 }).lean();
+    res.json({ success: true, tasks });
+  } catch (error) {
+    console.error('Admin list reward tasks error:', error);
+    res.status(500).json({ success: false, error: 'Failed to list reward tasks' });
+  }
+});
+
+/**
+ * POST /rewards/tasks
+ * Create a new reward task.
+ */
+router.post('/rewards/tasks', async (req, res) => {
+  try {
+    const {
+      slug, title, description, imageUrl, metadataUri,
+      active, sortOrder, availableFrom, availableUntil, requiresTaskSlug,
+      mintFeeLamports, maxSupply, verifierType, verifierConfig,
+    } = req.body;
+    if (!slug || !title || !description || !imageUrl || !metadataUri || !verifierType) {
+      res.status(400).json({ success: false, error: 'slug, title, description, imageUrl, metadataUri, and verifierType are required' });
+      return;
+    }
+    if (!Object.values(RewardVerifierType).includes(verifierType)) {
+      res.status(400).json({ success: false, error: `Invalid verifierType: ${verifierType}` });
+      return;
+    }
+
+    const task = await RewardTaskModel.create({
+      slug,
+      title,
+      description,
+      imageUrl,
+      metadataUri,
+      active: active !== false,
+      sortOrder: Number(sortOrder) || 0,
+      availableFrom: availableFrom ? new Date(availableFrom) : undefined,
+      availableUntil: availableUntil ? new Date(availableUntil) : undefined,
+      requiresTaskSlug: requiresTaskSlug || undefined,
+      mintFeeLamports: mintFeeLamports ? String(mintFeeLamports) : '20000000',
+      maxSupply: maxSupply != null ? Number(maxSupply) : undefined,
+      verifierType,
+      verifierConfig: verifierConfig || {},
+    });
+
+    res.json({ success: true, task: { id: task._id, slug: task.slug } });
+  } catch (error: any) {
+    if (error?.code === 11000) {
+      res.status(409).json({ success: false, error: 'Slug already exists' });
+      return;
+    }
+    console.error('Admin create reward task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create reward task' });
+  }
+});
+
+/**
+ * PATCH /rewards/tasks/:slug
+ * Partial update.
+ */
+router.patch('/rewards/tasks/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const update: Record<string, any> = {};
+    const allowed = [
+      'title', 'description', 'imageUrl', 'metadataUri', 'active', 'sortOrder',
+      'availableFrom', 'availableUntil', 'requiresTaskSlug', 'mintFeeLamports',
+      'maxSupply', 'verifierConfig',
+    ];
+    for (const key of allowed) {
+      if (key in req.body) update[key] = req.body[key];
+    }
+    if (update.availableFrom) update.availableFrom = new Date(update.availableFrom);
+    if (update.availableUntil) update.availableUntil = new Date(update.availableUntil);
+    if (update.mintFeeLamports != null) update.mintFeeLamports = String(update.mintFeeLamports);
+
+    const task = await RewardTaskModel.findOneAndUpdate({ slug }, { $set: update }, { new: true });
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    res.json({ success: true, task });
+  } catch (error) {
+    console.error('Admin patch reward task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update reward task' });
+  }
+});
+
+/**
+ * POST /rewards/manual-verify
+ * Body: { vaultAddress, taskSlug }
+ * Marks a manual-verifier progress entry as approved (sets attestations.manualApprovedAt).
+ */
+router.post('/rewards/manual-verify', async (req, res) => {
+  try {
+    const { vaultAddress, taskSlug } = req.body;
+    if (!vaultAddress || !taskSlug) {
+      res.status(400).json({ success: false, error: 'vaultAddress and taskSlug are required' });
+      return;
+    }
+
+    const task = await RewardTaskModel.findOne({ slug: taskSlug }).lean();
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    await UserRewardProgressModel.findOneAndUpdate(
+      { vaultAddress, taskSlug },
+      {
+        $set: {
+          'attestations.manualApprovedAt': new Date(),
+          status: RewardProgressStatus.CLAIMABLE,
+          currentValue: '1',
+          targetValue: '1',
+          completedAt: new Date(),
+          lastEvaluatedAt: new Date(),
+        },
+        $setOnInsert: { vaultAddress, taskSlug },
+      },
+      { upsert: true },
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin manual-verify reward error:', error);
+    res.status(500).json({ success: false, error: 'Failed to manual-verify' });
+  }
+});
+
+/**
+ * GET /rewards/diagnose?vaultAddress=&taskSlug=
+ * Inspect a single (vault, task) pair: returns the task config, the verifier
+ * filter that would run, the matching transactions, per-tx USD valuation, and
+ * the resulting current/target so you can see where progress disagrees with
+ * what you expected.
+ */
+router.get('/rewards/diagnose', async (req, res) => {
+  try {
+    const { vaultAddress, taskSlug } = req.query;
+    if (typeof vaultAddress !== 'string' || typeof taskSlug !== 'string') {
+      res.status(400).json({ success: false, error: 'vaultAddress and taskSlug are required' });
+      return;
+    }
+
+    const task = await RewardTaskModel.findOne({ slug: taskSlug }).lean();
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const cfg = (task.verifierConfig ?? {}) as Record<string, any>;
+    const txQuery: Record<string, any> = { userVaultAddress: vaultAddress, status: 'confirmed' };
+    if (task.verifierType === 'onchain_deposit') {
+      txQuery.action = 'deposit';
+      if (cfg.protocol) txQuery.type = cfg.protocol;
+      if (cfg.mint) txQuery.mint = cfg.mint;
+    } else if (task.verifierType === 'onchain_swap_volume') {
+      txQuery.action = 'swap';
+    } else if (task.verifierType === 'onchain_transfer_out') {
+      txQuery.action = 'transfer';
+      if (cfg.mint) txQuery.mint = cfg.mint;
+    }
+
+    const txs = await TransactionModel.find(txQuery).sort({ createdAt: -1 }).limit(50).lean();
+    const txDetails = txs.map((tx) => {
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[tx.mint];
+      const symbol = tokenInfo?.symbol ?? '(unknown)';
+      const decimals = tokenInfo?.decimals ?? 0;
+      const uiAmount = tokenInfo ? Number(BigInt(tx.amount)) / 10 ** decimals : 0;
+      const price = priceManager.getPrice(symbol);
+      const usd = priceManager.getUsdValue(symbol, uiAmount);
+      return {
+        id: String(tx._id),
+        createdAt: (tx as any).createdAt,
+        action: tx.action,
+        type: tx.type,
+        mint: tx.mint,
+        symbol,
+        amountRaw: tx.amount,
+        uiAmount,
+        priceUsd: price,
+        usd,
+        signature: tx.signature,
+      };
+    });
+    const totalUsd = txDetails.reduce((acc, t) => acc + t.usd, 0);
+
+    // Also list all transactions (any status) for this vault so we can spot
+    // tx that didn't reach CONFIRMED.
+    const allRecent = await TransactionModel.find({ userVaultAddress: vaultAddress })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+    const allRecentSummary = allRecent.map((tx) => ({
+      id: String(tx._id),
+      createdAt: (tx as any).createdAt,
+      action: tx.action,
+      type: tx.type,
+      mint: tx.mint,
+      status: tx.status,
+      signature: tx.signature,
+    }));
+
+    res.json({
+      success: true,
+      task: {
+        slug: task.slug,
+        title: task.title,
+        verifierType: task.verifierType,
+        verifierConfig: task.verifierConfig,
+      },
+      txQuery,
+      matchingTransactions: txDetails,
+      totalUsd,
+      allRecentTransactions: allRecentSummary,
+    });
+  } catch (error) {
+    console.error('Admin diagnose reward error:', error);
+    res.status(500).json({ success: false, error: 'Failed to diagnose' });
+  }
+});
+
+/**
+ * POST /rewards/backfill-user-vault
+ * Backfill Transaction.userVaultAddress for old records that pre-date the
+ * field. Maps via VaultPayment.cloudKey (works for both Seeker + standard)
+ * with User.publicKey as a fallback for non-Seeker users.
+ */
+router.post('/rewards/backfill-user-vault', async (_req, res) => {
+  try {
+    const cloudKeyToVault = new Map<string, string>();
+
+    const payments = await VaultPaymentModel.find(
+      { cloudKey: { $exists: true, $ne: null }, vaultAddress: { $exists: true, $ne: null } },
+      { cloudKey: 1, vaultAddress: 1 },
+    ).lean();
+    for (const p of payments) {
+      if (p.cloudKey && p.vaultAddress) cloudKeyToVault.set(p.cloudKey, p.vaultAddress);
+    }
+    const fromVaultPayments = cloudKeyToVault.size;
+
+    const users = await UserModel.find({}, { publicKey: 1, vaultAddress: 1 }).lean();
+    let userFallbackAdded = 0;
+    for (const u of users) {
+      if (u.publicKey && u.vaultAddress && !cloudKeyToVault.has(u.publicKey)) {
+        cloudKeyToVault.set(u.publicKey, u.vaultAddress);
+        userFallbackAdded++;
+      }
+    }
+
+    const missing = await TransactionModel.find(
+      { $or: [{ userVaultAddress: { $exists: false } }, { userVaultAddress: null }] },
+      { _id: 1, walletAddress: 1 },
+    ).lean();
+
+    let updated = 0;
+    const unmapped = new Map<string, number>();
+    for (const tx of missing) {
+      const vault = cloudKeyToVault.get(tx.walletAddress);
+      if (!vault) {
+        unmapped.set(tx.walletAddress, (unmapped.get(tx.walletAddress) ?? 0) + 1);
+        continue;
+      }
+      await TransactionModel.updateOne({ _id: tx._id }, { $set: { userVaultAddress: vault } });
+      updated++;
+    }
+
+    res.json({
+      success: true,
+      mappingsFromVaultPayments: fromVaultPayments,
+      mappingsFromUserFallback: userFallbackAdded,
+      totalMappings: cloudKeyToVault.size,
+      transactionsScanned: missing.length,
+      transactionsUpdated: updated,
+      unmappedWalletAddresses: [...unmapped.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([walletAddress, count]) => ({ walletAddress, count })),
+    });
+  } catch (error) {
+    console.error('Admin backfill-user-vault error:', error);
+    res.status(500).json({ success: false, error: 'Backfill failed' });
+  }
+});
+
+/**
+ * GET /rewards/badges?taskSlug=&status=
+ * Browse minted badges.
+ */
+router.get('/rewards/badges', async (req, res) => {
+  try {
+    const filter: Record<string, any> = {};
+    if (req.query.taskSlug) filter.taskSlug = req.query.taskSlug;
+    if (req.query.status) filter.status = req.query.status;
+
+    const badges = await MintedBadgeModel.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean();
+    res.json({ success: true, badges });
+  } catch (error) {
+    console.error('Admin list minted badges error:', error);
+    res.status(500).json({ success: false, error: 'Failed to list badges' });
+  }
+});
+
+/**
+ * GET /rewards/settings
+ * Returns runtime-configurable reward settings (collection address + env defaults).
+ */
+router.get('/rewards/settings', async (_req, res) => {
+  try {
+    const collectionAddress = await getSetting(
+      APP_SETTING_KEYS.REWARDS_COLLECTION_ADDRESS,
+      process.env.REWARDS_COLLECTION_ADDRESS ?? null,
+    );
+    res.json({
+      success: true,
+      settings: {
+        rewardsCollectionAddress: collectionAddress,
+        envDefaultCollectionAddress: process.env.REWARDS_COLLECTION_ADDRESS ?? null,
+        treasuryWallet: process.env.TREASURY_WALLET_ADDRESS ?? null,
+        cdnBaseUrl: process.env.DO_SPACES_CDN_URL ?? null,
+        storageConfigured: storage.isConfigured(),
+      },
+    });
+  } catch (error) {
+    console.error('Admin get reward settings error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load settings' });
+  }
+});
+
+/**
+ * PUT /rewards/settings
+ * Body: { rewardsCollectionAddress?: string }
+ * Updates runtime settings. Set to empty string to clear (env fallback applies).
+ */
+router.put('/rewards/settings', async (req, res) => {
+  try {
+    const { rewardsCollectionAddress } = req.body ?? {};
+    if (typeof rewardsCollectionAddress === 'string') {
+      const trimmed = rewardsCollectionAddress.trim();
+      if (trimmed.length === 0) {
+        // Treat empty as "fall back to env" — store empty string so we know admin opted in
+        await setSetting(APP_SETTING_KEYS.REWARDS_COLLECTION_ADDRESS, '');
+      } else {
+        // Light validation: base58 32-44 chars
+        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) {
+          res.status(400).json({ success: false, error: 'Invalid Solana address format' });
+          return;
+        }
+        await setSetting(APP_SETTING_KEYS.REWARDS_COLLECTION_ADDRESS, trimmed);
+      }
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin update reward settings error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update settings' });
+  }
+});
+
+// ─── Reward asset uploads (DigitalOcean Spaces) ───
+
+const rewardImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (_req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPEG, PNG, WebP, and GIF images are allowed'));
+    }
+  },
+});
+
+/**
+ * POST /rewards/upload-image
+ * Multipart form with field "image". Optional "slug" for stable filenames.
+ * Returns { url } for use as RewardTask.imageUrl or inside metadata JSON.
+ */
+router.post('/rewards/upload-image', rewardImageUpload.single('image'), async (req, res) => {
+  try {
+    if (!storage.isConfigured()) {
+      res.status(503).json({ success: false, error: 'Storage is not configured' });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ success: false, error: 'Image file is required' });
+      return;
+    }
+
+    const slug = (req.body?.slug ?? '').toString().trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 64);
+    const ext =
+      req.file.mimetype === 'image/png' ? 'png' :
+      req.file.mimetype === 'image/webp' ? 'webp' :
+      req.file.mimetype === 'image/gif' ? 'gif' : 'jpg';
+
+    const filename = slug ? `${slug}.${ext}` : `${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
+    const key = `rewards/badges/${filename}`;
+    const url = await storage.uploadFile(req.file.buffer, key, req.file.mimetype);
+
+    res.json({ success: true, url, key });
+  } catch (error: any) {
+    if (error?.message?.includes('Only JPEG')) {
+      res.status(400).json({ success: false, error: error.message });
+      return;
+    }
+    console.error('Admin upload reward image error:', error);
+    res.status(500).json({ success: false, error: 'Failed to upload image' });
+  }
+});
+
+/**
+ * POST /rewards/create-collection
+ * Body: { name, description, imageUrl, externalUrl?, metadata? }
+ * One-shot: uploads collection metadata JSON to DO Spaces, runs Metaplex Core
+ * createCollection on-chain (admin keypair signs), saves the resulting collection
+ * address into AppSettings, and returns { address, metadataUri, signature }.
+ *
+ * If `metadata` (object) is provided, it overrides the auto-generated JSON.
+ */
+router.post('/rewards/create-collection', async (req, res) => {
+  try {
+    if (!storage.isConfigured()) {
+      res.status(503).json({ success: false, error: 'Storage is not configured' });
+      return;
+    }
+
+    const rpcUrl = process.env.SOLANA_RPC_URL;
+    if (!rpcUrl) {
+      res.status(503).json({ success: false, error: 'SOLANA_RPC_URL not configured' });
+      return;
+    }
+
+    const { name, description, imageUrl, externalUrl, metadata } = req.body ?? {};
+    if (!name || typeof name !== 'string') {
+      res.status(400).json({ success: false, error: 'name is required' });
+      return;
+    }
+
+    // Build / accept the metadata JSON
+    const metadataObj = (metadata && typeof metadata === 'object')
+      ? metadata
+      : {
+          name,
+          description: description ?? '',
+          image: imageUrl ?? '',
+          ...(externalUrl ? { external_url: externalUrl } : {}),
+        };
+
+    // Upload metadata to DO Spaces under /rewards/metadata/collection.json
+    const metadataKey = `rewards/metadata/collection.json`;
+    const metadataUri = await storage.uploadFile(
+      Buffer.from(JSON.stringify(metadataObj, null, 2), 'utf-8'),
+      metadataKey,
+      'application/json',
+    );
+
+    // Run Metaplex Core createCollection server-side
+    const { createUmi } = await import('@metaplex-foundation/umi-bundle-defaults');
+    const { keypairIdentity, generateSigner } = await import('@metaplex-foundation/umi');
+    const { mplCore, createCollection } = await import('@metaplex-foundation/mpl-core');
+    const { getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
+
+    const umi = createUmi(rpcUrl).use(mplCore());
+    const adminKeypair = getAdminTxFeePayerKeypair();
+    const umiAdminKeypair = umi.eddsa.createKeypairFromSecretKey(adminKeypair.secretKey);
+    umi.use(keypairIdentity(umiAdminKeypair));
+
+    const collectionSigner = generateSigner(umi);
+
+    const result = await createCollection(umi, {
+      collection: collectionSigner,
+      name,
+      uri: metadataUri,
+      plugins: [],
+    }).sendAndConfirm(umi);
+
+    const address = collectionSigner.publicKey.toString();
+    const signature = Buffer.from(result.signature).toString('base64');
+
+    // Save into AppSetting so RewardMintBuilder + /config pick it up immediately
+    await setSetting(APP_SETTING_KEYS.REWARDS_COLLECTION_ADDRESS, address);
+
+    res.json({ success: true, address, metadataUri, signature });
+  } catch (error: any) {
+    console.error('Admin create-collection error:', error);
+    res.status(500).json({ success: false, error: error?.message ?? 'Failed to create collection' });
+  }
+});
+
+/**
+ * POST /rewards/upload-metadata
+ * Body: { slug: string, metadata: object }
+ * Uploads the metadata JSON to DO Spaces under /rewards/metadata/<slug>.json.
+ * Returns { url } for use as RewardTask.metadataUri.
+ */
+router.post('/rewards/upload-metadata', async (req, res) => {
+  try {
+    if (!storage.isConfigured()) {
+      res.status(503).json({ success: false, error: 'Storage is not configured' });
+      return;
+    }
+    const { slug, metadata } = req.body ?? {};
+    if (!slug || typeof slug !== 'string') {
+      res.status(400).json({ success: false, error: 'slug is required' });
+      return;
+    }
+    if (!metadata || typeof metadata !== 'object') {
+      res.status(400).json({ success: false, error: 'metadata object is required' });
+      return;
+    }
+    const safeSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 64);
+    if (!safeSlug) {
+      res.status(400).json({ success: false, error: 'Invalid slug' });
+      return;
+    }
+    const buffer = Buffer.from(JSON.stringify(metadata, null, 2), 'utf-8');
+    const key = `rewards/metadata/${safeSlug}.json`;
+    const url = await storage.uploadFile(buffer, key, 'application/json');
+    res.json({ success: true, url, key });
+  } catch (error) {
+    console.error('Admin upload reward metadata error:', error);
+    res.status(500).json({ success: false, error: 'Failed to upload metadata' });
   }
 });
 

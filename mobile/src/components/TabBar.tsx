@@ -163,6 +163,16 @@ export default function TabBar({ activeTab, onTabPress }: TabBarProps) {
     Linking.openURL('mailto:mike@cashflow.fun');
   };
 
+  const openNews = () => {
+    closeContact();
+    Linking.openURL('https://t.me/cashflow_fi');
+  };
+
+  const openCommunity = () => {
+    closeContact();
+    Linking.openURL('https://t.me/+bF-piLXZ7o40NWYy');
+  };
+
   const borderColor = isDark
     ? 'rgba(255, 255, 255, 0.12)'
     : 'rgba(0, 0, 0, 0.08)';
@@ -259,6 +269,22 @@ export default function TabBar({ activeTab, onTabPress }: TabBarProps) {
               <View style={styles.popupOptionText}>
                 <Text style={[styles.popupOptionLabel, { color: colors.textPrimary }]}>Telegram</Text>
                 <Text style={[styles.popupOptionValue, { color: colors.textSecondary }]}>@mike_cashflow</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.popupOption, { backgroundColor: colors.cardSecondary }]} onPress={openNews}>
+              <TelegramIcon />
+              <View style={styles.popupOptionText}>
+                <Text style={[styles.popupOptionLabel, { color: colors.textPrimary }]}>News</Text>
+                <Text style={[styles.popupOptionValue, { color: colors.textSecondary }]}>@cashflow_fi</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.popupOption, { backgroundColor: colors.cardSecondary }]} onPress={openCommunity}>
+              <TelegramIcon />
+              <View style={styles.popupOptionText}>
+                <Text style={[styles.popupOptionLabel, { color: colors.textPrimary }]}>Community</Text>
+                <Text style={[styles.popupOptionValue, { color: colors.textSecondary }]}>Join the community</Text>
               </View>
             </TouchableOpacity>
 

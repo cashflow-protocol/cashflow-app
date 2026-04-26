@@ -11,9 +11,10 @@ import {
   getBase64EncodedWireTransaction,
   AccountRole,
 } from '@solana/kit';
-import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from '@solana/kit';
+import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction, Signature } from '@solana/kit';
 import { DBManager, JitoManager, JupiterManager, PriceManager, SolanaDomainManager, TokenManager, TransferManager } from '../managers';
 import { TransactionAction } from '../models/Transaction';
+import type { AuthenticatedRequest } from '../middleware/auth';
 import { EarnTokenModel } from '../models';
 import { SUPPORTED_TOKENS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
@@ -42,6 +43,16 @@ const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
 // BigInt-safe JSON replacer (RPC returns BigInt for unitsConsumed, etc.)
 const bigIntReplacer = (_key: string, value: unknown) =>
   typeof value === 'bigint' ? value.toString() : value;
+
+// GET /solana/v1/jito-tip - Current dynamic Jito tip amount (75th pct, floored at 500k, capped at 95th pct)
+router.get('/jito-tip', async (_req: Request, res: Response) => {
+  try {
+    const lamports = await jitoManager.getDynamicTipLamports();
+    res.json({ success: true, lamports });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Failed to fetch Jito tip' });
+  }
+});
 
 // POST /solana/v1/submit-bundle-signatures - Store bundle signatures for a transaction
 router.post('/submit-bundle-signatures', async (req: Request, res: Response) => {
@@ -259,20 +270,37 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
     }
 
 
-    // Extract real transaction IDs (first signature of each fully-signed tx) and
-    // store them BEFORE sending to Jito, so the Helius webhook can match them
-    // as soon as the bundle lands on-chain — no race condition.
+    // Extract real transaction IDs (first signature of each fully-signed tx).
+    // Stored BEFORE sending to Jito so the Helius webhook can match them as
+    // soon as the bundle lands on-chain — no race condition. Also used as the
+    // source of truth when Jito's bundle status is unreliable.
+    const { VersionedTransaction: VTx } = await import('@solana/web3.js');
+    const { getBase58Decoder } = await import('@solana/kit');
+    const b58 = getBase58Decoder();
+    const txSignatures: string[] = transactions.map((txBase64: string) => {
+      const tx = VTx.deserialize(Buffer.from(txBase64, 'base64'));
+      return b58.decode(tx.signatures[0]);
+    });
+
     if (transactionId) {
-      const { VersionedTransaction: VTx } = await import('@solana/web3.js');
-      const { getBase58Decoder } = await import('@solana/kit');
-      const b58 = getBase58Decoder();
-      const txSignatures = transactions.map((txBase64: string) => {
-        const tx = VTx.deserialize(Buffer.from(txBase64, 'base64'));
-        return b58.decode(tx.signatures[0]);
-      });
       await dbManager.submitBundleTransaction(transactionId, txSignatures);
-      console.log(`Bundle signatures pre-stored for ${transactionId}: ${txSignatures.map((s: string) => s.slice(0, 8)).join(', ')}`);
+      console.log(`Bundle signatures pre-stored for ${transactionId}: ${txSignatures.map((s) => s.slice(0, 8)).join(', ')}`);
     }
+
+    // Ask the RPC whether all bundle signatures have landed on-chain.
+    const areSigsConfirmed = async (): Promise<boolean> => {
+      try {
+        const result = await rpc
+          .getSignatureStatuses(txSignatures as Signature[], { searchTransactionHistory: true })
+          .send();
+        return result.value.every((s: any) =>
+          s !== null && (s.confirmationStatus === 'confirmed' || s.confirmationStatus === 'finalized'),
+        );
+      } catch (err: any) {
+        console.warn('areSigsConfirmed check failed:', err?.message);
+        return false;
+      }
+    };
 
     // Send bundle via Jito
     const bundleId = await jitoManager.sendBundle(transactions);
@@ -301,24 +329,43 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
     }
 
     const confirmed = status?.confirmation_status === 'confirmed' || status?.confirmation_status === 'finalized';
-    if (!confirmed) {
-      console.warn(`Jito bundle not confirmed after polling: ${bundleId}, status=${status?.confirmation_status ?? 'unknown'}`);
-      res.status(408).json({
-        success: false,
-        error: 'Bundle not confirmed — it may still land. Please check your balances.',
+    if (confirmed) {
+      res.json({
+        success: true,
         bundleId,
-        status: status?.confirmation_status ?? 'pending',
+        status: status?.confirmation_status,
+        slot: status?.slot ?? null,
+        transactions: status?.transactions ?? [],
         timestamp: new Date().toISOString(),
       });
       return;
     }
 
-    res.json({
-      success: true,
+    console.warn(`Jito bundle not confirmed after polling: ${bundleId}, status=${status?.confirmation_status ?? 'unknown'} — checking RPC`);
+
+    // Fallback: Jito's bundle-status view can lag or drop state even when the
+    // bundle actually landed. Check sigs directly on-chain as a last resort.
+    // We do NOT re-broadcast via RPC — bundles must land atomically or not at all.
+    if (await areSigsConfirmed()) {
+      console.log(`Bundle ${bundleId} confirmed via RPC signature check`);
+      res.json({
+        success: true,
+        bundleId,
+        status: 'confirmed',
+        slot: null,
+        transactions: txSignatures,
+        recoveryPath: 'rpc-signature-check',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    console.warn(`Bundle ${bundleId} not confirmed after Jito poll + RPC sig check`);
+    res.status(408).json({
+      success: false,
+      error: 'Bundle not confirmed — it may still land. Please check your balances.',
       bundleId,
-      status: status?.confirmation_status,
-      slot: status?.slot ?? null,
-      transactions: status?.transactions ?? [],
+      status: 'pending',
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -354,9 +401,11 @@ router.post('/transfer', async (req: Request, res: Response) => {
       decimals,
     );
 
+    const userVault = (req as AuthenticatedRequest).user?.vaultAddress || ownerAddress || walletAddress;
     const record = await dbManager.createTransaction({
       action: TransactionAction.TRANSFER,
       mint,
+      userVaultAddress: userVault,
       amount,
       walletAddress,
       destinationAddress,
@@ -439,9 +488,11 @@ router.post('/swap', async (req: Request, res: Response) => {
       inputMint, outputMint, amount, ownerAddress, walletAddress, slippageBps || 50,
     );
 
+    const userVault = (req as AuthenticatedRequest).user?.vaultAddress || ownerAddress || walletAddress;
     const record = await dbManager.createTransaction({
       action: TransactionAction.SWAP,
       mint: inputMint,
+      userVaultAddress: userVault,
       outputMint,
       amount,
       walletAddress,

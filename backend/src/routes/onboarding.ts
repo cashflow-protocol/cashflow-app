@@ -1130,7 +1130,7 @@ router.post('/create-vault', async (req, res) => {
 
       // Check user wallet balance — needs rent (~0.015 SOL) + creation fee (0.05 SOL) + tx fee
       const { VAULT_CREATION_FEE } = await import('../constants/vault');
-      const minRequired = VAULT_CREATION_FEE + 20_000_000; // fee + rent + buffer
+      const minRequired = VAULT_CREATION_FEE + 10_000_000; // fee + rent + buffer
       const userBalance = await conn.getBalance(feePayer);
       if (userBalance < minRequired) {
         res.status(400).json({
@@ -1246,7 +1246,9 @@ router.post('/create-vault', async (req, res) => {
       // so mobile can sign everything in a single MWA prompt and send as one Jito bundle.
 
       const crypto = await import('crypto');
-      const { ADMIN_COVER_TARGET, GAS_COVER_SPENDING_LIMIT_SEED, JITO_TIP_LAMPORTS, JITO_TIP_ACCOUNTS } = await import('../constants/vault');
+      const { ADMIN_COVER_TARGET, DEFAULT_SPENDING_LIMIT, GAS_COVER_SPENDING_LIMIT_SEED, JITO_TIP_ACCOUNTS } = await import('../constants/vault');
+      const { JitoManager } = await import('../managers/JitoManager');
+      const jitoTipLamports = await new JitoManager().getDynamicTipLamports();
       const { Period } = multisigLib.types;
 
       // Use the all-tx fee payer key for spending limit (must match cover instruction destination)
@@ -1302,7 +1304,7 @@ router.post('/create-vault', async (req, res) => {
             createKey: spendingLimitCreateKey,
             vaultIndex: 0,
             mint: PublicKey.default, // native SOL
-            amount: ADMIN_COVER_TARGET,
+            amount: DEFAULT_SPENDING_LIMIT,
             period: Period.Day,
             members: spendingLimitMembers,
             destinations: [adminFeePayerPubkey],
@@ -1348,7 +1350,7 @@ router.post('/create-vault', async (req, res) => {
         SystemProgram.transfer({
           fromPubkey: adminFeePayerPubkey,
           toPubkey: new PublicKey(tipAccount),
-          lamports: JITO_TIP_LAMPORTS,
+          lamports: jitoTipLamports,
         }),
         coverIx,
       ];

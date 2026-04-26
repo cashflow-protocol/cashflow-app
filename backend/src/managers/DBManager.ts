@@ -117,7 +117,10 @@ export class DBManager {
     action: TransactionAction;
     type?: EarnTokenType;
     mint: string;
+    /** Protocol pool vault — only for deposit/withdraw */
     vaultAddress?: string;
+    /** User's Squads vault — required for rewards/earnings queries */
+    userVaultAddress: string;
     amount: string;
     walletAddress: string;
     destinationAddress?: string;
@@ -182,10 +185,17 @@ export class DBManager {
   }
 
   /**
-   * Update transaction status to confirmed or failed
+   * Update transaction status to confirmed or failed.
+   * Idempotent: only transitions from CREATED/SUBMITTED — returns null if already
+   * in a terminal state, so callers can avoid double-triggering side effects
+   * (e.g., cost basis updates).
    */
   async confirmTransaction(transactionId: string, status: TransactionStatus.CONFIRMED | TransactionStatus.FAILED) {
-    return TransactionModel.findByIdAndUpdate(transactionId, { status });
+    return TransactionModel.findOneAndUpdate(
+      { _id: transactionId, status: { $in: [TransactionStatus.CREATED, TransactionStatus.SUBMITTED] } },
+      { status },
+      { new: true },
+    );
   }
 
   /**

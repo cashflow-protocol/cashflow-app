@@ -152,6 +152,47 @@ class WalletService {
     });
   }
 
+  /**
+   * Sign one or more arbitrary messages with the connected MWA wallet.
+   * Used for off-chain attestations (e.g. proving Seeker device ownership).
+   */
+  async signMessages(messages: Uint8Array[], signerAddress: string): Promise<Uint8Array[]> {
+    const base64Payloads = messages.map((m) => Buffer.from(m).toString('base64'));
+
+    return getTransact()(async (wallet: any) => {
+      if (this.authToken) {
+        const auth = await wallet.reauthorize({ auth_token: this.authToken, identity: IDENTITY });
+        this.authToken = auth.auth_token;
+      } else {
+        const auth = await wallet.authorize({
+          cluster: SOLANA_CONFIG.cluster,
+          identity: IDENTITY,
+        });
+        this.authToken = auth.auth_token;
+      }
+
+      try {
+        const result = await wallet.signMessages({
+          addresses: [signerAddress],
+          payloads: base64Payloads,
+        });
+        if (!result?.signed_payloads?.length) {
+          throw new Error('MWA returned no signed payloads');
+        }
+        // Returned payloads are signed-message envelopes:
+        //   [...signature(64 bytes), ...messageBytes]
+        // We extract just the signature for verification on backend.
+        return result.signed_payloads.map((payload: string) => {
+          const bytes = new Uint8Array(Buffer.from(payload, 'base64'));
+          return bytes.slice(0, 64);
+        });
+      } catch (err: any) {
+        logError('wallet_sign_message', err?.message || 'unknown');
+        throw err;
+      }
+    });
+  }
+
   async disconnect(): Promise<void> {
     try {
       await getTransact()(async (wallet: any) => {

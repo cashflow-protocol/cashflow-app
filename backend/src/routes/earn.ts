@@ -378,6 +378,11 @@ router.post('/deposit', async (req: Request, res: Response) => {
   try {
     const { type, mint, vaultAddress, amount, walletAddress, ownerAddress, returnInstructions } = req.body;
     const authority = ownerAddress || walletAddress;
+    // The user's Squads vault PDA — used as the owner key for Transaction
+    // records and cost basis. `vaultAddress` (req.body) is the *protocol*
+    // pool vault (Jupiter Lend pool, Kamino vault, etc.) and is only used
+    // server-side for protocol lookups / instruction building.
+    const userVault = (req as AuthenticatedRequest).user?.vaultAddress || ownerAddress || walletAddress;
 
     const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
     console.log(`DEPOSIT walletAddress: ${walletAddress}, ownerAddress: ${authority}, type: ${type}, mint: ${mint}, symbol: ${tokenInfo?.symbol}, amount (raw): ${amount}, decimals: ${tokenInfo?.decimals}, vaultAddress: ${vaultAddress}, returnInstructions: ${!!returnInstructions}`)
@@ -437,6 +442,7 @@ router.post('/deposit', async (req: Request, res: Response) => {
         type,
         mint,
         vaultAddress,
+        userVaultAddress: userVault,
         amount,
         walletAddress,
       });
@@ -485,6 +491,7 @@ router.post('/deposit', async (req: Request, res: Response) => {
       type,
       mint,
       vaultAddress,
+      userVaultAddress: userVault,
       amount,
       walletAddress,
       unsignedTransaction: transaction,
@@ -516,6 +523,8 @@ router.post('/withdraw', async (req: Request, res: Response) => {
   try {
     const { type, mint, vaultAddress, amount, walletAddress, ownerAddress, returnInstructions } = req.body;
     const authority = ownerAddress || walletAddress;
+    // User's Squads vault — see deposit route for explanation.
+    const userVault = (req as AuthenticatedRequest).user?.vaultAddress || ownerAddress || walletAddress;
 
     // Validate minimum withdraw amount
     const earnToken = await EarnTokenModel.findOne({ type, mint, vaultAddress, status: 'active' }).lean();
@@ -562,8 +571,8 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         if (vaultLut) extraLookupTables.push(vaultLut);
       }
 
-      // Calculate and append profit fee instructions
-      const { feeAmount, profitAmount } = await calculateFee(vaultAddress, mint, amount);
+      // Calculate and append profit fee instructions (cost basis is keyed by user vault)
+      const { feeAmount, profitAmount } = await calculateFee(userVault, mint, amount);
       let feeAmountStr: string | undefined;
       if (feeAmount > 0n) {
         const feeInstructions = await buildFeeTransferInstructions(mint, feeAmount.toString(), authority);
@@ -576,6 +585,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         type,
         mint,
         vaultAddress,
+        userVaultAddress: userVault,
         amount,
         walletAddress,
         feeAmount: feeAmountStr,
@@ -583,7 +593,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
 
       if (feeAmount > 0n) {
         await createFeeRecord({
-          vaultAddress,
+          vaultAddress: userVault,
           mint,
           withdrawTransactionId: String(record._id),
           withdrawAmount: amount,
@@ -635,6 +645,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
       type,
       mint,
       vaultAddress,
+      userVaultAddress: userVault,
       amount,
       walletAddress,
       unsignedTransaction: transaction,

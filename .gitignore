@@ -6,3 +6,4 @@ website/dist
 *.keystore
 !mobile/android/app/debug.keystore
 backend/.env.production
+/.claude
