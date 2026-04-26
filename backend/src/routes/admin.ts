@@ -3,6 +3,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, TransactionStatus, RewardTaskModel, RewardVerifierType, UserRewardProgressModel, RewardProgressStatus, MintedBadgeModel, getSetting, setSetting, APP_SETTING_KEYS } from '../models';
+import { VaultPaymentModel } from '../models/VaultPayment';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { PriceManager } from '../managers';
 import { dispatchSystemNotification } from '../services/notificationService';
@@ -1201,6 +1202,68 @@ router.get('/rewards/diagnose', async (req, res) => {
   } catch (error) {
     console.error('Admin diagnose reward error:', error);
     res.status(500).json({ success: false, error: 'Failed to diagnose' });
+  }
+});
+
+/**
+ * POST /rewards/backfill-user-vault
+ * Backfill Transaction.userVaultAddress for old records that pre-date the
+ * field. Maps via VaultPayment.cloudKey (works for both Seeker + standard)
+ * with User.publicKey as a fallback for non-Seeker users.
+ */
+router.post('/rewards/backfill-user-vault', async (_req, res) => {
+  try {
+    const cloudKeyToVault = new Map<string, string>();
+
+    const payments = await VaultPaymentModel.find(
+      { cloudKey: { $exists: true, $ne: null }, vaultAddress: { $exists: true, $ne: null } },
+      { cloudKey: 1, vaultAddress: 1 },
+    ).lean();
+    for (const p of payments) {
+      if (p.cloudKey && p.vaultAddress) cloudKeyToVault.set(p.cloudKey, p.vaultAddress);
+    }
+    const fromVaultPayments = cloudKeyToVault.size;
+
+    const users = await UserModel.find({}, { publicKey: 1, vaultAddress: 1 }).lean();
+    let userFallbackAdded = 0;
+    for (const u of users) {
+      if (u.publicKey && u.vaultAddress && !cloudKeyToVault.has(u.publicKey)) {
+        cloudKeyToVault.set(u.publicKey, u.vaultAddress);
+        userFallbackAdded++;
+      }
+    }
+
+    const missing = await TransactionModel.find(
+      { $or: [{ userVaultAddress: { $exists: false } }, { userVaultAddress: null }] },
+      { _id: 1, walletAddress: 1 },
+    ).lean();
+
+    let updated = 0;
+    const unmapped = new Map<string, number>();
+    for (const tx of missing) {
+      const vault = cloudKeyToVault.get(tx.walletAddress);
+      if (!vault) {
+        unmapped.set(tx.walletAddress, (unmapped.get(tx.walletAddress) ?? 0) + 1);
+        continue;
+      }
+      await TransactionModel.updateOne({ _id: tx._id }, { $set: { userVaultAddress: vault } });
+      updated++;
+    }
+
+    res.json({
+      success: true,
+      mappingsFromVaultPayments: fromVaultPayments,
+      mappingsFromUserFallback: userFallbackAdded,
+      totalMappings: cloudKeyToVault.size,
+      transactionsScanned: missing.length,
+      transactionsUpdated: updated,
+      unmappedWalletAddresses: [...unmapped.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([walletAddress, count]) => ({ walletAddress, count })),
+    });
+  } catch (error) {
+    console.error('Admin backfill-user-vault error:', error);
+    res.status(500).json({ success: false, error: 'Backfill failed' });
   }
 });
 

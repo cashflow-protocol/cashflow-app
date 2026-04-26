@@ -9,6 +9,7 @@ import {
   uploadRewardMetadata,
   createRewardsCollection,
   diagnoseReward,
+  backfillUserVault,
   type RewardTask,
   type RewardSettings,
   type RewardVerifierType,
@@ -40,6 +41,7 @@ export default function RewardsPage() {
   const [loading, setLoading] = useState(true);
   const [editTask, setEditTask] = useState<RewardTask | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,11 +58,38 @@ export default function RewardsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const handleBackfill = async () => {
+    if (backfilling) return;
+    if (!confirm('Backfill userVaultAddress on all transactions missing it? This is safe to re-run.')) return;
+    setBackfilling(true);
+    try {
+      const res = await backfillUserVault();
+      if (res.success) {
+        const unmappedCount = res.unmappedWalletAddresses?.length ?? 0;
+        const summary =
+          `Updated ${res.transactionsUpdated}/${res.transactionsScanned} transactions.\n` +
+          `Mappings: ${res.mappingsFromVaultPayments} from VaultPayments + ${res.mappingsFromUserFallback} from Users.\n` +
+          (unmappedCount > 0 ? `Unmapped wallets: ${unmappedCount}` : 'All matched.');
+        alert(summary);
+        if (unmappedCount > 0) console.warn('Unmapped wallets:', res.unmappedWalletAddresses);
+      } else {
+        alert(`Failed: ${res.error ?? 'unknown'}`);
+      }
+    } catch (err: any) {
+      alert(`Failed: ${err?.message ?? 'unknown'}`);
+    } finally {
+      setBackfilling(false);
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
         <h2>Rewards ({tasks.length})</h2>
         <div className="header-actions" style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-secondary" style={{ width: 'auto' }} onClick={handleBackfill} disabled={backfilling}>
+            {backfilling ? 'Backfilling…' : 'Backfill user vaults'}
+          </button>
           <button className="btn-primary" style={{ width: 'auto' }} onClick={() => setShowCreate(true)}>
             Add Reward Task
           </button>
