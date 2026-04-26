@@ -14,6 +14,7 @@ import {
 import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction, Signature } from '@solana/kit';
 import { DBManager, JitoManager, JupiterManager, PriceManager, SolanaDomainManager, TokenManager, TransferManager } from '../managers';
 import { TransactionAction } from '../models/Transaction';
+import type { AuthenticatedRequest } from '../middleware/auth';
 import { EarnTokenModel } from '../models';
 import { SUPPORTED_TOKENS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
 
@@ -400,9 +401,11 @@ router.post('/transfer', async (req: Request, res: Response) => {
       decimals,
     );
 
+    const userVault = (req as AuthenticatedRequest).user?.vaultAddress || ownerAddress || walletAddress;
     const record = await dbManager.createTransaction({
       action: TransactionAction.TRANSFER,
       mint,
+      vaultAddress: userVault,
       amount,
       walletAddress,
       destinationAddress,
@@ -485,9 +488,11 @@ router.post('/swap', async (req: Request, res: Response) => {
       inputMint, outputMint, amount, ownerAddress, walletAddress, slippageBps || 50,
     );
 
+    const userVault = (req as AuthenticatedRequest).user?.vaultAddress || ownerAddress || walletAddress;
     const record = await dbManager.createTransaction({
       action: TransactionAction.SWAP,
       mint: inputMint,
+      vaultAddress: userVault,
       outputMint,
       amount,
       walletAddress,
