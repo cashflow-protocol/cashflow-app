@@ -14,6 +14,15 @@ interface TvlCoin {
   tvlUsd: number;
 }
 
+interface RewardBadge {
+  slug: string;
+  title: string;
+  imageUrl: string;
+  maxSupply?: number;
+  total: number;
+  today: number;
+}
+
 interface StatsData {
   users: CountGroup;
   waitlist: {
@@ -34,6 +43,11 @@ interface StatsData {
   tvl: {
     coins: TvlCoin[];
     totalUsd: number;
+  };
+  rewards: {
+    total: number;
+    today: number;
+    badges: RewardBadge[];
   };
 }
 
@@ -256,6 +270,70 @@ function CoinRow({ coin, pctOfTotal, isFirst }: { coin: TvlCoin; pctOfTotal: num
       <div style={{ textAlign: 'right' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a' }}>{formatUsdCompact(coin.tvlUsd)}</div>
         <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>{pctOfTotal.toFixed(1)}%</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Reward badge row ───
+
+function BadgeRow({ badge, isFirst }: { badge: RewardBadge; isFirst: boolean }) {
+  const supplyLabel = badge.maxSupply ? ` / ${badge.maxSupply.toLocaleString()}` : '';
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '40px 1fr auto auto',
+        alignItems: 'center',
+        gap: 16,
+        padding: '14px 20px',
+        borderTop: isFirst ? 'none' : '1px solid #f0f2f5',
+      }}
+    >
+      {badge.imageUrl ? (
+        <img
+          src={badge.imageUrl}
+          alt={badge.title}
+          style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', background: '#f0f2f5' }}
+        />
+      ) : (
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 8,
+            background: '#f0f2f5',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 11,
+            fontWeight: 700,
+            color: '#999',
+          }}
+        >
+          {badge.title.slice(0, 2).toUpperCase()}
+        </div>
+      )}
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a1a' }}>{badge.title}</div>
+        <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>{badge.slug}</div>
+      </div>
+      <div style={{ textAlign: 'right', minWidth: 80 }}>
+        <div style={{ fontSize: 11, color: '#999', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Today
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginTop: 2 }}>
+          {badge.today.toLocaleString()}
+        </div>
+      </div>
+      <div style={{ textAlign: 'right', minWidth: 100 }}>
+        <div style={{ fontSize: 11, color: '#999', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Minted
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginTop: 2 }}>
+          {badge.total.toLocaleString()}
+          {supplyLabel ? <span style={{ fontSize: 12, color: '#999', fontWeight: 400 }}>{supplyLabel}</span> : null}
+        </div>
       </div>
     </div>
   );
@@ -488,6 +566,25 @@ export default function StatsPage() {
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Transactions</div>
         <ComparisonTable rows={txRows} />
+      </div>
+
+      {/* Rewards */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>
+          Rewards · {stats.rewards.total.toLocaleString()} minted
+          {stats.rewards.today > 0 ? ` · ${stats.rewards.today.toLocaleString()} today` : ''}
+        </div>
+        {stats.rewards.badges.length === 0 ? (
+          <div style={{ ...cardStyle, color: '#999', textAlign: 'center', padding: '32px 20px' }}>
+            No reward tasks yet
+          </div>
+        ) : (
+          <div style={{ ...cardStyle, padding: '6px 0', overflow: 'hidden' }}>
+            {stats.rewards.badges.map((b, i) => (
+              <BadgeRow key={b.slug} badge={b} isFirst={i === 0} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Waitlist */}
