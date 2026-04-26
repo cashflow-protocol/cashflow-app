@@ -1207,6 +1207,15 @@ router.post('/create-vault', async (req, res) => {
     const multisigAddress = multisigPda.toBase58();
     const vaultAddress = vaultPda.toBase58();
 
+    // Persist the derived addresses immediately. The multisig PDA is deterministic
+    // from createKey, so the value is correct regardless of whether the create-vault
+    // tx ultimately lands. Saving here means a failed send (timeout, RPC blip, etc.)
+    // still leaves a queryable VaultPayment row instead of a stranded PENDING with
+    // no addresses.
+    await VaultPaymentModel.findByIdAndUpdate(paymentRecord._id, {
+      $set: { multisigAddress, vaultAddress },
+    });
+
     if (isAdminPays) {
       // ── Standard mode: admin signs + sends via Helius SWQoS ──
       tx.sign([adminKeypair]);
@@ -1217,8 +1226,6 @@ router.post('/create-vault', async (req, res) => {
       await VaultPaymentModel.findByIdAndUpdate(paymentRecord._id, {
         $set: {
           status: VaultPaymentStatus.USED,
-          multisigAddress,
-          vaultAddress,
           txSignature: signature,
         },
       });
@@ -1390,10 +1397,6 @@ router.post('/create-vault', async (req, res) => {
         Buffer.from(tx2.serialize()).toString('base64'),
         Buffer.from(tx3.serialize()).toString('base64'),
       ];
-
-      await VaultPaymentModel.findByIdAndUpdate(paymentRecord._id, {
-        $set: { multisigAddress, vaultAddress },
-      });
 
       res.json({
         success: true,
