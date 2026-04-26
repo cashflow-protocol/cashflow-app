@@ -331,6 +331,45 @@ export async function uploadRewardMetadata(slug: string, metadata: Record<string
   });
 }
 
+// Maintenance
+export interface BackfillUserVaultReport {
+  dryRun: boolean;
+  scanned: number;
+  mapped: number;
+  unmapped: number;
+  unmappedSample: Array<{ address: string; count: number }>;
+  mappingSourceCount: number;
+}
+
+export interface RebuildCostBasisReport {
+  dryRun: boolean;
+  aggregatedKeys: number;
+  wouldCreate: number;
+  wouldUpdate: number;
+  unchanged: number;
+  totalDepositsScanned: number;
+  totalWithdrawalsScanned: number;
+  ignoredMissingVault: number;
+}
+
+export async function backfillUserVaultAddress(
+  dryRun: boolean,
+): Promise<{ success: boolean; report: BackfillUserVaultReport; error?: string }> {
+  return apiFetch('/maintenance/backfill-user-vault-address', {
+    method: 'POST',
+    body: JSON.stringify({ dryRun }),
+  });
+}
+
+export async function rebuildUserCostBasis(
+  dryRun: boolean,
+): Promise<{ success: boolean; report: RebuildCostBasisReport; error?: string }> {
+  return apiFetch('/maintenance/rebuild-user-cost-basis', {
+    method: 'POST',
+    body: JSON.stringify({ dryRun }),
+  });
+}
+
 export async function createRewardsCollection(input: {
   name: string;
   description?: string;

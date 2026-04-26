@@ -1617,4 +1617,40 @@ router.post('/rewards/upload-metadata', async (req, res) => {
   }
 });
 
+// ─── Maintenance ───
+
+/**
+ * POST /maintenance/backfill-user-vault-address
+ * Backfill Transaction.userVaultAddress for deposit/withdraw rows missing it.
+ * Body: { dryRun: boolean }
+ */
+router.post('/maintenance/backfill-user-vault-address', async (req, res) => {
+  try {
+    const dryRun = req.body?.dryRun === true;
+    const { backfillUserVaultAddress } = await import('../services/maintenanceService');
+    const report = await backfillUserVaultAddress({ dryRun });
+    res.json({ success: true, report });
+  } catch (error) {
+    console.error('Admin backfillUserVaultAddress error:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || 'Backfill failed' });
+  }
+});
+
+/**
+ * POST /maintenance/rebuild-user-cost-basis
+ * Rebuild UserCostBasis from confirmed deposit/withdraw transactions.
+ * Body: { dryRun: boolean }
+ */
+router.post('/maintenance/rebuild-user-cost-basis', async (req, res) => {
+  try {
+    const dryRun = req.body?.dryRun === true;
+    const { rebuildUserCostBasis } = await import('../services/maintenanceService');
+    const report = await rebuildUserCostBasis({ dryRun });
+    res.json({ success: true, report });
+  } catch (error) {
+    console.error('Admin rebuildUserCostBasis error:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || 'Rebuild failed' });
+  }
+});
+
 export default router;
