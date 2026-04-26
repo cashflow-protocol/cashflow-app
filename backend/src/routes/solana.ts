@@ -405,7 +405,7 @@ router.post('/transfer', async (req: Request, res: Response) => {
     const record = await dbManager.createTransaction({
       action: TransactionAction.TRANSFER,
       mint,
-      vaultAddress: userVault,
+      userVaultAddress: userVault,
       amount,
       walletAddress,
       destinationAddress,
@@ -492,7 +492,7 @@ router.post('/swap', async (req: Request, res: Response) => {
     const record = await dbManager.createTransaction({
       action: TransactionAction.SWAP,
       mint: inputMint,
-      vaultAddress: userVault,
+      userVaultAddress: userVault,
       outputMint,
       amount,
       walletAddress,

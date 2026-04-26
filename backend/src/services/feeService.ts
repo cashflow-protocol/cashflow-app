@@ -152,12 +152,12 @@ export async function onTransactionConfirmed(transactionId: string): Promise<voi
   const tx = await TransactionModel.findById(transactionId).lean();
   if (!tx) return;
 
-  const { vaultAddress, mint, amount, action, feeAmount } = tx;
+  const { userVaultAddress, mint, amount, action, feeAmount } = tx;
 
-  if (!vaultAddress) return;
+  if (!userVaultAddress) return;
 
   if (action === TransactionAction.DEPOSIT) {
-    await casIncrementCostBasis(vaultAddress, mint, { totalDeposited: BigInt(amount) });
+    await casIncrementCostBasis(userVaultAddress, mint, { totalDeposited: BigInt(amount) });
   } else if (action === TransactionAction.WITHDRAW) {
     const increments: Parameters<typeof casIncrementCostBasis>[2] = {
       totalWithdrawn: BigInt(amount),
@@ -165,7 +165,7 @@ export async function onTransactionConfirmed(transactionId: string): Promise<voi
     if (feeAmount) {
       increments.totalFeesCollected = BigInt(feeAmount);
     }
-    await casIncrementCostBasis(vaultAddress, mint, increments);
+    await casIncrementCostBasis(userVaultAddress, mint, increments);
 
     // Update the associated FeeTransaction status
     await FeeTransactionModel.findOneAndUpdate(
@@ -177,7 +177,7 @@ export async function onTransactionConfirmed(transactionId: string): Promise<voi
   // Invalidate reward verifier TTL cache so the next read re-evaluates
   // progress against the freshly-confirmed transaction.
   await UserRewardProgressModel.updateMany(
-    { vaultAddress, status: RewardProgressStatus.IN_PROGRESS },
+    { vaultAddress: userVaultAddress, status: RewardProgressStatus.IN_PROGRESS },
     { $unset: { lastEvaluatedAt: '' } },
   ).catch((err) => console.error('[onTransactionConfirmed] reward cache invalidation error:', err));
 }

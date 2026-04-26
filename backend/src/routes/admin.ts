@@ -1133,7 +1133,7 @@ router.get('/rewards/diagnose', async (req, res) => {
     }
 
     const cfg = (task.verifierConfig ?? {}) as Record<string, any>;
-    const txQuery: Record<string, any> = { vaultAddress, status: 'confirmed' };
+    const txQuery: Record<string, any> = { userVaultAddress: vaultAddress, status: 'confirmed' };
     if (task.verifierType === 'onchain_deposit') {
       txQuery.action = 'deposit';
       if (cfg.protocol) txQuery.type = cfg.protocol;
@@ -1171,7 +1171,7 @@ router.get('/rewards/diagnose', async (req, res) => {
 
     // Also list all transactions (any status) for this vault so we can spot
     // tx that didn't reach CONFIRMED.
-    const allRecent = await TransactionModel.find({ vaultAddress })
+    const allRecent = await TransactionModel.find({ userVaultAddress: vaultAddress })
       .sort({ createdAt: -1 })
       .limit(20)
       .lean();

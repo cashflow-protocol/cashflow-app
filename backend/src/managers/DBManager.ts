@@ -117,7 +117,10 @@ export class DBManager {
     action: TransactionAction;
     type?: EarnTokenType;
     mint: string;
+    /** Protocol pool vault — only for deposit/withdraw */
     vaultAddress?: string;
+    /** User's Squads vault — required for rewards/earnings queries */
+    userVaultAddress: string;
     amount: string;
     walletAddress: string;
     destinationAddress?: string;

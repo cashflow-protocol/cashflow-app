@@ -52,7 +52,7 @@ async function sumTransactionsUsd(
   filter: { type?: string; action: TransactionAction; mint?: string },
 ): Promise<number> {
   const query: Record<string, any> = {
-    vaultAddress,
+    userVaultAddress: vaultAddress,
     action: filter.action,
     status: TransactionStatus.CONFIRMED,
   };
@@ -110,7 +110,7 @@ const verifyOnchainSwapVolume: Verifier = async (task, vaultAddress) => {
 const verifyOnchainTransferOut: Verifier = async (task, vaultAddress) => {
   const cfg = task.verifierConfig ?? {};
   const query: Record<string, any> = {
-    vaultAddress,
+    userVaultAddress: vaultAddress,
     action: TransactionAction.TRANSFER,
     status: TransactionStatus.CONFIRMED,
   };
