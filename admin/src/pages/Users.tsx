@@ -1,5 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getAppUsers, sendUserNotification, broadcastNotification } from '../api';
+import {
+  getAppUsers,
+  sendUserNotification,
+  broadcastNotification,
+  backfillUserVaultAddress,
+  rebuildUserCostBasis,
+  type BackfillUserVaultReport,
+  type RebuildCostBasisReport,
+} from '../api';
+
+type MaintenanceReport =
+  | { kind: 'backfill'; report: BackfillUserVaultReport }
+  | { kind: 'rebuild'; report: RebuildCostBasisReport };
 
 interface SquadMember {
   address: string;
@@ -40,6 +52,41 @@ export default function UsersPage() {
 
   // Squad members modal
   const [squadUser, setSquadUser] = useState<AppUser | null>(null);
+
+  // Maintenance ops
+  const [maintenanceRunning, setMaintenanceRunning] = useState<string | null>(null);
+  const [maintenanceError, setMaintenanceError] = useState('');
+  const [maintenanceReport, setMaintenanceReport] = useState<MaintenanceReport | null>(null);
+
+  const runMaintenance = async (
+    op: 'backfill-dry' | 'backfill-apply' | 'rebuild-dry' | 'rebuild-apply',
+  ) => {
+    const isApply = op.endsWith('-apply');
+    if (isApply && !confirm(
+      op === 'backfill-apply'
+        ? 'Apply backfill? This will write userVaultAddress on matched deposit/withdraw transactions.'
+        : 'Rebuild UserCostBasis? This overwrites cost basis from confirmed transactions. Run during low traffic.',
+    )) return;
+
+    setMaintenanceRunning(op);
+    setMaintenanceError('');
+    setMaintenanceReport(null);
+    try {
+      if (op.startsWith('backfill')) {
+        const res = await backfillUserVaultAddress(!isApply);
+        if (!res.success) throw new Error(res.error || 'Backfill failed');
+        setMaintenanceReport({ kind: 'backfill', report: res.report });
+      } else {
+        const res = await rebuildUserCostBasis(!isApply);
+        if (!res.success) throw new Error(res.error || 'Rebuild failed');
+        setMaintenanceReport({ kind: 'rebuild', report: res.report });
+      }
+    } catch (err) {
+      setMaintenanceError((err as Error).message || 'Operation failed');
+    } finally {
+      setMaintenanceRunning(null);
+    }
+  };
 
   // Broadcast modal
   const [showBroadcast, setShowBroadcast] = useState(false);
@@ -121,6 +168,53 @@ export default function UsersPage() {
         <button className="btn-primary" onClick={() => { setShowBroadcast(true); setSendResult(''); }}>
           Broadcast to All
         </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        <span style={{ fontSize: 12, color: '#666', alignSelf: 'center', marginRight: 4 }}>
+          Backfill userVaultAddress:
+        </span>
+        <button
+          className="btn-secondary"
+          onClick={() => runMaintenance('backfill-dry')}
+          disabled={!!maintenanceRunning}
+          style={{ fontSize: 12, padding: '4px 10px' }}
+        >
+          {maintenanceRunning === 'backfill-dry' ? 'Running…' : 'Dry run'}
+        </button>
+        <button
+          className="btn-primary"
+          onClick={() => runMaintenance('backfill-apply')}
+          disabled={!!maintenanceRunning}
+          style={{ fontSize: 12, padding: '4px 10px' }}
+        >
+          {maintenanceRunning === 'backfill-apply' ? 'Running…' : 'Apply'}
+        </button>
+
+        <span style={{ fontSize: 12, color: '#666', alignSelf: 'center', marginLeft: 16, marginRight: 4 }}>
+          Rebuild cost basis:
+        </span>
+        <button
+          className="btn-secondary"
+          onClick={() => runMaintenance('rebuild-dry')}
+          disabled={!!maintenanceRunning}
+          style={{ fontSize: 12, padding: '4px 10px' }}
+        >
+          {maintenanceRunning === 'rebuild-dry' ? 'Running…' : 'Dry run'}
+        </button>
+        <button
+          className="btn-primary"
+          onClick={() => runMaintenance('rebuild-apply')}
+          disabled={!!maintenanceRunning}
+          style={{ fontSize: 12, padding: '4px 10px' }}
+        >
+          {maintenanceRunning === 'rebuild-apply' ? 'Running…' : 'Apply'}
+        </button>
+        {maintenanceError && (
+          <span style={{ color: '#e53e3e', fontSize: 12, alignSelf: 'center', marginLeft: 8 }}>
+            {maintenanceError}
+          </span>
+        )}
       </div>
 
       <div className="search-bar">
@@ -219,6 +313,81 @@ export default function UsersPage() {
           </div>
         )}
       </div>
+
+      {/* Maintenance Report Modal */}
+      {maintenanceReport && (
+        <div className="modal-overlay" onClick={() => setMaintenanceReport(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+            <h3>
+              {maintenanceReport.kind === 'backfill' ? 'Backfill userVaultAddress' : 'Rebuild UserCostBasis'}
+              {' '}({maintenanceReport.report.dryRun ? 'dry run' : 'applied'})
+            </h3>
+            {maintenanceReport.kind === 'backfill' ? (
+              <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+                <div>Mapping sources: <strong>{maintenanceReport.report.mappingSourceCount}</strong></div>
+                <div>Scanned (deposit/withdraw, missing field): <strong>{maintenanceReport.report.scanned}</strong></div>
+                <div>
+                  Mapped: <strong>{maintenanceReport.report.mapped}</strong>
+                  {maintenanceReport.report.dryRun ? ' (would update)' : ' (updated)'}
+                </div>
+                <div>Unmapped: <strong>{maintenanceReport.report.unmapped}</strong></div>
+                {maintenanceReport.report.unmappedSample.length > 0 && (
+                  <>
+                    <div style={{ marginTop: 12, fontWeight: 600 }}>Top unmapped walletAddress values:</div>
+                    <div className="table-container" style={{ maxHeight: 280, overflowY: 'auto' }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Address</th>
+                            <th style={{ width: 80, textAlign: 'right' }}>Tx count</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {maintenanceReport.report.unmappedSample.map((u) => (
+                            <tr key={u.address}>
+                              <td>
+                                <a
+                                  href={`https://solscan.io/account/${u.address}`}
+                                  target="_blank"
+                                  rel="noopener"
+                                  className="mono truncate"
+                                  title={u.address}
+                                >
+                                  {u.address.slice(0, 6)}...{u.address.slice(-4)}
+                                </a>
+                              </td>
+                              <td style={{ textAlign: 'right' }}>{u.count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+                <div>Deposits scanned: <strong>{maintenanceReport.report.totalDepositsScanned}</strong></div>
+                <div>Withdrawals scanned: <strong>{maintenanceReport.report.totalWithdrawalsScanned}</strong></div>
+                <div>Skipped (still missing userVaultAddress): <strong>{maintenanceReport.report.ignoredMissingVault}</strong></div>
+                <div style={{ marginTop: 8 }}>(vault, mint) keys: <strong>{maintenanceReport.report.aggregatedKeys}</strong></div>
+                <div>
+                  Would create: <strong>{maintenanceReport.report.wouldCreate}</strong>
+                  {!maintenanceReport.report.dryRun && ' (created)'}
+                </div>
+                <div>
+                  Would update: <strong>{maintenanceReport.report.wouldUpdate}</strong>
+                  {!maintenanceReport.report.dryRun && ' (updated)'}
+                </div>
+                <div>Unchanged: <strong>{maintenanceReport.report.unchanged}</strong></div>
+              </div>
+            )}
+            <div className="modal-actions" style={{ marginTop: 16 }}>
+              <button className="btn-secondary" onClick={() => setMaintenanceReport(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Squad Members Modal */}
       {squadUser && squadUser.squad && (

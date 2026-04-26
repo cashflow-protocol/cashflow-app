@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, TransactionStatus, RewardTaskModel, RewardVerifierType, UserRewardProgressModel, RewardProgressStatus, MintedBadgeModel, getSetting, setSetting, APP_SETTING_KEYS } from '../models';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, TransactionStatus, RewardTaskModel, RewardVerifierType, UserRewardProgressModel, RewardProgressStatus, MintedBadgeModel, MintedBadgeStatus, getSetting, setSetting, APP_SETTING_KEYS } from '../models';
 import { VaultPaymentModel } from '../models/VaultPayment';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { PriceManager } from '../managers';
@@ -150,6 +150,32 @@ router.get('/stats', async (_req, res) => {
       ).lean(),
     ]);
 
+    // Rewards: confirmed minted badges per task + totals
+    const [rewardTasks, mintedTotal, mintedToday, mintedByTask, mintedByTaskToday] = await Promise.all([
+      RewardTaskModel.find({}, { slug: 1, title: 1, imageUrl: 1, maxSupply: 1, sortOrder: 1 }).sort({ sortOrder: 1 }).lean(),
+      MintedBadgeModel.countDocuments({ status: MintedBadgeStatus.CONFIRMED }),
+      MintedBadgeModel.countDocuments({ status: MintedBadgeStatus.CONFIRMED, createdAt: { $gte: startOfTodayUTC } }),
+      MintedBadgeModel.aggregate<{ _id: string; count: number }>([
+        { $match: { status: MintedBadgeStatus.CONFIRMED } },
+        { $group: { _id: '$taskSlug', count: { $sum: 1 } } },
+      ]),
+      MintedBadgeModel.aggregate<{ _id: string; count: number }>([
+        { $match: { status: MintedBadgeStatus.CONFIRMED, createdAt: { $gte: startOfTodayUTC } } },
+        { $group: { _id: '$taskSlug', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const totalBySlug = new Map(mintedByTask.map((r) => [r._id, r.count]));
+    const todayBySlug = new Map(mintedByTaskToday.map((r) => [r._id, r.count]));
+    const rewardBadges = rewardTasks.map((t) => ({
+      slug: t.slug,
+      title: t.title,
+      imageUrl: t.imageUrl,
+      maxSupply: t.maxSupply,
+      total: totalBySlug.get(t.slug) ?? 0,
+      today: todayBySlug.get(t.slug) ?? 0,
+    }));
+
     // Compute TVL (net deposited - withdrawn) per mint, in UI units and USD
     const netByMint = new Map<string, bigint>();
     for (const tx of costBasisRecords) {
@@ -191,6 +217,11 @@ router.get('/stats', async (_req, res) => {
       tvl: {
         coins: tvlCoins,
         totalUsd: tvlTotalUsd,
+      },
+      rewards: {
+        total: mintedTotal,
+        today: mintedToday,
+        badges: rewardBadges,
       },
     });
   } catch (error) {
@@ -1583,6 +1614,42 @@ router.post('/rewards/upload-metadata', async (req, res) => {
   } catch (error) {
     console.error('Admin upload reward metadata error:', error);
     res.status(500).json({ success: false, error: 'Failed to upload metadata' });
+  }
+});
+
+// ─── Maintenance ───
+
+/**
+ * POST /maintenance/backfill-user-vault-address
+ * Backfill Transaction.userVaultAddress for deposit/withdraw rows missing it.
+ * Body: { dryRun: boolean }
+ */
+router.post('/maintenance/backfill-user-vault-address', async (req, res) => {
+  try {
+    const dryRun = req.body?.dryRun === true;
+    const { backfillUserVaultAddress } = await import('../services/maintenanceService');
+    const report = await backfillUserVaultAddress({ dryRun });
+    res.json({ success: true, report });
+  } catch (error) {
+    console.error('Admin backfillUserVaultAddress error:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || 'Backfill failed' });
+  }
+});
+
+/**
+ * POST /maintenance/rebuild-user-cost-basis
+ * Rebuild UserCostBasis from confirmed deposit/withdraw transactions.
+ * Body: { dryRun: boolean }
+ */
+router.post('/maintenance/rebuild-user-cost-basis', async (req, res) => {
+  try {
+    const dryRun = req.body?.dryRun === true;
+    const { rebuildUserCostBasis } = await import('../services/maintenanceService');
+    const report = await rebuildUserCostBasis({ dryRun });
+    res.json({ success: true, report });
+  } catch (error) {
+    console.error('Admin rebuildUserCostBasis error:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || 'Rebuild failed' });
   }
 });
 
