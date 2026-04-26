@@ -47,10 +47,12 @@ export async function tryConfirmBadgeMint(badge: any): Promise<ConfirmOutcome> {
       { vaultAddress: badge.vaultAddress, taskSlug: badge.taskSlug },
       { $set: { status: RewardProgressStatus.MINTED, completedAt: new Date(), mintedBadgeId: String(badge._id) } },
     );
+    const task = await RewardTaskModel.findOne({ slug: badge.taskSlug }).select('title').lean();
+    const badgeName = task?.title || badge.taskSlug;
     dispatchSystemNotification(
       badge.vaultAddress,
-      'Badge minted',
-      `Your "${badge.taskSlug}" badge is now in your vault.`,
+      `You minted ${badgeName} badge`,
+      undefined,
       NotificationType.BADGE_MINTED,
     ).catch((err) => console.error('Badge minted notification error:', err));
     return 'confirmed';

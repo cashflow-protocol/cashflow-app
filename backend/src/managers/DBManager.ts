@@ -16,6 +16,7 @@ import {
   UserCostBasisModel,
   FeeTransactionModel,
   RecoveryProposalModel,
+  MintedBadgeModel,
 } from '../models';
 import { EarnTokenType } from '../types';
 
@@ -170,6 +171,18 @@ export class DBManager {
    */
   async isSignatureInBundle(signature: string): Promise<boolean> {
     const count = await TransactionModel.countDocuments({
+      bundleSignatures: signature,
+    });
+    return count > 0;
+  }
+
+  /**
+   * Check if a signature belongs to a badge mint bundle. Used to suppress the
+   * generic "Sent X SOL" notification for the mint fee transfer — the badge
+   * confirmation flow dispatches its own notification.
+   */
+  async isSignatureInBadgeBundle(signature: string): Promise<boolean> {
+    const count = await MintedBadgeModel.countDocuments({
       bundleSignatures: signature,
     });
     return count > 0;
