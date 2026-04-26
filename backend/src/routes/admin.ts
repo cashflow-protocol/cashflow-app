@@ -670,6 +670,69 @@ router.post('/waitlist-users/:id/revoke-task', async (req, res) => {
 
 // ─── App Users ───
 
+const SQUADS_V4_API = 'https://v4-api.squads.so';
+const SQUAD_LOOKUP_TIMEOUT_MS = 5000;
+const SQUAD_LOOKUP_CACHE_TTL_MS = 60_000;
+
+interface SquadMemberInfo {
+  address: string;
+  permissions: { initiate: boolean; vote: boolean; execute: boolean };
+}
+
+interface SquadInfo {
+  multisigAddress: string;
+  threshold: number;
+  members: SquadMemberInfo[];
+}
+
+const squadLookupCache = new Map<string, { value: SquadInfo | null; expiresAt: number }>();
+
+/**
+ * Look up a user's squad on Squads V4 by their wallet pubkey, picking the
+ * multisig whose default vault matches our stored vaultAddress. Returns null
+ * if the API is unreachable, the user isn't a known member, or no multisig
+ * matches the vault address (e.g. Seeker users where publicKey isn't a member).
+ */
+async function fetchSquadForUser(publicKey: string, vaultAddress: string): Promise<SquadInfo | null> {
+  const cacheKey = `${publicKey}::${vaultAddress}`;
+  const now = Date.now();
+  const cached = squadLookupCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  let value: SquadInfo | null = null;
+  try {
+    const r = await fetch(`${SQUADS_V4_API}/multisigs/${publicKey}?useProd=true`, {
+      signal: AbortSignal.timeout(SQUAD_LOOKUP_TIMEOUT_MS),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      if (Array.isArray(data)) {
+        const match = data.find((ms: any) => ms?.defaultVault === vaultAddress);
+        if (match) {
+          const members: SquadMemberInfo[] = (match.account?.members || []).map((m: any) => ({
+            address: m.key,
+            permissions: {
+              initiate: (m.permissions?.mask & 1) !== 0,
+              vote: (m.permissions?.mask & 2) !== 0,
+              execute: (m.permissions?.mask & 4) !== 0,
+            },
+          }));
+          value = {
+            multisigAddress: match.address,
+            threshold: match.account?.threshold ?? 1,
+            members,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[admin] Squad lookup failed for', publicKey, (err as Error).message);
+  }
+
+  squadLookupCache.set(cacheKey, { value, expiresAt: now + SQUAD_LOOKUP_CACHE_TTL_MS });
+  return value;
+}
+
 /**
  * GET /users
  * List all registered app users (with vaults).
@@ -702,9 +765,15 @@ router.get('/users', async (req, res) => {
     const tokensWithUsers = await DeviceTokenModel.distinct('userId', { userId: { $in: userIds } });
     const usersWithPush = new Set(tokensWithUsers.map(String));
 
+    // Enrich each user with their Squads V4 multisig members (parallel, best-effort).
+    const squadResults = await Promise.allSettled(
+      users.map((u) => fetchSquadForUser(u.publicKey, u.vaultAddress)),
+    );
+    const squadByIdx = squadResults.map((r) => (r.status === 'fulfilled' ? r.value : null));
+
     res.json({
       success: true,
-      users: users.map((u) => ({
+      users: users.map((u, i) => ({
         id: u._id,
         vaultAddress: u.vaultAddress,
         publicKey: u.publicKey,
@@ -712,6 +781,7 @@ router.get('/users', async (req, res) => {
         inviteCode: u.inviteCode || null,
         hasPush: usersWithPush.has(String(u._id)),
         createdAt: (u as any).createdAt,
+        squad: squadByIdx[i],
       })),
       total,
       page,
