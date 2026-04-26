@@ -1,6 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getAppUsers, sendUserNotification, broadcastNotification } from '../api';
 
+interface SquadMember {
+  address: string;
+  permissions: { initiate: boolean; vote: boolean; execute: boolean };
+}
+
+interface SquadInfo {
+  multisigAddress: string;
+  threshold: number;
+  members: SquadMember[];
+}
+
 interface AppUser {
   id: string;
   vaultAddress: string;
@@ -9,6 +20,7 @@ interface AppUser {
   inviteCode: string | null;
   hasPush: boolean;
   createdAt: string;
+  squad: SquadInfo | null;
 }
 
 export default function UsersPage() {
@@ -25,6 +37,9 @@ export default function UsersPage() {
   const [notifyBody, setNotifyBody] = useState('');
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState('');
+
+  // Squad members modal
+  const [squadUser, setSquadUser] = useState<AppUser | null>(null);
 
   // Broadcast modal
   const [showBroadcast, setShowBroadcast] = useState(false);
@@ -122,6 +137,7 @@ export default function UsersPage() {
             <tr>
               <th>Vault Address</th>
               <th>Public Key</th>
+              <th>Members</th>
               <th>Invite Code</th>
               <th>Push</th>
               <th>Last Seen</th>
@@ -131,9 +147,9 @@ export default function UsersPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
             ) : users.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: '#999' }}>No users found</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: '#999' }}>No users found</td></tr>
             ) : users.map((u) => (
               <tr key={u.id}>
                 <td>
@@ -151,6 +167,20 @@ export default function UsersPage() {
                   <span className="mono truncate" title={u.publicKey}>
                     {u.publicKey.slice(0, 6)}...{u.publicKey.slice(-4)}
                   </span>
+                </td>
+                <td>
+                  {u.squad ? (
+                    <button
+                      className="btn-secondary"
+                      style={{ fontSize: 12, padding: '4px 10px' }}
+                      onClick={() => setSquadUser(u)}
+                      title={`Threshold ${u.squad.threshold} of ${u.squad.members.length}`}
+                    >
+                      {u.squad.members.length} ({u.squad.threshold}/{u.squad.members.length})
+                    </button>
+                  ) : (
+                    <span style={{ color: '#ccc' }}>—</span>
+                  )}
                 </td>
                 <td>
                   {u.inviteCode
@@ -189,6 +219,74 @@ export default function UsersPage() {
           </div>
         )}
       </div>
+
+      {/* Squad Members Modal */}
+      {squadUser && squadUser.squad && (
+        <div className="modal-overlay" onClick={() => setSquadUser(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+            <h3>Squad Members</h3>
+            <p style={{ fontSize: 14, color: '#666', marginBottom: 8 }}>
+              Vault:{' '}
+              <a
+                href={`https://solscan.io/account/${squadUser.vaultAddress}`}
+                target="_blank"
+                rel="noopener"
+                className="mono"
+              >
+                {squadUser.vaultAddress.slice(0, 8)}...{squadUser.vaultAddress.slice(-6)}
+              </a>
+            </p>
+            <p style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
+              Multisig:{' '}
+              <a
+                href={`https://solscan.io/account/${squadUser.squad.multisigAddress}`}
+                target="_blank"
+                rel="noopener"
+                className="mono"
+              >
+                {squadUser.squad.multisigAddress.slice(0, 8)}...{squadUser.squad.multisigAddress.slice(-6)}
+              </a>
+              {' · '}
+              Threshold {squadUser.squad.threshold} of {squadUser.squad.members.length}
+            </p>
+            <div className="table-container" style={{ maxHeight: 400, overflowY: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Address</th>
+                    <th>Permissions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {squadUser.squad.members.map((m) => (
+                    <tr key={m.address}>
+                      <td>
+                        <a
+                          href={`https://solscan.io/account/${m.address}`}
+                          target="_blank"
+                          rel="noopener"
+                          className="mono truncate"
+                          title={m.address}
+                        >
+                          {m.address.slice(0, 6)}...{m.address.slice(-4)}
+                        </a>
+                      </td>
+                      <td style={{ display: 'flex', gap: 4 }}>
+                        {m.permissions.initiate && <span className="badge badge-green">Initiate</span>}
+                        {m.permissions.vote && <span className="badge badge-green">Vote</span>}
+                        {m.permissions.execute && <span className="badge badge-green">Execute</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-actions" style={{ marginTop: 16 }}>
+              <button className="btn-secondary" onClick={() => setSquadUser(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Send Notification Modal */}
       {notifyUser && (
