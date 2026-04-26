@@ -76,11 +76,6 @@ export default function RewardBadgeCard({ task, onPress, compact }: Props) {
           source={{ uri: task.imageUrl }}
           style={[styles.image, !claimable && !minted && styles.imageDimmed]}
         />
-        {minted && (
-          <View style={[styles.lockBadge, { backgroundColor: colors.accentGreen }]}>
-            <Text style={styles.lockBadgeText}>✓</Text>
-          </View>
-        )}
         {!claimable && !minted && (
           <View style={[styles.lockBadge, { backgroundColor: colors.cardSecondary }]}>
             <Text style={[styles.lockBadgeText, { color: colors.textSecondary }]}>🔒</Text>

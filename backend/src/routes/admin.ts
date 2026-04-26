@@ -1112,6 +1112,99 @@ router.post('/rewards/manual-verify', async (req, res) => {
 });
 
 /**
+ * GET /rewards/diagnose?vaultAddress=&taskSlug=
+ * Inspect a single (vault, task) pair: returns the task config, the verifier
+ * filter that would run, the matching transactions, per-tx USD valuation, and
+ * the resulting current/target so you can see where progress disagrees with
+ * what you expected.
+ */
+router.get('/rewards/diagnose', async (req, res) => {
+  try {
+    const { vaultAddress, taskSlug } = req.query;
+    if (typeof vaultAddress !== 'string' || typeof taskSlug !== 'string') {
+      res.status(400).json({ success: false, error: 'vaultAddress and taskSlug are required' });
+      return;
+    }
+
+    const task = await RewardTaskModel.findOne({ slug: taskSlug }).lean();
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const cfg = (task.verifierConfig ?? {}) as Record<string, any>;
+    const txQuery: Record<string, any> = { vaultAddress, status: 'confirmed' };
+    if (task.verifierType === 'onchain_deposit') {
+      txQuery.action = 'deposit';
+      if (cfg.protocol) txQuery.type = cfg.protocol;
+      if (cfg.mint) txQuery.mint = cfg.mint;
+    } else if (task.verifierType === 'onchain_swap_volume') {
+      txQuery.action = 'swap';
+    } else if (task.verifierType === 'onchain_transfer_out') {
+      txQuery.action = 'transfer';
+      if (cfg.mint) txQuery.mint = cfg.mint;
+    }
+
+    const txs = await TransactionModel.find(txQuery).sort({ createdAt: -1 }).limit(50).lean();
+    const txDetails = txs.map((tx) => {
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[tx.mint];
+      const symbol = tokenInfo?.symbol ?? '(unknown)';
+      const decimals = tokenInfo?.decimals ?? 0;
+      const uiAmount = tokenInfo ? Number(BigInt(tx.amount)) / 10 ** decimals : 0;
+      const price = priceManager.getPrice(symbol);
+      const usd = priceManager.getUsdValue(symbol, uiAmount);
+      return {
+        id: String(tx._id),
+        createdAt: (tx as any).createdAt,
+        action: tx.action,
+        type: tx.type,
+        mint: tx.mint,
+        symbol,
+        amountRaw: tx.amount,
+        uiAmount,
+        priceUsd: price,
+        usd,
+        signature: tx.signature,
+      };
+    });
+    const totalUsd = txDetails.reduce((acc, t) => acc + t.usd, 0);
+
+    // Also list all transactions (any status) for this vault so we can spot
+    // tx that didn't reach CONFIRMED.
+    const allRecent = await TransactionModel.find({ vaultAddress })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+    const allRecentSummary = allRecent.map((tx) => ({
+      id: String(tx._id),
+      createdAt: (tx as any).createdAt,
+      action: tx.action,
+      type: tx.type,
+      mint: tx.mint,
+      status: tx.status,
+      signature: tx.signature,
+    }));
+
+    res.json({
+      success: true,
+      task: {
+        slug: task.slug,
+        title: task.title,
+        verifierType: task.verifierType,
+        verifierConfig: task.verifierConfig,
+      },
+      txQuery,
+      matchingTransactions: txDetails,
+      totalUsd,
+      allRecentTransactions: allRecentSummary,
+    });
+  } catch (error) {
+    console.error('Admin diagnose reward error:', error);
+    res.status(500).json({ success: false, error: 'Failed to diagnose' });
+  }
+});
+
+/**
  * GET /rewards/badges?taskSlug=&status=
  * Browse minted badges.
  */
