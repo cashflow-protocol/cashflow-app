@@ -670,8 +670,6 @@ router.post('/waitlist-users/:id/revoke-task', async (req, res) => {
 
 // ─── App Users ───
 
-const SQUADS_V4_API = 'https://v4-api.squads.so';
-const SQUAD_LOOKUP_TIMEOUT_MS = 5000;
 const SQUAD_LOOKUP_CACHE_TTL_MS = 60_000;
 
 interface SquadMemberInfo {
@@ -688,48 +686,43 @@ interface SquadInfo {
 const squadLookupCache = new Map<string, { value: SquadInfo | null; expiresAt: number }>();
 
 /**
- * Look up a user's squad on Squads V4 by their wallet pubkey, picking the
- * multisig whose default vault matches our stored vaultAddress. Returns null
- * if the API is unreachable, the user isn't a known member, or no multisig
- * matches the vault address (e.g. Seeker users where publicKey isn't a member).
+ * Read a multisig's members directly on-chain. Mirrors the mobile pattern in
+ * mobile/src/services/squadsService.ts:getMultisigInfo. Cached by multisig
+ * address so repeated page loads don't re-fetch the same accounts.
  */
-async function fetchSquadForUser(publicKey: string, vaultAddress: string): Promise<SquadInfo | null> {
-  const cacheKey = `${publicKey}::${vaultAddress}`;
+async function fetchSquadByMultisig(multisigAddress: string): Promise<SquadInfo | null> {
   const now = Date.now();
-  const cached = squadLookupCache.get(cacheKey);
+  const cached = squadLookupCache.get(multisigAddress);
   if (cached && cached.expiresAt > now) return cached.value;
 
   let value: SquadInfo | null = null;
   try {
-    const r = await fetch(`${SQUADS_V4_API}/multisigs/${publicKey}?useProd=true`, {
-      signal: AbortSignal.timeout(SQUAD_LOOKUP_TIMEOUT_MS),
-    });
-    if (r.ok) {
-      const data = await r.json();
-      if (Array.isArray(data)) {
-        const match = data.find((ms: any) => ms?.defaultVault === vaultAddress);
-        if (match) {
-          const members: SquadMemberInfo[] = (match.account?.members || []).map((m: any) => ({
-            address: m.key,
-            permissions: {
-              initiate: (m.permissions?.mask & 1) !== 0,
-              vote: (m.permissions?.mask & 2) !== 0,
-              execute: (m.permissions?.mask & 4) !== 0,
-            },
-          }));
-          value = {
-            multisigAddress: match.address,
-            threshold: match.account?.threshold ?? 1,
-            members,
-          };
-        }
-      }
-    }
+    const multisigLib = await import('@sqds/multisig');
+    const { Connection, PublicKey } = await import('@solana/web3.js');
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const conn = new Connection(rpcUrl);
+
+    const multisigPda = new PublicKey(multisigAddress);
+    const account = await multisigLib.accounts.Multisig.fromAccountAddress(conn, multisigPda);
+    const { Permission, Permissions } = multisigLib.types;
+
+    value = {
+      multisigAddress,
+      threshold: account.threshold,
+      members: account.members.map((m: any) => ({
+        address: m.key.toBase58(),
+        permissions: {
+          initiate: Permissions.has(m.permissions, Permission.Initiate),
+          vote: Permissions.has(m.permissions, Permission.Vote),
+          execute: Permissions.has(m.permissions, Permission.Execute),
+        },
+      })),
+    };
   } catch (err) {
-    console.warn('[admin] Squad lookup failed for', publicKey, (err as Error).message);
+    console.warn('[admin] Multisig RPC lookup failed for', multisigAddress, (err as Error).message);
   }
 
-  squadLookupCache.set(cacheKey, { value, expiresAt: now + SQUAD_LOOKUP_CACHE_TTL_MS });
+  squadLookupCache.set(multisigAddress, { value, expiresAt: now + SQUAD_LOOKUP_CACHE_TTL_MS });
   return value;
 }
 
@@ -765,9 +758,23 @@ router.get('/users', async (req, res) => {
     const tokensWithUsers = await DeviceTokenModel.distinct('userId', { userId: { $in: userIds } });
     const usersWithPush = new Set(tokensWithUsers.map(String));
 
-    // Enrich each user with their Squads V4 multisig members (parallel, best-effort).
+    // Resolve each user's multisig address via VaultPayment (one batched query)
+    // then read members directly on-chain (parallel, best-effort).
+    const pageVaults = users.map((u) => u.vaultAddress);
+    const payments = await VaultPaymentModel.find(
+      { vaultAddress: { $in: pageVaults }, multisigAddress: { $exists: true, $ne: null } },
+      { vaultAddress: 1, multisigAddress: 1 },
+    ).lean();
+    const vaultToMultisig = new Map<string, string>();
+    for (const p of payments) {
+      if (p.vaultAddress && p.multisigAddress) vaultToMultisig.set(p.vaultAddress, p.multisigAddress);
+    }
+
     const squadResults = await Promise.allSettled(
-      users.map((u) => fetchSquadForUser(u.publicKey, u.vaultAddress)),
+      users.map((u) => {
+        const ms = vaultToMultisig.get(u.vaultAddress);
+        return ms ? fetchSquadByMultisig(ms) : Promise.resolve(null);
+      }),
     );
     const squadByIdx = squadResults.map((r) => (r.status === 'fulfilled' ? r.value : null));
 
