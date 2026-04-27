@@ -1603,6 +1603,91 @@ export async function executeVaultTransaction(
 }
 
 /**
+ * Submit a single-TX Jito bundle that combines admin-authority instructions
+ * with the gas-cover reimbursement. Used for operations that don't need a
+ * vault execute (e.g. Metaplex Core updatePlugin where admin holds
+ * UpdateAuthority).
+ *
+ *   TX = [...adminInstructions, jitoTip, createCoverFromSquadInstruction]
+ *
+ * Admin signs server-side via /solana/v2/send-bundle. Mobile signs as the
+ * cover member (cloud key, or MWA wallet on Seeker).
+ */
+export async function executeAdminInstructionsWithGasCover(
+  multisigAddress: string,
+  serializedAdminInstructions: Array<{
+    programId: string;
+    accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[];
+    data: string;
+  }>,
+): Promise<{ signature: string; bundleSignatures: string[] }> {
+  const multisigPda = new PublicKey(multisigAddress);
+  const ctx = await getSigningContext('admin_instructions_gas_cover');
+  const adminFeePayerPubkey = new PublicKey(getAdminTxFeePayerPublicKey());
+  const feePayer = adminFeePayerPubkey;
+
+  const luts = await getLuts(connection);
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+
+  const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+  const coverMember = ctx.seekerMode ? ctx.walletPubkey! : ctx.cloudPubkey!;
+
+  const adminIxs: TransactionInstruction[] = serializedAdminInstructions.map((ix) =>
+    new TransactionInstruction({
+      programId: new PublicKey(ix.programId),
+      keys: ix.accounts.map((acc) => ({
+        pubkey: new PublicKey(acc.pubkey),
+        isSigner: acc.isSigner,
+        isWritable: acc.isWritable,
+      })),
+      data: Buffer.from(ix.data, 'base64'),
+    }),
+  );
+
+  const allInstructions: TransactionInstruction[] = [
+    ...adminIxs,
+    await jitoTipIx(feePayer),
+    kitIxToWeb3(await createCoverFromSquadInstruction(
+      kitAddress(adminFeePayerPubkey.toBase58()),
+      kitAddress(coverMember.toBase58()),
+      kitAddress(multisigPda.toBase58()),
+      kitAddress(spendingLimitPda.toBase58()),
+      ADMIN_COVER_TARGET,
+    )),
+  ];
+
+  const msg = new TransactionMessage({
+    payerKey: feePayer,
+    recentBlockhash: blockhash,
+    instructions: allInstructions,
+  }).compileToV0Message(luts);
+  const tx = new VersionedTransaction(msg);
+
+  let signedTx: VersionedTransaction;
+  if (ctx.seekerMode) {
+    const signedBytes = await walletService.signTransactions([new Uint8Array(tx.serialize())]);
+    signedTx = VersionedTransaction.deserialize(signedBytes[0]);
+  } else {
+    await signTransactionNatively(tx, [
+      { pubkey: ctx.cloudPubkey!, signFn: signWithCloud },
+    ]);
+    if (IS_SOLANA_MOBILE && ctx.walletPubkey) {
+      await signTransactionsWithWallet([tx], [0], ctx.walletPubkey);
+    }
+    signedTx = tx;
+  }
+
+  const txBase64 = Buffer.from(signedTx.serialize()).toString('base64');
+  const bundleResult = await apiService.sendBundle([txBase64]);
+
+  const bundleSignatures = bundleResult.transactions.length > 0
+    ? bundleResult.transactions
+    : [bs58.encode(signedTx.signatures[0])];
+
+  return { signature: bundleSignatures[0] ?? '', bundleSignatures };
+}
+
+/**
  * Set rentCollector on an existing multisig via config transaction.
  * Required before vault/config transaction accounts can be closed.
  */

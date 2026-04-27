@@ -24,9 +24,7 @@ export interface BadgeMintBuildResult {
   badgeMintId: string;
   assetAddress: string;
   collectionAddress: string;
-  innerInstructions: SerializedInstruction[];
-  mintTransactionBase64: string;
-  blockhash: string;
+  updatePluginInstructions: SerializedInstruction[];
 }
 
 export class PassportNotActivatedError extends Error {
@@ -144,9 +142,7 @@ export async function buildBadgeMint(
     badgeMintId: String(attempt._id),
     assetAddress: user.cashflowPassportAddress,
     collectionAddress: built.collectionAddress,
-    innerInstructions: built.innerInstructions,
-    mintTransactionBase64: built.mintTransactionBase64,
-    blockhash: built.blockhash,
+    updatePluginInstructions: built.updatePluginInstructions,
   };
 }
 

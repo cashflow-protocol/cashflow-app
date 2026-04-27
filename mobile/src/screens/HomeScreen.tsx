@@ -398,7 +398,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
             const ok = await attestSeekerIfNeeded();
             invalidateRewards();
             if (ok) {
-              showToast('Seeker verified', 'Adding badge to your Cashflow Passport…', 'success');
+              showToast('Seeker verified', 'You can mint badge to your Cashflow Passport…', 'success');
               setSelectedRewardTask(null);
             }
           } catch (err: any) {
