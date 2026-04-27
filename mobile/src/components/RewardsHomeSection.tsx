@@ -9,9 +9,13 @@ import type { TaskWithProgress } from '../types/rewards';
 interface Props {
   onSelectTask?: (task: TaskWithProgress) => void;
   onActivatePassport?: () => void;
+  /** Inline Mint handler. Triggered when a card's Mint CTA is tapped. */
+  onMintBadge?: (task: TaskWithProgress) => void;
+  /** Slug of the badge currently being minted (drives the spinner). */
+  mintingSlug?: string | null;
 }
 
-export default function RewardsHomeSection({ onSelectTask, onActivatePassport }: Props) {
+export default function RewardsHomeSection({ onSelectTask, onActivatePassport, onMintBadge, mintingSlug }: Props) {
   const { colors } = useTheme();
   const { tasks, cashflowPassport, loading } = useRewards();
 
@@ -54,6 +58,8 @@ export default function RewardsHomeSection({ onSelectTask, onActivatePassport }:
                 task={item}
                 onPress={() => onSelectTask?.(item)}
                 passportActivated={cashflowPassport.activated}
+                onMint={onMintBadge ? () => onMintBadge(item) : undefined}
+                minting={mintingSlug === item.slug}
               />
             )}
           />

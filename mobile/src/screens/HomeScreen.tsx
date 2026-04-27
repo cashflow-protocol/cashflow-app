@@ -16,6 +16,7 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { useAssets } from '../hooks/useAssets';
 import { useEarnTokens } from '../hooks/useEarnTokens';
 import { useRewards, invalidateRewards } from '../hooks/useRewards';
+import { useBadgeMint } from '../hooks/useBadgeMint';
 import { attestSeekerIfNeeded } from '../services/rewardsService';
 import { useToast } from '../contexts/ToastContext';
 import { useSolPrice } from '../hooks/useSolPrice';
@@ -75,11 +76,23 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
   const { price: solPrice, loading: solPriceLoading, refresh: refreshSolPrice } = useSolPrice();
   const { suggestions, refresh: refreshSuggestions } = useSuggestions();
   const { cashflowPassport } = useRewards();
+  const { mint: mintBadge, mintingSlug } = useBadgeMint();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRewardTask, setSelectedRewardTask] = useState<TaskWithProgress | null>(null);
   const [attestingSeeker, setAttestingSeeker] = useState(false);
   const [activatePassportVisible, setActivatePassportVisible] = useState(false);
   const { showToast } = useToast();
+
+  const handleMintBadge = useCallback(async (task: TaskWithProgress) => {
+    if (mintingSlug) return;
+    try {
+      await mintBadge(task.slug);
+      showToast('Badge minted', `${task.title} added to your Cashflow Passport`, 'success');
+      setSelectedRewardTask(null);
+    } catch (err: any) {
+      showToast('Mint failed', err?.message ?? 'Please try again', 'error');
+    }
+  }, [mintBadge, mintingSlug, showToast]);
 
   const openActivatePassport = React.useCallback(() => {
     setSelectedRewardTask(null);
@@ -334,6 +347,8 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         <RewardsHomeSection
           onSelectTask={(task) => setSelectedRewardTask(task)}
           onActivatePassport={openActivatePassport}
+          onMintBadge={handleMintBadge}
+          mintingSlug={mintingSlug}
         />
 
         {/* Useful Section */}
@@ -374,6 +389,8 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         attesting={attestingSeeker}
         passportActivated={cashflowPassport.activated}
         onActivatePassport={openActivatePassport}
+        onMint={selectedRewardTask ? () => handleMintBadge(selectedRewardTask) : undefined}
+        minting={!!mintingSlug && mintingSlug === selectedRewardTask?.slug}
         onAttestSeeker={async () => {
           if (attestingSeeker) return;
           setAttestingSeeker(true);

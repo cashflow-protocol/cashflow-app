@@ -6,7 +6,6 @@ import {
   UserModel,
 } from '../models';
 import { RewardMintBuilder, getCashflowPassportActivationFeeLamports } from '../managers/RewardMintBuilder';
-import { enqueueClaimableAttributes } from './badgeAttributeService';
 
 const builder = new RewardMintBuilder();
 
@@ -160,11 +159,7 @@ export async function tryConfirmActivation(activation: any): Promise<ConfirmOutc
       { $set: { cashflowPassportAddress: activation.assetAddress, cashflowPassportActivatedAt: new Date() } },
     );
 
-    // Pick up any badges already in CLAIMABLE state.
-    enqueueClaimableAttributes(activation.vaultAddress).catch((err) =>
-      console.error('[activation] enqueueClaimableAttributes error:', err),
-    );
-
+    // No auto-mint of pre-activation claimables — user clicks Mint per badge.
     return 'confirmed';
   }
   return 'pending';

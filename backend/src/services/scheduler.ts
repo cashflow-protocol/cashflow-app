@@ -6,7 +6,11 @@ import { JupiterManager, KaminoManager, DriftManager, PerenaManager, SolomonMana
 import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from '../models';
 import { NotificationType } from '../models';
 import { CashflowPassportActivationModel, CashflowPassportActivationStatus } from '../models/CashflowPassportActivation';
+import { BadgeMintAttemptModel, BadgeMintAttemptStatus } from '../models/BadgeMintAttempt';
+import { RewardProgressStatus, UserRewardProgressModel } from '../models/UserRewardProgress';
+import { RewardTaskModel } from '../models/RewardTask';
 import { tryConfirmActivation, failActivation } from './cashflowPassportService';
+import { tryConfirmBadgeMint } from './badgeMintService';
 import { dispatchSystemNotification } from './notificationService';
 import { sendWaitlistPushNotification, cleanupExpiredRTDBNotifications } from './firebaseManager';
 import { onTransactionConfirmed, markFeeTransactionFailed } from './feeService';
@@ -240,6 +244,54 @@ async function approveTopWaitlistUsers() {
 const RECOVER_GRACE_MS = 10 * 60 * 1000;
 const RECOVER_FAIL_AFTER_MS = 30 * 60 * 1000;
 
+async function recoverPendingBadgeMints() {
+  try {
+    const cutoff = new Date(Date.now() - RECOVER_GRACE_MS);
+    const pending = await BadgeMintAttemptModel.find({
+      status: BadgeMintAttemptStatus.PENDING,
+      createdAt: { $lte: cutoff },
+    }).limit(100);
+
+    if (pending.length === 0) return;
+    console.log(`[Cron] recoverPendingBadgeMints: ${pending.length} pending`);
+
+    for (const attempt of pending) {
+      const createdAt = (attempt as any).createdAt as Date | undefined;
+      const expired = createdAt && Date.now() - createdAt.getTime() > RECOVER_FAIL_AFTER_MS;
+      try {
+        if (attempt.bundleSignatures.filter((s) => !!s).length === 0) {
+          if (expired) {
+            attempt.status = BadgeMintAttemptStatus.FAILED;
+            await attempt.save();
+            await RewardTaskModel.updateOne({ slug: attempt.taskSlug }, { $inc: { mintedCount: -1 } }).catch(() => {});
+            await UserRewardProgressModel.updateOne(
+              { vaultAddress: attempt.vaultAddress, taskSlug: attempt.taskSlug, status: RewardProgressStatus.MINT_PENDING },
+              { $set: { status: RewardProgressStatus.CLAIMABLE } },
+            ).catch(() => {});
+          }
+          continue;
+        }
+        const outcome = await tryConfirmBadgeMint(attempt);
+        if (outcome === 'confirmed') {
+          console.log(`[Cron] Badge mint ${attempt.taskSlug}/${attempt.vaultAddress} CONFIRMED`);
+        } else if (outcome === 'pending' && expired) {
+          attempt.status = BadgeMintAttemptStatus.FAILED;
+          await attempt.save();
+          await RewardTaskModel.updateOne({ slug: attempt.taskSlug }, { $inc: { mintedCount: -1 } }).catch(() => {});
+          await UserRewardProgressModel.updateOne(
+            { vaultAddress: attempt.vaultAddress, taskSlug: attempt.taskSlug, status: RewardProgressStatus.MINT_PENDING },
+            { $set: { status: RewardProgressStatus.CLAIMABLE } },
+          ).catch(() => {});
+        }
+      } catch (err) {
+        console.error(`[Cron] Recovery error for badge mint ${attempt._id}:`, err);
+      }
+    }
+  } catch (error) {
+    console.error('[Cron] Failed to recover pending badge mints:', error);
+  }
+}
+
 async function recoverPendingActivations() {
   try {
     const cutoff = new Date(Date.now() - RECOVER_GRACE_MS);
@@ -350,6 +402,11 @@ export async function initializeScheduler() {
 
   // Recover stuck Cashflow Passport activations every 5 minutes
   cron.schedule('*/5 * * * *', recoverPendingActivations, {
+    timezone: 'UTC',
+  });
+
+  // Recover stuck badge mint attempts every 5 minutes
+  cron.schedule('*/5 * * * *', recoverPendingBadgeMints, {
     timezone: 'UTC',
   });
 

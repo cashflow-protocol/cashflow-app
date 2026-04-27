@@ -46,6 +46,7 @@ export function getCashflowPassportActivationFeeLamports(): bigint {
   return 30_000_000n;
 }
 
+
 /**
  * Convert a Umi instruction to a web3.js TransactionInstruction.
  */
@@ -285,5 +286,70 @@ export class RewardMintBuilder {
 
     const result = await builder.sendAndConfirm(umi, { confirm: { commitment: 'confirmed' } });
     return Buffer.from(result.signature).toString('base64');
+  }
+
+  /**
+   * Build (but do not send) the Metaplex Core `updatePlugin` transaction that
+   * appends a badge attribute to the user's Cashflow Passport.
+   *
+   * Returns an admin-pre-signed VersionedTransaction for mobile to bundle as
+   * TX5. No inner instructions are needed — the mobile's executeVaultTransaction
+   * already bundles createCoverFromSquadInstruction in TX4 to reimburse admin
+   * gas from the vault's spending limit PDA.
+   */
+  async buildBadgeMintTransaction(params: {
+    assetAddress: string;
+    key: string;
+    value: string;
+  }): Promise<{
+    mintTransactionBase64: string;
+    innerInstructions: SerializedInstruction[];
+    blockhash: string;
+    collectionAddress: string;
+    alreadyPresent: boolean;
+  }> {
+    const { assetAddress, key, value } = params;
+    const collectionAddress = await this.getCollectionAddress();
+
+    const adminKeypair = getAdminTxFeePayerKeypair();
+    const umi = createUmi(this.rpc.rpcEndpoint).use(mplCore());
+    const umiAdminKeypair = umi.eddsa.createKeypairFromSecretKey(adminKeypair.secretKey);
+    umi.use(keypairIdentity(umiAdminKeypair));
+
+    const asset = await fetchAssetV1(umi, umiPublicKey(assetAddress));
+    const existing = asset.attributes?.attributeList ?? [];
+    const alreadyPresent = existing.some((a) => a.key === key);
+    const nextList = alreadyPresent ? [...existing] : [...existing, { key, value }];
+
+    const updateBuilder = updatePlugin(umi, {
+      asset: umiPublicKey(assetAddress),
+      collection: umiPublicKey(collectionAddress),
+      plugin: { type: 'Attributes', attributeList: nextList },
+    });
+
+    const umiInstructions = updateBuilder.getInstructions();
+    const web3Instructions = umiInstructions.map(umiInstructionToWeb3);
+
+    const { blockhash } = await this.rpc.getLatestBlockhash('confirmed');
+    const message = new TransactionMessage({
+      payerKey: adminKeypair.publicKey,
+      recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ...web3Instructions,
+      ],
+    }).compileToV0Message();
+
+    const tx = new VersionedTransaction(message);
+    tx.sign([adminKeypair]);
+    const mintTransactionBase64 = Buffer.from(tx.serialize()).toString('base64');
+
+    return {
+      mintTransactionBase64,
+      innerInstructions: [],
+      blockhash,
+      collectionAddress,
+      alreadyPresent,
+    };
   }
 }

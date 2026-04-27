@@ -10,8 +10,12 @@ interface Props {
   compact?: boolean;
   /** Has the user activated their Cashflow Passport? Affects the CTA copy
    *  for claimable badges — pre-activation we tell them to activate; once
-   *  activated the badge auto-adds. */
+   *  activated the user clicks Mint per badge. */
   passportActivated?: boolean;
+  /** Tap handler for the inline Mint CTA on claimable + activated cards. */
+  onMint?: () => void;
+  /** True while this card's badge is being minted (overrides status). */
+  minting?: boolean;
 }
 
 function isUsdBased(verifierType: TaskWithProgress['verifierType']): boolean {
@@ -50,9 +54,9 @@ function progressFraction(task: TaskWithProgress): number {
 function ctaLabel(task: TaskWithProgress, passportActivated: boolean): string {
   switch (task.status) {
     case 'claimable':
-      return passportActivated ? 'Earned' : 'Activate Passport';
+      return passportActivated ? 'Mint' : 'Activate Passport';
     case 'mint_pending':
-      return 'Adding…';
+      return 'Minting…';
     case 'minted':
       return 'Earned';
     case 'in_progress':
@@ -61,15 +65,22 @@ function ctaLabel(task: TaskWithProgress, passportActivated: boolean): string {
   }
 }
 
-export default function RewardBadgeCard({ task, onPress, compact, passportActivated = false }: Props) {
+export default function RewardBadgeCard({ task, onPress, compact, passportActivated = false, onMint, minting = false }: Props) {
   const { colors } = useTheme();
   const fraction = progressFraction(task);
   const claimable = task.status === 'claimable';
   const minted = task.status === 'minted';
-  const pending = task.status === 'mint_pending';
-  // CTA highlights when the user has an action to take (activate Passport)
-  // OR when the badge is auto-completing in the background.
-  const ctaHighlighted = (claimable && !passportActivated) || pending;
+  const pending = task.status === 'mint_pending' || minting;
+  const canMintInline = claimable && passportActivated && !!onMint && !minting;
+  const ctaHighlighted = claimable || pending;
+
+  const handleCtaPress = () => {
+    if (canMintInline) {
+      onMint?.();
+      return;
+    }
+    onPress?.();
+  };
 
   return (
     <TouchableOpacity
@@ -112,7 +123,10 @@ export default function RewardBadgeCard({ task, onPress, compact, passportActiva
         />
       </View>
 
-      <View
+      <TouchableOpacity
+        activeOpacity={canMintInline ? 0.85 : 1}
+        onPress={canMintInline ? handleCtaPress : onPress}
+        disabled={pending}
         style={[
           styles.cta,
           ctaHighlighted && { backgroundColor: colors.accentBlueDark },
@@ -132,7 +146,7 @@ export default function RewardBadgeCard({ task, onPress, compact, passportActiva
             {ctaLabel(task, passportActivated)}
           </Text>
         )}
-      </View>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 }

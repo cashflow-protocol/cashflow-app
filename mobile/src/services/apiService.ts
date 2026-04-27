@@ -356,6 +356,36 @@ class ApiService {
     return { status: res.status };
   }
 
+  async mintBadge(taskSlug: string): Promise<{
+    badgeMintId: string;
+    assetAddress: string;
+    collectionAddress: string;
+    innerInstructions: SerializedInstruction[];
+    mintTransactionBase64: string;
+    blockhash: string;
+  }> {
+    const res = await this.signedPost<{
+      success: boolean;
+      data: {
+        badgeMintId: string;
+        assetAddress: string;
+        collectionAddress: string;
+        innerInstructions: SerializedInstruction[];
+        mintTransactionBase64: string;
+        blockhash: string;
+      };
+    }>('/rewards/v2/badge/mint', { taskSlug });
+    return res.data;
+  }
+
+  async confirmBadgeMint(badgeMintId: string, bundleSignatures: string[]): Promise<{ status: 'confirmed' | 'pending' | 'failed' }> {
+    const res = await this.post<{ success: boolean; status: 'confirmed' | 'pending' | 'failed' }>(
+      '/rewards/v2/badge/mint/confirm',
+      { badgeMintId, bundleSignatures },
+    );
+    return { status: res.status };
+  }
+
   async deposit(params: {
     type: string;
     mint: string;

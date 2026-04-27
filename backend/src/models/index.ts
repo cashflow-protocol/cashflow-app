@@ -19,4 +19,5 @@ export { RewardTask, RewardTaskModel, RewardVerifierType } from './RewardTask';
 export { UserRewardProgress, UserRewardProgressModel, RewardProgressStatus } from './UserRewardProgress';
 export { MintedBadge, MintedBadgeModel, MintedBadgeStatus } from './MintedBadge';
 export { CashflowPassportActivation, CashflowPassportActivationModel, CashflowPassportActivationStatus } from './CashflowPassportActivation';
+export { BadgeMintAttempt, BadgeMintAttemptModel, BadgeMintAttemptStatus } from './BadgeMintAttempt';
 export { AppSetting, AppSettingModel, APP_SETTING_KEYS, getSetting, setSetting, invalidateSettingCache } from './AppSetting';

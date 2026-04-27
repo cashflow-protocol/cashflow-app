@@ -10,6 +10,14 @@ import {
   recordAndConfirmActivation,
   InsufficientBalanceError,
 } from '../services/cashflowPassportService';
+import {
+  buildBadgeMint,
+  recordAndConfirmBadgeMint,
+  PassportNotActivatedError,
+  TaskNotClaimableError,
+  TaskSoldOutError,
+  TaskInactiveError,
+} from '../services/badgeMintService';
 import { getCashflowPassportActivationFeeLamports } from '../managers/RewardMintBuilder';
 
 const router = Router();
@@ -189,6 +197,76 @@ router.post('/cashflow-passport/activate/confirm', async (req: AuthenticatedRequ
     console.error('POST /rewards/v2/cashflow-passport/activate/confirm error:', err);
     const status = err?.message === 'Activation not found' ? 404 : 500;
     res.status(status).json({ success: false, error: err?.message ?? 'Failed to confirm activation' });
+  }
+});
+
+/**
+ * POST /rewards/v2/badge/mint
+ * Body: { taskSlug }
+ * Builds an admin-pre-signed Metaplex Core updatePlugin TX for the badge,
+ * plus inner instructions (vault → admin) covering gas. Mobile bundles the
+ * pair via executeVaultTransaction (TX1-TX4 + TX5).
+ */
+router.post('/badge/mint', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const vaultAddress = req.user?.vaultAddress;
+    if (!vaultAddress) {
+      res.status(401).json({ success: false, error: 'Not authenticated' });
+      return;
+    }
+    const { taskSlug } = req.body ?? {};
+    if (typeof taskSlug !== 'string' || !taskSlug) {
+      res.status(400).json({ success: false, error: 'taskSlug is required' });
+      return;
+    }
+
+    const built = await buildBadgeMint(vaultAddress, taskSlug);
+    res.json({ success: true, data: built });
+  } catch (err: any) {
+    if (err instanceof PassportNotActivatedError) {
+      res.status(400).json({ success: false, error: err.message, errorCode: 'PASSPORT_NOT_ACTIVATED' });
+      return;
+    }
+    if (err instanceof TaskNotClaimableError) {
+      res.status(400).json({ success: false, error: err.message, errorCode: 'NOT_CLAIMABLE', status: err.status });
+      return;
+    }
+    if (err instanceof TaskSoldOutError) {
+      res.status(409).json({ success: false, error: err.message, errorCode: 'SOLD_OUT' });
+      return;
+    }
+    if (err instanceof TaskInactiveError) {
+      res.status(409).json({ success: false, error: err.message, errorCode: 'INACTIVE' });
+      return;
+    }
+    console.error('POST /rewards/v2/badge/mint error:', err);
+    res.status(500).json({ success: false, error: err?.message ?? 'Failed to build badge mint' });
+  }
+});
+
+/**
+ * POST /rewards/v2/badge/mint/confirm
+ * Body: { badgeMintId, bundleSignatures: string[] }
+ */
+router.post('/badge/mint/confirm', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const vaultAddress = req.user?.vaultAddress;
+    if (!vaultAddress) {
+      res.status(401).json({ success: false, error: 'Not authenticated' });
+      return;
+    }
+    const { badgeMintId, bundleSignatures } = req.body ?? {};
+    if (!badgeMintId || !Array.isArray(bundleSignatures)) {
+      res.status(400).json({ success: false, error: 'badgeMintId and bundleSignatures are required' });
+      return;
+    }
+
+    const outcome = await recordAndConfirmBadgeMint(badgeMintId, vaultAddress, bundleSignatures);
+    res.json({ success: true, status: outcome });
+  } catch (err: any) {
+    console.error('POST /rewards/v2/badge/mint/confirm error:', err);
+    const status = err?.message === 'Badge mint attempt not found' ? 404 : 500;
+    res.status(status).json({ success: false, error: err?.message ?? 'Failed to confirm badge mint' });
   }
 });
 
