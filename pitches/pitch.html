@@ -854,7 +854,104 @@
         }
 
         /* ===========================================
-           SLIDE 7 - TRACTION
+           SLIDE 7 - GO TO MARKET
+           =========================================== */
+        .gtm-card {
+            padding: clamp(1rem, 1.8vw, 1.4rem);
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.5rem, 1vw, 0.75rem);
+            transition: border-color 0.3s ease, background 0.3s ease;
+        }
+
+        .gtm-card:hover {
+            border-color: var(--green-20);
+            background: var(--surface-2);
+        }
+
+        .gtm-num {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--green);
+            letter-spacing: 0.05em;
+        }
+
+        .gtm-card h3 {
+            font-size: var(--t-h3);
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: -0.01em;
+        }
+
+        .gtm-card p {
+            font-size: var(--t-small);
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .gtm-partners {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.35rem, 0.7vw, 0.5rem);
+            margin-top: auto;
+            padding-top: clamp(0.5rem, 1vw, 0.75rem);
+            border-top: 1px solid var(--line);
+        }
+
+        .gtm-partners li {
+            display: grid;
+            grid-template-columns: 14px 1fr auto;
+            gap: 0.6em;
+            align-items: baseline;
+            font-size: var(--t-small);
+            color: var(--text);
+        }
+
+        .gtm-partners .gtm-status {
+            font-family: var(--mono);
+            font-weight: 600;
+            color: var(--green);
+            line-height: 1;
+        }
+
+        .gtm-partners .gtm-status.pending {
+            color: var(--text-faint);
+        }
+
+        .gtm-partners li em {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            font-style: normal;
+            color: var(--text-faint);
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        .gtm-protocols {
+            display: flex;
+            flex-wrap: wrap;
+            gap: clamp(0.4rem, 0.8vw, 0.6rem);
+            margin-top: auto;
+            padding-top: clamp(0.5rem, 1vw, 0.75rem);
+            border-top: 1px solid var(--line);
+            align-items: center;
+        }
+
+        .gtm-protocols img {
+            width: clamp(22px, 2.6vw, 30px);
+            height: clamp(22px, 2.6vw, 30px);
+            border-radius: 50%;
+            object-fit: cover;
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+        }
+
+        /* ===========================================
+           SLIDE 8 - TRACTION
            Big numbers as design
            =========================================== */
         .traction-grid {
@@ -938,7 +1035,7 @@
         }
 
         /* ===========================================
-           SLIDE 8 - SKR
+           SLIDE 9 - SKR
            =========================================== */
         .skr-banner {
             display: grid;
@@ -1038,7 +1135,7 @@
         }
 
         /* ===========================================
-           SLIDE 9 - ROADMAP
+           SLIDE 10 - ROADMAP
            =========================================== */
         .roadmap-timeline {
             --rm-node-top: clamp(28px, 3vw, 38px);
@@ -1216,7 +1313,7 @@
         }
 
         /* ===========================================
-           SLIDE 10 - BUILDER
+           SLIDE 11 - BUILDER
            =========================================== */
         .builder-grid {
             display: grid;
@@ -1301,7 +1398,7 @@
         }
 
         /* ===========================================
-           SLIDE 11 - CTA
+           SLIDE 12 - CTA
            =========================================== */
         .cta-grid {
             display: grid;
@@ -1640,7 +1737,7 @@
 
     <!-- Slide counter -->
     <div class="slide-counter" id="slideCounter">
-        <span class="current">01</span> &nbsp;/&nbsp; 11
+        <span class="current">01</span> &nbsp;/&nbsp; 12
     </div>
 
     <!-- Top-right meta -->
@@ -1923,12 +2020,60 @@
 
 
     <!-- ═══════════════════════════════════════════
-         07 - TRACTION
+         07 - GO TO MARKET
          ═══════════════════════════════════════════ -->
     <section class="slide" data-slide="7">
         <div class="slide-inner">
             <div class="reveal">
-                <p class="eyebrow">07 / Traction</p>
+                <p class="eyebrow">07 / Go to Market</p>
+                <h2 class="title" style="margin-top: 0.6em;">
+                    Three channels. <em>One flywheel.</em>
+                </h2>
+            </div>
+
+            <div class="grid-3 reveal" style="transition-delay: 0.15s;">
+                <div class="gtm-card">
+                    <span class="gtm-num">C.01</span>
+                    <h3>Boosted yield campaigns</h3>
+                    <p>Co-run reward programs with the yield protocols we integrate. Users earn higher APY by depositing through Cashflow — protocols get distribution.</p>
+                </div>
+
+                <div class="gtm-card">
+                    <span class="gtm-num">C.02</span>
+                    <h3>Hardware wallet alliances</h3>
+                    <p>First mobile DeFi app with native multi-sig and hardware support. The whales who can't use hot wallets at scale.</p>
+                    <ul class="gtm-partners">
+                        <li><span class="gtm-status">✓</span><span>Keystone</span><em>support</em></li>
+                        <li><span class="gtm-status">✓</span><span>Trezor</span><em>support</em></li>
+                        <li><span class="gtm-status pending">→</span><span>SafePal</span><em>grant program</em></li>
+                    </ul>
+                </div>
+
+                <div class="gtm-card">
+                    <span class="gtm-num">C.03</span>
+                    <h3>Protocol co-marketing</h3>
+                    <p>We send curated mobile users to the protocols we integrate. They amplify our launch; we drive their TVL.</p>
+                    <div class="gtm-protocols" aria-label="Integrated protocols">
+                        <img src="files/protocol-icons/jupiter.svg" alt="Jupiter">
+                        <img src="files/protocol-icons/kamino.svg" alt="Kamino">
+                        <img src="files/protocol-icons/drift.svg" alt="Drift">
+                        <img src="files/protocol-icons/onre.jpg" alt="Onre">
+                        <img src="files/protocol-icons/solomon.svg" alt="Solomon">
+                        <img src="files/protocol-icons/perena.jpg" alt="Perena">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- ═══════════════════════════════════════════
+         08 - TRACTION
+         ═══════════════════════════════════════════ -->
+    <section class="slide" data-slide="8">
+        <div class="slide-inner">
+            <div class="reveal">
+                <p class="eyebrow">08 / Traction</p>
                 <h2 class="title" style="margin-top: 0.6em;">
                     Building in public. <em>Growing organically.</em>
                 </h2>
@@ -1965,12 +2110,12 @@
 
 
     <!-- ═══════════════════════════════════════════
-         08 - SKR INTEGRATION
+         09 - SKR INTEGRATION
          ═══════════════════════════════════════════ -->
-    <section class="slide" data-slide="8">
+    <section class="slide" data-slide="9">
         <div class="slide-inner">
             <div class="reveal">
-                <p class="eyebrow">08 / SKR Integration</p>
+                <p class="eyebrow">09 / SKR Integration</p>
                 <h2 class="title" style="margin-top: 0.6em;">
                     Built for the <em>Solana Mobile</em> ecosystem.
                 </h2>
@@ -2006,12 +2151,12 @@
 
 
     <!-- ═══════════════════════════════════════════
-         09 - ROADMAP
+         10 - ROADMAP
          ═══════════════════════════════════════════ -->
-    <section class="slide" data-slide="9">
+    <section class="slide" data-slide="10">
         <div class="slide-inner">
             <div class="reveal">
-                <p class="eyebrow">09 / Roadmap</p>
+                <p class="eyebrow">10 / Roadmap</p>
                 <h2 class="title" style="margin-top: 0.6em;">
                     Where we're going.
                 </h2>
@@ -2081,12 +2226,12 @@
 
 
     <!-- ═══════════════════════════════════════════
-         10 - BUILDER
+         11 - BUILDER
          ═══════════════════════════════════════════ -->
-    <section class="slide" data-slide="10">
+    <section class="slide" data-slide="11">
         <div class="slide-inner">
             <div class="reveal">
-                <p class="eyebrow">10 / The Builder</p>
+                <p class="eyebrow">11 / The Builder</p>
                 <h2 class="title" style="margin-top: 0.6em;">
                     Solo founder. <em>Proven track record.</em>
                 </h2>
@@ -2116,13 +2261,13 @@
 
 
     <!-- ═══════════════════════════════════════════
-         11 - CTA
+         12 - CTA
          ═══════════════════════════════════════════ -->
-    <section class="slide" data-slide="11">
+    <section class="slide" data-slide="12">
         <div class="slide-inner">
             <div class="cta-grid">
                 <div class="cta-left">
-                    <p class="eyebrow reveal">11 / Try It</p>
+                    <p class="eyebrow reveal">12 / Try It</p>
 
                     <h2 class="cta-headline reveal">
                         Wealth<br>
