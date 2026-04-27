@@ -8,6 +8,7 @@ import { createChallenge, consumeChallenge } from '../services/challengeStore';
 import {
   buildActivation,
   recordAndConfirmActivation,
+  InsufficientBalanceError,
 } from '../services/cashflowPassportService';
 import { getCashflowPassportActivationFeeLamports } from '../managers/RewardMintBuilder';
 
@@ -148,6 +149,16 @@ router.post('/cashflow-passport/activate', async (req: AuthenticatedRequest, res
     const built = await buildActivation(vaultAddress);
     res.json({ success: true, data: built });
   } catch (err: any) {
+    if (err instanceof InsufficientBalanceError) {
+      res.status(400).json({
+        success: false,
+        error: err.message,
+        errorCode: 'INSUFFICIENT_BALANCE',
+        requiredLamports: err.required.toString(),
+        availableLamports: err.available.toString(),
+      });
+      return;
+    }
     console.error('POST /rewards/v2/cashflow-passport/activate error:', err);
     res.status(500).json({ success: false, error: err?.message ?? 'Failed to build activation' });
   }

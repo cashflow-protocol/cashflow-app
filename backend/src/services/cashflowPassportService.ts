@@ -1,4 +1,4 @@
-import { createSolanaRpc } from '@solana/kit';
+import { createSolanaRpc, address } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
 import {
   CashflowPassportActivationModel,
@@ -37,10 +37,35 @@ export interface ActivationBuildResult {
  * never landed) and create a new one. Recovery cron can reconcile by checking
  * signatures onchain.
  */
+/** Gas + Jito tip headroom required on top of the mint fee, in lamports. */
+const ACTIVATION_GAS_BUFFER_LAMPORTS = 2_000_000n; // 0.002 SOL
+
+export class InsufficientBalanceError extends Error {
+  constructor(public readonly required: bigint, public readonly available: bigint) {
+    super(`Insufficient SOL balance: need ${formatSol(required)} SOL, vault has ${formatSol(available)} SOL`);
+    this.name = 'InsufficientBalanceError';
+  }
+}
+
+function formatSol(lamports: bigint): string {
+  return (Number(lamports) / 1_000_000_000).toLocaleString('en-US', { maximumFractionDigits: 4 });
+}
+
 export async function buildActivation(vaultAddress: string): Promise<ActivationBuildResult> {
   const user = await UserModel.findOne({ vaultAddress }, { cashflowPassportAddress: 1 }).lean();
   if (user?.cashflowPassportAddress) {
     throw new Error('Cashflow Passport already activated');
+  }
+
+  const feeLamportsBig = getCashflowPassportActivationFeeLamports();
+  const required = feeLamportsBig + ACTIVATION_GAS_BUFFER_LAMPORTS;
+
+  // Vault SOL balance check — bail early with a clear message rather than
+  // letting the transaction fail onchain after the user pays gas.
+  const balanceRes = await rpc.getBalance(address(vaultAddress)).send();
+  const available = BigInt(balanceRes.value);
+  if (available < required) {
+    throw new InsufficientBalanceError(required, available);
   }
 
   // Drop any old PENDING activation for this vault — retrying replaces it.
@@ -50,7 +75,7 @@ export async function buildActivation(vaultAddress: string): Promise<ActivationB
   );
 
   const built = await builder.buildCashflowPassportMintTransaction({ vaultAddress });
-  const feeLamports = getCashflowPassportActivationFeeLamports().toString();
+  const feeLamports = feeLamportsBig.toString();
 
   const activation = await CashflowPassportActivationModel.create({
     vaultAddress,
