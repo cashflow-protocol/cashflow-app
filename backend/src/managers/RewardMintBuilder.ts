@@ -33,12 +33,12 @@ export interface BuildActivationTransactionResult {
 }
 
 /**
- * Activation fee charged for minting a Cashflow ID. Read at request time so the
+ * Activation fee charged for minting a Cashflow Passport. Read at request time so the
  * value can be tuned without redeploying. Defaults to 0.02 SOL (matches the old
  * per-badge fee).
  */
-export function getCashflowIdActivationFeeLamports(): bigint {
-  const raw = process.env.CASHFLOW_ID_ACTIVATION_FEE_LAMPORTS;
+export function getCashflowPassportActivationFeeLamports(): bigint {
+  const raw = process.env.CASHFLOW_PASSPORT_ACTIVATION_FEE_LAMPORTS;
   if (raw && /^\d+$/.test(raw)) return BigInt(raw);
   return 20_000_000n;
 }
@@ -99,7 +99,7 @@ export class RewardMintBuilder {
 
   /**
    * Build the standalone Metaplex Core mint transaction for a user's
-   * "Cashflow ID" — a single soulbound NFT that hosts earned-badge entries
+   * "Cashflow Passport" — a single soulbound NFT that hosts earned-badge entries
    * via the Attributes plugin.
    *
    * Returns a base64-encoded VersionedTransaction pre-signed by the admin
@@ -112,7 +112,7 @@ export class RewardMintBuilder {
    * authority. The Attributes plugin is pre-initialized so admin can append
    * earned-badge entries later without paying allocation rent.
    */
-  async buildCashflowIdMintTransaction(params: {
+  async buildCashflowPassportMintTransaction(params: {
     vaultAddress: string;
   }): Promise<BuildActivationTransactionResult> {
     const { vaultAddress } = params;
@@ -129,8 +129,8 @@ export class RewardMintBuilder {
     const umiAssetKeypair = umi.eddsa.createKeypairFromSecretKey(assetKeypair.secretKey);
     const umiAssetSigner = createSignerFromKeypair(umi, umiAssetKeypair);
 
-    const metadataUri = process.env.CASHFLOW_ID_METADATA_URI ?? '';
-    const name = process.env.CASHFLOW_ID_NAME ?? 'Cashflow ID';
+    const metadataUri = process.env.CASHFLOW_PASSPORT_METADATA_URI ?? '';
+    const name = process.env.CASHFLOW_PASSPORT_NAME ?? 'Cashflow Passport';
 
     const createBuilder = createCoreAsset(umi, {
       asset: umiAssetSigner,
@@ -164,8 +164,8 @@ export class RewardMintBuilder {
 
     const mintTransactionBase64 = Buffer.from(tx.serialize()).toString('base64');
 
-    const feeLamports = getCashflowIdActivationFeeLamports();
-    if (feeLamports <= 0n) throw new Error('Invalid CASHFLOW_ID_ACTIVATION_FEE_LAMPORTS');
+    const feeLamports = getCashflowPassportActivationFeeLamports();
+    if (feeLamports <= 0n) throw new Error('Invalid CASHFLOW_PASSPORT_ACTIVATION_FEE_LAMPORTS');
 
     const transferIx = SystemProgram.transfer({
       fromPubkey: new PublicKey(vaultAddress),
@@ -196,7 +196,7 @@ export class RewardMintBuilder {
 
   /**
    * Append a `{ key, value }` entry to the Attributes plugin on the user's
-   * Cashflow ID asset, then send the transaction signed only by the admin
+   * Cashflow Passport asset, then send the transaction signed only by the admin
    * keypair (admin holds UpdateAuthority — no user signature needed).
    *
    * Returns the resulting signature (string). Throws on RPC/build failure.

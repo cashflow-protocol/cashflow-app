@@ -1237,7 +1237,7 @@ router.get('/rewards/diagnose', async (req, res) => {
 
     const [task, user, progress] = await Promise.all([
       RewardTaskModel.findOne({ slug: taskSlug }).lean(),
-      UserModel.findOne({ vaultAddress }, { cashflowIdAddress: 1, cashflowIdActivatedAt: 1 }).lean(),
+      UserModel.findOne({ vaultAddress }, { cashflowPassportAddress: 1, cashflowPassportActivatedAt: 1 }).lean(),
       UserRewardProgressModel.findOne({ vaultAddress, taskSlug }).lean(),
     ]);
     if (!task) {
@@ -1306,10 +1306,10 @@ router.get('/rewards/diagnose', async (req, res) => {
         verifierType: task.verifierType,
         verifierConfig: task.verifierConfig,
       },
-      cashflowId: {
-        address: user?.cashflowIdAddress ?? null,
-        activated: !!user?.cashflowIdAddress,
-        activatedAt: user?.cashflowIdActivatedAt ?? null,
+      cashflowPassport: {
+        address: user?.cashflowPassportAddress ?? null,
+        activated: !!user?.cashflowPassportAddress,
+        activatedAt: user?.cashflowPassportActivatedAt ?? null,
       },
       progress: progress
         ? {
@@ -1396,7 +1396,7 @@ router.post('/rewards/backfill-user-vault', async (_req, res) => {
 /**
  * POST /rewards/reset-minted-progress
  * Flips all UserRewardProgress with status MINTED or MINT_PENDING back to
- * IN_PROGRESS so the new Cashflow ID + Attributes flow can re-credit those
+ * IN_PROGRESS so the new Cashflow Passport + Attributes flow can re-credit those
  * badges as attributes. Old standalone MintedBadge NFTs remain in wallets
  * (soulbound, can't burn).
  */

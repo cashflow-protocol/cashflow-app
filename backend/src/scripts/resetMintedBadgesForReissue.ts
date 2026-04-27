@@ -4,9 +4,9 @@ import { UserRewardProgressModel, RewardProgressStatus } from '../models/UserRew
 
 /**
  * One-shot: flip every UserRewardProgress with status=MINTED back to
- * IN_PROGRESS so the new "attributes on Cashflow ID" flow can re-credit
+ * IN_PROGRESS so the new "attributes on Cashflow Passport" flow can re-credit
  * the badge as an attribute (the verifier re-evaluates on next read,
- * and once the user activates their Cashflow ID, the auto-add fires).
+ * and once the user activates their Cashflow Passport, the auto-add fires).
  *
  * Old standalone MintedBadge NFTs are soulbound and can't be burned —
  * they remain in user wallets as orphan records.

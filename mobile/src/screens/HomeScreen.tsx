@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { useAssets } from '../hooks/useAssets';
 import { useEarnTokens } from '../hooks/useEarnTokens';
-import { invalidateRewards } from '../hooks/useRewards';
+import { useRewards, invalidateRewards } from '../hooks/useRewards';
 import { attestSeekerIfNeeded } from '../services/rewardsService';
 import { useToast } from '../contexts/ToastContext';
 import { useSolPrice } from '../hooks/useSolPrice';
@@ -73,6 +73,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
   const { tokens, loading: earnLoading, refresh: refreshEarn } = useEarnTokens();
   const { price: solPrice, loading: solPriceLoading, refresh: refreshSolPrice } = useSolPrice();
   const { suggestions, refresh: refreshSuggestions } = useSuggestions();
+  const { cashflowPassport } = useRewards();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRewardTask, setSelectedRewardTask] = useState<TaskWithProgress | null>(null);
   const [attestingSeeker, setAttestingSeeker] = useState(false);
@@ -361,6 +362,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         visible={selectedRewardTask !== null}
         onClose={() => setSelectedRewardTask(null)}
         attesting={attestingSeeker}
+        passportActivated={cashflowPassport.activated}
         onAttestSeeker={async () => {
           if (attestingSeeker) return;
           setAttestingSeeker(true);
@@ -368,7 +370,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
             const ok = await attestSeekerIfNeeded();
             invalidateRewards();
             if (ok) {
-              showToast('Seeker verified', 'Adding badge to your Cashflow ID…', 'success');
+              showToast('Seeker verified', 'Adding badge to your Cashflow Passport…', 'success');
               setSelectedRewardTask(null);
             }
           } catch (err: any) {

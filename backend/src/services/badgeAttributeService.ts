@@ -11,20 +11,20 @@ import { dispatchSystemNotification } from './notificationService';
 const builder = new RewardMintBuilder();
 
 export type AttributeAddOutcome =
-  | { status: 'no_cashflow_id' }
+  | { status: 'no_cashflow_passport' }
   | { status: 'already_minted' }
   | { status: 'sold_out' }
   | { status: 'task_inactive' }
   | { status: 'minted'; signature: string };
 
 /**
- * Try to add a badge attribute on the user's Cashflow ID asset.
+ * Try to add a badge attribute on the user's Cashflow Passport asset.
  *
  * Pre-conditions: caller has determined the verifier is satisfied (i.e.
  * UserRewardProgress.status was about to flip to CLAIMABLE).
  *
  * Flow:
- *   1. Resolve user's Cashflow ID — if missing, mark progress CLAIMABLE so the
+ *   1. Resolve user's Cashflow Passport — if missing, mark progress CLAIMABLE so the
  *      activation flow can pick it up later.
  *   2. Atomic slot claim against RewardTask.maxSupply.
  *   3. Mark progress MINT_PENDING.
@@ -39,15 +39,15 @@ export async function tryAddBadgeAttribute(
   userVaultAddress: string,
   taskSlug: string,
 ): Promise<AttributeAddOutcome> {
-  const user = await UserModel.findOne({ vaultAddress: userVaultAddress }, { cashflowIdAddress: 1 }).lean();
-  if (!user?.cashflowIdAddress) {
+  const user = await UserModel.findOne({ vaultAddress: userVaultAddress }, { cashflowPassportAddress: 1 }).lean();
+  if (!user?.cashflowPassportAddress) {
     // User hasn't activated yet — leave progress at CLAIMABLE so the
     // activation flow's enqueueClaimableAttributes picks it up later.
     await UserRewardProgressModel.updateOne(
       { vaultAddress: userVaultAddress, taskSlug, status: { $ne: RewardProgressStatus.MINTED } },
       { $set: { status: RewardProgressStatus.CLAIMABLE, completedAt: new Date() } },
     );
-    return { status: 'no_cashflow_id' };
+    return { status: 'no_cashflow_passport' };
   }
 
   // Already minted? Short-circuit.
@@ -94,7 +94,7 @@ export async function tryAddBadgeAttribute(
 
   try {
     const signature = await builder.appendBadgeAttribute({
-      assetAddress: user.cashflowIdAddress,
+      assetAddress: user.cashflowPassportAddress,
       key: taskSlug,
       value: claimedTask.imageUrl,
     });
@@ -130,7 +130,7 @@ export async function tryAddBadgeAttribute(
 }
 
 /**
- * After Cashflow ID activation confirms, scan all of this vault's CLAIMABLE
+ * After Cashflow Passport activation confirms, scan all of this vault's CLAIMABLE
  * progress rows and try to add an attribute for each. Failures are swallowed
  * per-badge so one bad badge doesn't block the rest.
  */

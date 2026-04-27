@@ -5,8 +5,8 @@ import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
 import { JupiterManager, KaminoManager, DriftManager, PerenaManager, SolomonManager, OnreManager, DBManager, PriceManager, TokenManager } from '../managers';
 import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from '../models';
 import { NotificationType } from '../models';
-import { CashflowIdActivationModel, CashflowIdActivationStatus } from '../models/CashflowIdActivation';
-import { tryConfirmActivation, failActivation } from './cashflowIdService';
+import { CashflowPassportActivationModel, CashflowPassportActivationStatus } from '../models/CashflowPassportActivation';
+import { tryConfirmActivation, failActivation } from './cashflowPassportService';
 import { dispatchSystemNotification } from './notificationService';
 import { sendWaitlistPushNotification, cleanupExpiredRTDBNotifications } from './firebaseManager';
 import { onTransactionConfirmed, markFeeTransactionFailed } from './feeService';
@@ -236,15 +236,15 @@ async function approveTopWaitlistUsers() {
   }
 }
 
-/** Recovery windows for pending Metaplex ops (Cashflow ID activations). */
+/** Recovery windows for pending Metaplex ops (Cashflow Passport activations). */
 const RECOVER_GRACE_MS = 10 * 60 * 1000;
 const RECOVER_FAIL_AFTER_MS = 30 * 60 * 1000;
 
 async function recoverPendingActivations() {
   try {
     const cutoff = new Date(Date.now() - RECOVER_GRACE_MS);
-    const pending = await CashflowIdActivationModel.find({
-      status: CashflowIdActivationStatus.PENDING,
+    const pending = await CashflowPassportActivationModel.find({
+      status: CashflowPassportActivationStatus.PENDING,
       createdAt: { $lte: cutoff },
     }).limit(100);
 
@@ -261,7 +261,7 @@ async function recoverPendingActivations() {
         }
         const outcome = await tryConfirmActivation(activation);
         if (outcome === 'confirmed') {
-          console.log(`[Cron] Cashflow ID ${activation.assetAddress} CONFIRMED`);
+          console.log(`[Cron] Cashflow Passport ${activation.assetAddress} CONFIRMED`);
         } else if (outcome === 'pending' && expired) {
           await failActivation(activation);
         }
@@ -348,7 +348,7 @@ export async function initializeScheduler() {
     timezone: 'UTC',
   });
 
-  // Recover stuck Cashflow ID activations every 5 minutes
+  // Recover stuck Cashflow Passport activations every 5 minutes
   cron.schedule('*/5 * * * *', recoverPendingActivations, {
     timezone: 'UTC',
   });

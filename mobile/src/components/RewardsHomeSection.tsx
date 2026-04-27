@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useRewards } from '../hooks/useRewards';
 import RewardBadgeCard from './RewardBadgeCard';
-import ActivateCashflowIdCard from './ActivateCashflowIdCard';
+import ActivateCashflowPassportCard from './ActivateCashflowPassportCard';
 import type { TaskWithProgress } from '../types/rewards';
 
 interface Props {
@@ -12,7 +12,7 @@ interface Props {
 
 export default function RewardsHomeSection({ onSelectTask }: Props) {
   const { colors } = useTheme();
-  const { tasks, cashflowId, loading } = useRewards();
+  const { tasks, cashflowPassport, loading } = useRewards();
 
   // Sort: claimable first, then in_progress, then mint_pending, then minted; tie-break by sortOrder.
   const ordered = useMemo(() => {
@@ -30,12 +30,12 @@ export default function RewardsHomeSection({ onSelectTask }: Props) {
   }, [tasks]);
 
   // Section is hidden only when there are no tasks AND no activation state to show.
-  if (!loading && ordered.length === 0 && cashflowId.activated) return null;
+  if (!loading && ordered.length === 0 && cashflowPassport.activated) return null;
 
   return (
     <View style={styles.container}>
-      {!cashflowId.activated && !loading && (
-        <ActivateCashflowIdCard feeLamports={cashflowId.feeLamports} />
+      {!cashflowPassport.activated && !loading && (
+        <ActivateCashflowPassportCard feeLamports={cashflowPassport.feeLamports} />
       )}
       {loading ? (
         <ActivityIndicator size="small" color={colors.accentBlueDark} style={styles.loader} />
@@ -49,7 +49,11 @@ export default function RewardsHomeSection({ onSelectTask }: Props) {
             contentContainerStyle={styles.listContent}
             ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
             renderItem={({ item }) => (
-              <RewardBadgeCard task={item} onPress={() => onSelectTask?.(item)} />
+              <RewardBadgeCard
+                task={item}
+                onPress={() => onSelectTask?.(item)}
+                passportActivated={cashflowPassport.activated}
+              />
             )}
           />
         </View>

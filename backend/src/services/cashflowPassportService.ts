@@ -1,11 +1,11 @@
 import { createSolanaRpc } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
 import {
-  CashflowIdActivationModel,
-  CashflowIdActivationStatus,
+  CashflowPassportActivationModel,
+  CashflowPassportActivationStatus,
   UserModel,
 } from '../models';
-import { RewardMintBuilder, getCashflowIdActivationFeeLamports } from '../managers/RewardMintBuilder';
+import { RewardMintBuilder, getCashflowPassportActivationFeeLamports } from '../managers/RewardMintBuilder';
 import { enqueueClaimableAttributes } from './badgeAttributeService';
 
 const builder = new RewardMintBuilder();
@@ -19,44 +19,44 @@ export interface ActivationBuildResult {
   activationId: string;
   assetAddress: string;
   collectionAddress: string;
-  innerInstructions: Awaited<ReturnType<RewardMintBuilder['buildCashflowIdMintTransaction']>>['innerInstructions'];
+  innerInstructions: Awaited<ReturnType<RewardMintBuilder['buildCashflowPassportMintTransaction']>>['innerInstructions'];
   mintTransactionBase64: string;
   blockhash: string;
   mintFeeLamports: string;
 }
 
 /**
- * Build a Cashflow ID activation transaction for a vault. Persists a PENDING
- * activation row and returns the data the mobile needs to bundle in the
- * vault's Squads execute.
+ * Build a Cashflow Passport activation transaction for a vault. Persists a
+ * PENDING activation row and returns the data the mobile needs to bundle in
+ * the vault's Squads execute.
  *
- * If the user already has a Cashflow ID, throws — caller should branch on the
- * `User.cashflowIdAddress` field before calling this.
+ * If the user already has a Cashflow Passport, throws — caller should branch
+ * on the `User.cashflowPassportAddress` field before calling this.
  *
  * If a PENDING activation already exists, fail it (the previous attempt likely
  * never landed) and create a new one. Recovery cron can reconcile by checking
  * signatures on-chain.
  */
 export async function buildActivation(vaultAddress: string): Promise<ActivationBuildResult> {
-  const user = await UserModel.findOne({ vaultAddress }, { cashflowIdAddress: 1 }).lean();
-  if (user?.cashflowIdAddress) {
-    throw new Error('Cashflow ID already activated');
+  const user = await UserModel.findOne({ vaultAddress }, { cashflowPassportAddress: 1 }).lean();
+  if (user?.cashflowPassportAddress) {
+    throw new Error('Cashflow Passport already activated');
   }
 
   // Drop any old PENDING activation for this vault — retrying replaces it.
-  await CashflowIdActivationModel.updateMany(
-    { vaultAddress, status: CashflowIdActivationStatus.PENDING },
-    { $set: { status: CashflowIdActivationStatus.FAILED } },
+  await CashflowPassportActivationModel.updateMany(
+    { vaultAddress, status: CashflowPassportActivationStatus.PENDING },
+    { $set: { status: CashflowPassportActivationStatus.FAILED } },
   );
 
-  const built = await builder.buildCashflowIdMintTransaction({ vaultAddress });
-  const feeLamports = getCashflowIdActivationFeeLamports().toString();
+  const built = await builder.buildCashflowPassportMintTransaction({ vaultAddress });
+  const feeLamports = getCashflowPassportActivationFeeLamports().toString();
 
-  const activation = await CashflowIdActivationModel.create({
+  const activation = await CashflowPassportActivationModel.create({
     vaultAddress,
     assetAddress: built.assetAddress,
     collectionAddress: built.collectionAddress,
-    status: CashflowIdActivationStatus.PENDING,
+    status: CashflowPassportActivationStatus.PENDING,
     bundleSignatures: [],
     feeAmount: feeLamports,
   });
@@ -74,7 +74,7 @@ export async function buildActivation(vaultAddress: string): Promise<ActivationB
 
 /**
  * Record bundle signatures from the mobile and try to verify on-chain
- * synchronously. On confirm, writes User.cashflowIdAddress and triggers
+ * synchronously. On confirm, writes User.cashflowPassportAddress and triggers
  * the auto-add for any already-claimable badges.
  */
 export async function recordAndConfirmActivation(
@@ -82,11 +82,11 @@ export async function recordAndConfirmActivation(
   vaultAddress: string,
   bundleSignatures: string[],
 ): Promise<ConfirmOutcome> {
-  const activation = await CashflowIdActivationModel.findOne({ _id: activationId, vaultAddress });
+  const activation = await CashflowPassportActivationModel.findOne({ _id: activationId, vaultAddress });
   if (!activation) throw new Error('Activation not found');
 
   activation.bundleSignatures = bundleSignatures;
-  if (activation.status === CashflowIdActivationStatus.PENDING) {
+  if (activation.status === CashflowPassportActivationStatus.PENDING) {
     await activation.save();
   }
 
@@ -99,8 +99,8 @@ export async function recordAndConfirmActivation(
  * if signatures haven't landed yet.
  */
 export async function tryConfirmActivation(activation: any): Promise<ConfirmOutcome> {
-  if (activation.status === CashflowIdActivationStatus.CONFIRMED) return 'confirmed';
-  if (activation.status === CashflowIdActivationStatus.FAILED) return 'failed';
+  if (activation.status === CashflowPassportActivationStatus.CONFIRMED) return 'confirmed';
+  if (activation.status === CashflowPassportActivationStatus.FAILED) return 'failed';
 
   const sigs = activation.bundleSignatures.filter((s: string | undefined): s is string => !!s);
   if (sigs.length === 0) return 'pending';
@@ -122,17 +122,17 @@ export async function tryConfirmActivation(activation: any): Promise<ConfirmOutc
   }
 
   if (anyFailed) {
-    activation.status = CashflowIdActivationStatus.FAILED;
+    activation.status = CashflowPassportActivationStatus.FAILED;
     await activation.save();
     return 'failed';
   }
   if (!allUnknown && allConfirmed) {
-    activation.status = CashflowIdActivationStatus.CONFIRMED;
+    activation.status = CashflowPassportActivationStatus.CONFIRMED;
     await activation.save();
 
     await UserModel.updateOne(
       { vaultAddress: activation.vaultAddress },
-      { $set: { cashflowIdAddress: activation.assetAddress, cashflowIdActivatedAt: new Date() } },
+      { $set: { cashflowPassportAddress: activation.assetAddress, cashflowPassportActivatedAt: new Date() } },
     );
 
     // Pick up any badges already in CLAIMABLE state.
@@ -146,6 +146,6 @@ export async function tryConfirmActivation(activation: any): Promise<ConfirmOutc
 }
 
 export async function failActivation(activation: any): Promise<void> {
-  activation.status = CashflowIdActivationStatus.FAILED;
+  activation.status = CashflowPassportActivationStatus.FAILED;
   await activation.save();
 }

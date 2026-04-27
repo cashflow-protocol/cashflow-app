@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { useCashflowIdActivation } from '../hooks/useCashflowId';
+import { useCashflowPassportActivation } from '../hooks/useCashflowPassport';
 import { useToast } from '../contexts/ToastContext';
 
 interface Props {
@@ -13,9 +13,9 @@ function formatSol(lamports: string): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
 }
 
-export default function ActivateCashflowIdCard({ feeLamports }: Props) {
+export default function ActivateCashflowPassportCard({ feeLamports }: Props) {
   const { colors } = useTheme();
-  const { activate, activating } = useCashflowIdActivation();
+  const { activate, activating } = useCashflowPassportActivation();
   const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -24,7 +24,7 @@ export default function ActivateCashflowIdCard({ feeLamports }: Props) {
     setBusy(true);
     try {
       await activate();
-      showToast('Cashflow ID activated', 'Earned badges will appear automatically', 'success');
+      showToast('Cashflow Passport activated', 'Earned badges will appear automatically', 'success');
     } catch (err: any) {
       showToast('Activation failed', err?.message ?? 'Please try again', 'error');
     } finally {
@@ -39,7 +39,7 @@ export default function ActivateCashflowIdCard({ feeLamports }: Props) {
           <Text style={styles.icon}>★</Text>
         </View>
         <View style={styles.copy}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Activate Cashflow ID</Text>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Activate Cashflow Passport</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             One-time {formatSol(feeLamports)} SOL. Earned badges are added automatically — no extra fees.
           </Text>

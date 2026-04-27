@@ -11,6 +11,9 @@ interface Props {
   /** Called when the user taps "Verify on Seeker" for a device_seeker task. */
   onAttestSeeker?: () => void;
   attesting?: boolean;
+  /** Has the user activated their Cashflow Passport? Drives the
+   *  Earned-vs-Activate-to-claim copy on the status pill. */
+  passportActivated?: boolean;
 }
 
 function isUsdBased(verifierType: TaskWithProgress['verifierType']): boolean {
@@ -37,7 +40,7 @@ function formatProgressLabel(task: TaskWithProgress): string {
   return `${task.currentValue} of ${task.targetValue}`;
 }
 
-export default function RewardBadgeSheet({ task, visible, onClose, onAttestSeeker, attesting }: Props) {
+export default function RewardBadgeSheet({ task, visible, onClose, onAttestSeeker, attesting, passportActivated = false }: Props) {
   const { colors } = useTheme();
   if (!task) return <BottomSheet visible={visible} onClose={onClose}><View /></BottomSheet>;
 
@@ -97,7 +100,9 @@ export default function RewardBadgeSheet({ task, visible, onClose, onAttestSeeke
                 {minted
                   ? 'Earned'
                   : claimable
-                    ? 'Earned — adding to Cashflow ID…'
+                    ? passportActivated
+                      ? 'Earned — adding to Cashflow Passport…'
+                      : 'Earned — activate your Cashflow Passport to claim'
                     : 'Keep using Cashflow to unlock'}
               </Text>
             )}

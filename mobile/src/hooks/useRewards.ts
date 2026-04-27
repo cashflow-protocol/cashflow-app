@@ -3,14 +3,14 @@ import apiService from '../services/apiService';
 import type { TaskWithProgress } from '../types/rewards';
 import { logError } from '../services/analyticsService';
 
-export interface CashflowIdState {
+export interface CashflowPassportState {
   address: string | null;
   activated: boolean;
   activatedAt: string | null;
   feeLamports: string;
 }
 
-const DEFAULT_CASHFLOW_ID: CashflowIdState = {
+const DEFAULT_CASHFLOW_PASSPORT: CashflowPassportState = {
   address: null,
   activated: false,
   activatedAt: null,
@@ -18,19 +18,19 @@ const DEFAULT_CASHFLOW_ID: CashflowIdState = {
 };
 
 let cachedTasks: TaskWithProgress[] | null = null;
-let cachedCashflowId: CashflowIdState | null = null;
+let cachedCashflowPassport: CashflowPassportState | null = null;
 const refreshListeners = new Set<() => void>();
 
 /** Invalidate the rewards cache and trigger a refresh on all mounted hooks. */
 export function invalidateRewards(): void {
   cachedTasks = null;
-  cachedCashflowId = null;
+  cachedCashflowPassport = null;
   refreshListeners.forEach((fn) => fn());
 }
 
 export function useRewards() {
   const [tasks, setTasks] = useState<TaskWithProgress[]>(cachedTasks ?? []);
-  const [cashflowId, setCashflowId] = useState<CashflowIdState>(cachedCashflowId ?? DEFAULT_CASHFLOW_ID);
+  const [cashflowPassport, setCashflowPassport] = useState<CashflowPassportState>(cachedCashflowPassport ?? DEFAULT_CASHFLOW_PASSPORT);
   const [loading, setLoading] = useState(cachedTasks === null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,10 +41,12 @@ export function useRewards() {
     setError(null);
     try {
       const fetched = await apiService.getRewardTasks();
+      // Coalesce so an old backend (or partial response) can't crash the UI.
+      const passport = fetched.cashflowPassport ?? DEFAULT_CASHFLOW_PASSPORT;
       cachedTasks = fetched.tasks;
-      cachedCashflowId = fetched.cashflowId;
+      cachedCashflowPassport = passport;
       setTasks(fetched.tasks);
-      setCashflowId(fetched.cashflowId);
+      setCashflowPassport(passport);
     } catch (err: any) {
       logError('rewards_fetch', err.message ?? 'unknown');
       setError(err.message ?? 'Failed to fetch rewards');
@@ -66,5 +68,5 @@ export function useRewards() {
 
   const refresh = useCallback(() => fetchData(true), [fetchData]);
 
-  return { tasks, cashflowId, loading, refreshing, error, refresh };
+  return { tasks, cashflowPassport, loading, refreshing, error, refresh };
 }

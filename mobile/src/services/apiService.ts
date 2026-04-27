@@ -290,7 +290,7 @@ class ApiService {
 
   async getRewardTasks(): Promise<{
     tasks: TaskWithProgress[];
-    cashflowId: {
+    cashflowPassport: {
       address: string | null;
       activated: boolean;
       activatedAt: string | null;
@@ -301,7 +301,7 @@ class ApiService {
       success: boolean;
       data: {
         tasks: TaskWithProgress[];
-        cashflowId: {
+        cashflowPassport: {
           address: string | null;
           activated: boolean;
           activatedAt: string | null;
@@ -324,7 +324,7 @@ class ApiService {
     await this.post<{ success: boolean }>('/rewards/v2/attest-seeker', params);
   }
 
-  async activateCashflowId(): Promise<{
+  async activateCashflowPassport(): Promise<{
     activationId: string;
     assetAddress: string;
     collectionAddress: string;
@@ -344,13 +344,13 @@ class ApiService {
         blockhash: string;
         mintFeeLamports: string;
       };
-    }>('/rewards/v2/cashflow-id/activate', {});
+    }>('/rewards/v2/cashflow-passport/activate', {});
     return res.data;
   }
 
-  async confirmCashflowIdActivation(activationId: string, bundleSignatures: string[]): Promise<{ status: 'confirmed' | 'pending' | 'failed' }> {
+  async confirmCashflowPassportActivation(activationId: string, bundleSignatures: string[]): Promise<{ status: 'confirmed' | 'pending' | 'failed' }> {
     const res = await this.post<{ success: boolean; status: 'confirmed' | 'pending' | 'failed' }>(
-      '/rewards/v2/cashflow-id/activate/confirm',
+      '/rewards/v2/cashflow-passport/activate/confirm',
       { activationId, bundleSignatures },
     );
     return { status: res.status };

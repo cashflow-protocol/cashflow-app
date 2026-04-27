@@ -62,7 +62,7 @@ export default function RewardsPage() {
 
   const handleReset = async () => {
     if (resetting) return;
-    if (!confirm('Reset every MINTED / MINT_PENDING reward progress back to IN_PROGRESS so badges can be re-issued as attributes on Cashflow IDs? Existing standalone NFTs are NOT removed (soulbound).')) return;
+    if (!confirm('Reset every MINTED / MINT_PENDING reward progress back to IN_PROGRESS so badges can be re-issued as attributes on Cashflow Passports? Existing standalone NFTs are NOT removed (soulbound).')) return;
     setResetting(true);
     try {
       const res = await resetMintedProgress();
@@ -281,13 +281,13 @@ function DiagnoseResult({ result }: { result: any }) {
           <pre style={{ background: '#f5f6f8', padding: 8, borderRadius: 6, fontSize: 11, marginTop: 6, overflow: 'auto' }}>
             {JSON.stringify(result.task.verifierConfig ?? {}, null, 2)}
           </pre>
-          <div style={{ color: '#666', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 12, marginBottom: 4 }}>Cashflow ID</div>
-          {result.cashflowId?.activated ? (
+          <div style={{ color: '#666', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 12, marginBottom: 4 }}>Cashflow Passport</div>
+          {result.cashflowPassport?.activated ? (
             <div style={{ fontSize: 12 }}>
               <span style={{ background: '#d4edda', color: '#155724', padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>Activated</span>
-              <div style={{ fontFamily: 'monospace', fontSize: 11, marginTop: 4, wordBreak: 'break-all' }}>{result.cashflowId.address}</div>
-              {result.cashflowId.activatedAt && (
-                <div style={{ color: '#666', fontSize: 11, marginTop: 2 }}>{new Date(result.cashflowId.activatedAt).toLocaleString()}</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 11, marginTop: 4, wordBreak: 'break-all' }}>{result.cashflowPassport.address}</div>
+              {result.cashflowPassport.activatedAt && (
+                <div style={{ color: '#666', fontSize: 11, marginTop: 2 }}>{new Date(result.cashflowPassport.activatedAt).toLocaleString()}</div>
               )}
             </div>
           ) : (

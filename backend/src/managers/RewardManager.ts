@@ -317,7 +317,7 @@ export class RewardManager {
     // If the verifier just flipped to satisfied, auto-add the badge attribute.
     // Terminal states (MINTED, MINT_PENDING) early-returned above, so this
     // only runs for IN_PROGRESS / CLAIMABLE / new docs. tryAddBadgeAttribute
-    // itself short-circuits if the user has no Cashflow ID yet — that case
+    // itself short-circuits if the user has no Cashflow Passport yet — that case
     // leaves the progress at CLAIMABLE so activation picks it up later.
     if (result.satisfied) {
       autoAddBadge(vaultAddress, task.slug).catch((err) =>

@@ -8,8 +8,8 @@ import { createChallenge, consumeChallenge } from '../services/challengeStore';
 import {
   buildActivation,
   recordAndConfirmActivation,
-} from '../services/cashflowIdService';
-import { getCashflowIdActivationFeeLamports } from '../managers/RewardMintBuilder';
+} from '../services/cashflowPassportService';
+import { getCashflowPassportActivationFeeLamports } from '../managers/RewardMintBuilder';
 
 const router = Router();
 
@@ -26,17 +26,17 @@ router.get('/tasks', async (req: AuthenticatedRequest, res: Response) => {
     }
     const [tasks, user] = await Promise.all([
       rewardManager.getTasksForVault(vaultAddress),
-      UserModel.findOne({ vaultAddress }, { cashflowIdAddress: 1, cashflowIdActivatedAt: 1 }).lean(),
+      UserModel.findOne({ vaultAddress }, { cashflowPassportAddress: 1, cashflowPassportActivatedAt: 1 }).lean(),
     ]);
     res.json({
       success: true,
       data: {
         tasks,
-        cashflowId: {
-          address: user?.cashflowIdAddress ?? null,
-          activated: !!user?.cashflowIdAddress,
-          activatedAt: user?.cashflowIdActivatedAt ?? null,
-          feeLamports: getCashflowIdActivationFeeLamports().toString(),
+        cashflowPassport: {
+          address: user?.cashflowPassportAddress ?? null,
+          activated: !!user?.cashflowPassportAddress,
+          activatedAt: user?.cashflowPassportActivatedAt ?? null,
+          feeLamports: getCashflowPassportActivationFeeLamports().toString(),
         },
       },
     });
@@ -126,12 +126,12 @@ router.post('/attest-seeker', async (req: AuthenticatedRequest, res: Response) =
 });
 
 /**
- * POST /rewards/v2/cashflow-id/activate
- * Builds the one-time Cashflow ID mint transaction. Returns a fee transfer
+ * POST /rewards/v2/cashflow-passport/activate
+ * Builds the one-time Cashflow Passport mint transaction. Returns a fee transfer
  * (vault → treasury) as inner instructions plus an admin-pre-signed Metaplex
  * Core mint TX. Mobile bundles them via executeVaultTransaction (TX1-TX4 + TX5).
  */
-router.post('/cashflow-id/activate', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/cashflow-passport/activate', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const vaultAddress = req.user?.vaultAddress;
     if (!vaultAddress) {
@@ -139,27 +139,27 @@ router.post('/cashflow-id/activate', async (req: AuthenticatedRequest, res: Resp
       return;
     }
 
-    const user = await UserModel.findOne({ vaultAddress }, { cashflowIdAddress: 1 }).lean();
-    if (user?.cashflowIdAddress) {
-      res.status(409).json({ success: false, error: 'Cashflow ID already activated' });
+    const user = await UserModel.findOne({ vaultAddress }, { cashflowPassportAddress: 1 }).lean();
+    if (user?.cashflowPassportAddress) {
+      res.status(409).json({ success: false, error: 'Cashflow Passport already activated' });
       return;
     }
 
     const built = await buildActivation(vaultAddress);
     res.json({ success: true, data: built });
   } catch (err: any) {
-    console.error('POST /rewards/v2/cashflow-id/activate error:', err);
+    console.error('POST /rewards/v2/cashflow-passport/activate error:', err);
     res.status(500).json({ success: false, error: err?.message ?? 'Failed to build activation' });
   }
 });
 
 /**
- * POST /rewards/v2/cashflow-id/activate/confirm
+ * POST /rewards/v2/cashflow-passport/activate/confirm
  * Body: { activationId, bundleSignatures: string[] }
  * Mobile calls this after submitting the bundle. We verify on-chain
  * synchronously; the recovery cron is the failsafe for slow confirms.
  */
-router.post('/cashflow-id/activate/confirm', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/cashflow-passport/activate/confirm', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const vaultAddress = req.user?.vaultAddress;
     if (!vaultAddress) {
@@ -175,7 +175,7 @@ router.post('/cashflow-id/activate/confirm', async (req: AuthenticatedRequest, r
     const outcome = await recordAndConfirmActivation(activationId, vaultAddress, bundleSignatures);
     res.json({ success: true, status: outcome });
   } catch (err: any) {
-    console.error('POST /rewards/v2/cashflow-id/activate/confirm error:', err);
+    console.error('POST /rewards/v2/cashflow-passport/activate/confirm error:', err);
     const status = err?.message === 'Activation not found' ? 404 : 500;
     res.status(status).json({ success: false, error: err?.message ?? 'Failed to confirm activation' });
   }
