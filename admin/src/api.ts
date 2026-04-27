@@ -306,6 +306,10 @@ export async function backfillUserVault() {
   return apiFetch('/rewards/backfill-user-vault', { method: 'POST' });
 }
 
+export async function resetMintedProgress() {
+  return apiFetch('/rewards/reset-minted-progress', { method: 'POST' });
+}
+
 export async function uploadRewardImage(file: File, slug?: string): Promise<{ success: boolean; url: string; key: string; error?: string }> {
   const token = sessionStorage.getItem('admin_token');
   const form = new FormData();

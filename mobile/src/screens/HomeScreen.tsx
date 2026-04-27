@@ -16,9 +16,9 @@ import { LinearGradient } from 'react-native-linear-gradient';
 import { useAssets } from '../hooks/useAssets';
 import { useEarnTokens } from '../hooks/useEarnTokens';
 import { useRewards, invalidateRewards } from '../hooks/useRewards';
+import { useBadgeMint } from '../hooks/useBadgeMint';
 import { attestSeekerIfNeeded } from '../services/rewardsService';
 import { useToast } from '../contexts/ToastContext';
-import { logBadgeMintAttempt, logBadgeMintSuccess, logBadgeMintError } from '../services/analyticsService';
 import { useSolPrice } from '../hooks/useSolPrice';
 import { useSuggestions } from '../hooks/useSuggestions';
 import ActionButton from '../components/ActionButton';
@@ -26,6 +26,7 @@ import AssetRow from '../components/AssetRow';
 import EarnTokenItem from '../components/EarnTokenItem';
 import RewardsHomeSection from '../components/RewardsHomeSection';
 import RewardBadgeSheet from '../components/RewardBadgeSheet';
+import ActivateCashflowPassportSheet from '../components/ActivateCashflowPassportSheet';
 import SectionCard from '../components/SectionCard';
 import StatBox from '../components/StatBox';
 import type { TaskWithProgress } from '../types/rewards';
@@ -74,12 +75,29 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
   const { tokens, loading: earnLoading, refresh: refreshEarn } = useEarnTokens();
   const { price: solPrice, loading: solPriceLoading, refresh: refreshSolPrice } = useSolPrice();
   const { suggestions, refresh: refreshSuggestions } = useSuggestions();
+  const { cashflowPassport } = useRewards();
+  const { mint: mintBadge, mintingSlug } = useBadgeMint();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRewardTask, setSelectedRewardTask] = useState<TaskWithProgress | null>(null);
-  const [mintingTaskSlug, setMintingTaskSlug] = useState<string | null>(null);
   const [attestingSeeker, setAttestingSeeker] = useState(false);
-  const { mint: mintReward } = useRewards();
+  const [activatePassportVisible, setActivatePassportVisible] = useState(false);
   const { showToast } = useToast();
+
+  const handleMintBadge = useCallback(async (task: TaskWithProgress) => {
+    if (mintingSlug) return;
+    try {
+      await mintBadge(task.slug);
+      showToast('Badge minted', `${task.title} added to your Cashflow Passport`, 'success');
+      setSelectedRewardTask(null);
+    } catch (err: any) {
+      showToast('Mint failed', err?.message ?? 'Please try again', 'error');
+    }
+  }, [mintBadge, mintingSlug, showToast]);
+
+  const openActivatePassport = React.useCallback(() => {
+    setSelectedRewardTask(null);
+    setActivatePassportVisible(true);
+  }, []);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [convertModalVisible, setConvertModalVisible] = useState(false);
   const [receiveModalVisible, setReceiveModalVisible] = useState(false);
@@ -326,7 +344,12 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         )}
 
         {/* Rewards Section */}
-        <RewardsHomeSection onSelectTask={(task) => setSelectedRewardTask(task)} />
+        <RewardsHomeSection
+          onSelectTask={(task) => setSelectedRewardTask(task)}
+          onActivatePassport={openActivatePassport}
+          onMintBadge={handleMintBadge}
+          mintingSlug={mintingSlug}
+        />
 
         {/* Useful Section */}
         <SectionCard title="Useful">
@@ -363,8 +386,11 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         task={selectedRewardTask}
         visible={selectedRewardTask !== null}
         onClose={() => setSelectedRewardTask(null)}
-        minting={mintingTaskSlug !== null && mintingTaskSlug === selectedRewardTask?.slug}
         attesting={attestingSeeker}
+        passportActivated={cashflowPassport.activated}
+        onActivatePassport={openActivatePassport}
+        onMint={selectedRewardTask ? () => handleMintBadge(selectedRewardTask) : undefined}
+        minting={!!mintingSlug && mintingSlug === selectedRewardTask?.slug}
         onAttestSeeker={async () => {
           if (attestingSeeker) return;
           setAttestingSeeker(true);
@@ -372,7 +398,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
             const ok = await attestSeekerIfNeeded();
             invalidateRewards();
             if (ok) {
-              showToast('Seeker verified', 'You can now claim this badge', 'success');
+              showToast('Seeker verified', 'Adding badge to your Cashflow Passport…', 'success');
               setSelectedRewardTask(null);
             }
           } catch (err: any) {
@@ -381,23 +407,11 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
             setAttestingSeeker(false);
           }
         }}
-        onMint={async (task) => {
-          if (mintingTaskSlug) return; // already minting
-          logBadgeMintAttempt(task.slug);
-          setMintingTaskSlug(task.slug);
-          try {
-            await mintReward(task.slug);
-            logBadgeMintSuccess(task.slug);
-            showToast('Badge minted', task.title, 'success');
-            setSelectedRewardTask(null);
-          } catch (err: any) {
-            const msg = err?.message ?? 'Mint failed';
-            logBadgeMintError(task.slug, msg);
-            showToast('Mint failed', msg, 'error');
-          } finally {
-            setMintingTaskSlug(null);
-          }
-        }}
+      />
+      <ActivateCashflowPassportSheet
+        visible={activatePassportVisible}
+        onClose={() => setActivatePassportVisible(false)}
+        feeLamports={cashflowPassport.feeLamports}
       />
       <ComingSoonModal
         visible={profileModalVisible}

@@ -288,9 +288,28 @@ class ApiService {
     await this.post<{ success: boolean }>('/earn/v2/notify-interest', { protocol, protocolName });
   }
 
-  async getRewardTasks(): Promise<TaskWithProgress[]> {
-    const res = await this.get<{ success: boolean; data: { tasks: TaskWithProgress[] } }>('/rewards/v2/tasks');
-    return res.data.tasks;
+  async getRewardTasks(): Promise<{
+    tasks: TaskWithProgress[];
+    cashflowPassport: {
+      address: string | null;
+      activated: boolean;
+      activatedAt: string | null;
+      feeLamports: string;
+    };
+  }> {
+    const res = await this.get<{
+      success: boolean;
+      data: {
+        tasks: TaskWithProgress[];
+        cashflowPassport: {
+          address: string | null;
+          activated: boolean;
+          activatedAt: string | null;
+          feeLamports: string;
+        };
+      };
+    }>('/rewards/v2/tasks');
+    return res.data;
   }
 
   async getSeekerAttestChallenge(walletAddress: string): Promise<{ challenge: string; expiresAt: string }> {
@@ -305,32 +324,66 @@ class ApiService {
     await this.post<{ success: boolean }>('/rewards/v2/attest-seeker', params);
   }
 
-  async mintRewardBadge(taskSlug: string): Promise<{
-    mintedBadgeId: string;
+  async activateCashflowPassport(): Promise<{
+    activationId: string;
     assetAddress: string;
+    collectionAddress: string;
     innerInstructions: SerializedInstruction[];
     mintTransactionBase64: string;
     blockhash: string;
-    collectionAddress: string;
     mintFeeLamports: string;
   }> {
     const res = await this.signedPost<{
       success: boolean;
       data: {
-        mintedBadgeId: string;
+        activationId: string;
         assetAddress: string;
+        collectionAddress: string;
         innerInstructions: SerializedInstruction[];
         mintTransactionBase64: string;
         blockhash: string;
-        collectionAddress: string;
         mintFeeLamports: string;
       };
-    }>('/rewards/v2/mint', { taskSlug });
+    }>('/rewards/v2/cashflow-passport/activate', {});
     return res.data;
   }
 
-  async confirmRewardMint(mintedBadgeId: string, bundleSignatures: string[]): Promise<void> {
-    await this.post<{ success: boolean }>('/rewards/v2/mint/confirm', { mintedBadgeId, bundleSignatures });
+  async confirmCashflowPassportActivation(activationId: string, bundleSignatures: string[]): Promise<{ status: 'confirmed' | 'pending' | 'failed' }> {
+    const res = await this.post<{ success: boolean; status: 'confirmed' | 'pending' | 'failed' }>(
+      '/rewards/v2/cashflow-passport/activate/confirm',
+      { activationId, bundleSignatures },
+    );
+    return { status: res.status };
+  }
+
+  async mintBadge(taskSlug: string): Promise<{
+    badgeMintId: string;
+    assetAddress: string;
+    collectionAddress: string;
+    innerInstructions: SerializedInstruction[];
+    mintTransactionBase64: string;
+    blockhash: string;
+  }> {
+    const res = await this.signedPost<{
+      success: boolean;
+      data: {
+        badgeMintId: string;
+        assetAddress: string;
+        collectionAddress: string;
+        innerInstructions: SerializedInstruction[];
+        mintTransactionBase64: string;
+        blockhash: string;
+      };
+    }>('/rewards/v2/badge/mint', { taskSlug });
+    return res.data;
+  }
+
+  async confirmBadgeMint(badgeMintId: string, bundleSignatures: string[]): Promise<{ status: 'confirmed' | 'pending' | 'failed' }> {
+    const res = await this.post<{ success: boolean; status: 'confirmed' | 'pending' | 'failed' }>(
+      '/rewards/v2/badge/mint/confirm',
+      { badgeMintId, bundleSignatures },
+    );
+    return { status: res.status };
   }
 
   async deposit(params: {

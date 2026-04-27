@@ -272,7 +272,7 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
 
     // Extract real transaction IDs (first signature of each fully-signed tx).
     // Stored BEFORE sending to Jito so the Helius webhook can match them as
-    // soon as the bundle lands on-chain — no race condition. Also used as the
+    // soon as the bundle lands onchain — no race condition. Also used as the
     // source of truth when Jito's bundle status is unreliable.
     const { VersionedTransaction: VTx } = await import('@solana/web3.js');
     const { getBase58Decoder } = await import('@solana/kit');
@@ -287,7 +287,7 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
       console.log(`Bundle signatures pre-stored for ${transactionId}: ${txSignatures.map((s) => s.slice(0, 8)).join(', ')}`);
     }
 
-    // Ask the RPC whether all bundle signatures have landed on-chain.
+    // Ask the RPC whether all bundle signatures have landed onchain.
     const areSigsConfirmed = async (): Promise<boolean> => {
       try {
         const result = await rpc
@@ -344,7 +344,7 @@ router.post('/send-bundle', async (req: Request, res: Response) => {
     console.warn(`Jito bundle not confirmed after polling: ${bundleId}, status=${status?.confirmation_status ?? 'unknown'} — checking RPC`);
 
     // Fallback: Jito's bundle-status view can lag or drop state even when the
-    // bundle actually landed. Check sigs directly on-chain as a last resort.
+    // bundle actually landed. Check sigs directly onchain as a last resort.
     // We do NOT re-broadcast via RPC — bundles must land atomically or not at all.
     if (await areSigsConfirmed()) {
       console.log(`Bundle ${bundleId} confirmed via RPC signature check`);

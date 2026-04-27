@@ -8,12 +8,19 @@ interface Props {
   task: TaskWithProgress | null;
   visible: boolean;
   onClose: () => void;
-  /** Called when the user taps the mint button. Parent owns the mint flow. */
-  onMint?: (task: TaskWithProgress) => void;
-  minting?: boolean;
   /** Called when the user taps "Verify on Seeker" for a device_seeker task. */
   onAttestSeeker?: () => void;
   attesting?: boolean;
+  /** Has the user activated their Cashflow Passport? Drives the
+   *  Earned-vs-Activate-to-claim copy on the status pill. */
+  passportActivated?: boolean;
+  /** Called when the user taps the "Activate Passport" pill (only shown
+   *  when a badge is claimable AND the passport isn't activated yet). */
+  onActivatePassport?: () => void;
+  /** Called when the user taps "Mint Badge" (claimable + passport activated). */
+  onMint?: () => void;
+  /** True while this badge is being minted (drives the spinner / disabled state). */
+  minting?: boolean;
 }
 
 function isUsdBased(verifierType: TaskWithProgress['verifierType']): boolean {
@@ -40,15 +47,15 @@ function formatProgressLabel(task: TaskWithProgress): string {
   return `${task.currentValue} of ${task.targetValue}`;
 }
 
-export default function RewardBadgeSheet({ task, visible, onClose, onMint, minting, onAttestSeeker, attesting }: Props) {
+export default function RewardBadgeSheet({ task, visible, onClose, onAttestSeeker, attesting, passportActivated = false, onActivatePassport, onMint, minting = false }: Props) {
   const { colors } = useTheme();
   if (!task) return <BottomSheet visible={visible} onClose={onClose}><View /></BottomSheet>;
 
-  const claimable = task.status === 'claimable';
   const minted = task.status === 'minted';
   const pending = task.status === 'mint_pending' || minting;
-  const feeSol = ((Number(task.mintFeeLamports) + 1_000_000) / 1_000_000_000).toFixed(3);
+  const claimable = task.status === 'claimable';
   const needsSeekerAttest = task.verifierType === 'device_seeker' && task.status === 'in_progress';
+  const canMint = claimable && passportActivated && !!onMint;
 
   return (
     <BottomSheet visible={visible} onClose={onClose}>
@@ -79,15 +86,6 @@ export default function RewardBadgeSheet({ task, visible, onClose, onMint, minti
           <Text style={[styles.statusValue, { color: colors.textPrimary }]}>Locked to your vault forever</Text>
         </View>
 
-        {minted && task.assetAddress && (
-          <View style={[styles.statusBox, { backgroundColor: colors.cardSecondary }]}>
-            <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Asset</Text>
-            <Text style={[styles.statusValue, { color: colors.textPrimary }]} numberOfLines={1} ellipsizeMode="middle">
-              {task.assetAddress}
-            </Text>
-          </View>
-        )}
-
         {needsSeekerAttest ? (
           <TouchableOpacity
             style={[styles.cta, { backgroundColor: colors.accentBlueDark }, attesting && styles.ctaDisabled]}
@@ -101,30 +99,41 @@ export default function RewardBadgeSheet({ task, visible, onClose, onMint, minti
               <Text style={[styles.ctaText, { color: '#fff' }]}>Verify on Seeker</Text>
             )}
           </TouchableOpacity>
-        ) : (
+        ) : claimable && !passportActivated ? (
           <TouchableOpacity
-            style={[
-              styles.cta,
-              { backgroundColor: claimable && !pending ? colors.accentBlueDark : colors.cardSecondary },
-              (!claimable || pending) && styles.ctaDisabled,
-            ]}
-            onPress={claimable && !pending ? () => onMint?.(task) : undefined}
-            disabled={!claimable || pending}
+            style={[styles.cta, { backgroundColor: colors.accentBlueDark }]}
+            onPress={onActivatePassport}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.ctaText, { color: '#fff' }]}>Activate Passport to claim</Text>
+          </TouchableOpacity>
+        ) : canMint ? (
+          <TouchableOpacity
+            style={[styles.cta, { backgroundColor: colors.accentBlueDark }, pending && styles.ctaDisabled]}
+            onPress={pending ? undefined : onMint}
+            disabled={pending}
             activeOpacity={0.85}
           >
             {pending ? (
-              <ActivityIndicator size="small" color={colors.textPrimary} />
+              <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text
-                style={[
-                  styles.ctaText,
-                  { color: claimable ? '#fff' : colors.textSecondary },
-                ]}
-              >
-                {minted ? 'Already minted' : claimable ? `Mint badge (~${feeSol} SOL fees)` : 'Keep using Cashflow to unlock'}
-              </Text>
+              <Text style={[styles.ctaText, { color: '#fff' }]}>Mint Badge</Text>
             )}
           </TouchableOpacity>
+        ) : (
+          <View style={[styles.cta, { backgroundColor: colors.cardSecondary }]}>
+            {pending ? (
+              <ActivityIndicator size="small" color={colors.textPrimary} />
+            ) : (
+              <Text style={[styles.ctaText, { color: minted ? colors.accentGreen : claimable ? colors.accentBlueDark : colors.textSecondary }]}>
+                {minted
+                  ? 'Earned'
+                  : claimable
+                    ? 'Ready to mint'
+                    : 'Keep using Cashflow to unlock'}
+              </Text>
+            )}
+          </View>
         )}
       </View>
     </BottomSheet>

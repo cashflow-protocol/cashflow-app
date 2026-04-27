@@ -10,6 +10,7 @@ import {
   createRewardsCollection,
   diagnoseReward,
   backfillUserVault,
+  resetMintedProgress,
   type RewardTask,
   type RewardSettings,
   type RewardVerifierType,
@@ -42,6 +43,7 @@ export default function RewardsPage() {
   const [editTask, setEditTask] = useState<RewardTask | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +59,24 @@ export default function RewardsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleReset = async () => {
+    if (resetting) return;
+    if (!confirm('Reset every MINTED / MINT_PENDING reward progress back to IN_PROGRESS so badges can be re-issued as attributes on Cashflow Passports? Existing standalone NFTs are NOT removed (soulbound).')) return;
+    setResetting(true);
+    try {
+      const res = await resetMintedProgress();
+      if (res.success) {
+        alert(`Reset ${res.modifiedCount} progress rows.`);
+      } else {
+        alert(`Failed: ${res.error ?? 'unknown'}`);
+      }
+    } catch (err: any) {
+      alert(`Failed: ${err?.message ?? 'unknown'}`);
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const handleBackfill = async () => {
     if (backfilling) return;
@@ -89,6 +109,9 @@ export default function RewardsPage() {
         <div className="header-actions" style={{ display: 'flex', gap: 8 }}>
           <button className="btn-secondary" style={{ width: 'auto' }} onClick={handleBackfill} disabled={backfilling}>
             {backfilling ? 'Backfilling…' : 'Backfill user vaults'}
+          </button>
+          <button className="btn-secondary" style={{ width: 'auto' }} onClick={handleReset} disabled={resetting}>
+            {resetting ? 'Resetting…' : 'Reset minted progress'}
           </button>
           <button className="btn-primary" style={{ width: 'auto' }} onClick={() => setShowCreate(true)}>
             Add Reward Task
@@ -258,6 +281,36 @@ function DiagnoseResult({ result }: { result: any }) {
           <pre style={{ background: '#f5f6f8', padding: 8, borderRadius: 6, fontSize: 11, marginTop: 6, overflow: 'auto' }}>
             {JSON.stringify(result.task.verifierConfig ?? {}, null, 2)}
           </pre>
+          <div style={{ color: '#666', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 12, marginBottom: 4 }}>Cashflow Passport</div>
+          {result.cashflowPassport?.activated ? (
+            <div style={{ fontSize: 12 }}>
+              <span style={{ background: '#d4edda', color: '#155724', padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>Activated</span>
+              <div style={{ fontFamily: 'monospace', fontSize: 11, marginTop: 4, wordBreak: 'break-all' }}>{result.cashflowPassport.address}</div>
+              {result.cashflowPassport.activatedAt && (
+                <div style={{ color: '#666', fontSize: 11, marginTop: 2 }}>{new Date(result.cashflowPassport.activatedAt).toLocaleString()}</div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12 }}>
+              <span style={{ background: '#fff3cd', color: '#856404', padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>Not activated</span>
+              <div style={{ color: '#666', fontSize: 11, marginTop: 4 }}>Badges queue at CLAIMABLE until the user activates.</div>
+            </div>
+          )}
+          {result.progress && (
+            <>
+              <div style={{ color: '#666', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 12, marginBottom: 4 }}>Progress</div>
+              <div style={{ fontSize: 12 }}>
+                <span style={{
+                  fontSize: 11, padding: '2px 6px', borderRadius: 4, fontWeight: 600,
+                  background: result.progress.status === 'minted' ? '#d4edda' : result.progress.status === 'claimable' ? '#cce5ff' : '#fff3cd',
+                  color: result.progress.status === 'minted' ? '#155724' : result.progress.status === 'claimable' ? '#004085' : '#856404',
+                }}>
+                  {result.progress.status}
+                </span>
+                <span style={{ marginLeft: 8 }}>{result.progress.currentValue} / {result.progress.targetValue}</span>
+              </div>
+            </>
+          )}
         </div>
         <div>
           <div style={{ color: '#666', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Verifier query</div>
@@ -514,7 +567,7 @@ function CreateCollectionModal({ onClose, onCreated }: { onClose: () => void; on
         {result ? (
           <>
             <p style={{ fontSize: 13, color: '#19C394', marginBottom: 16 }}>
-              Collection created on-chain and saved to settings.
+              Collection created onchain and saved to settings.
             </p>
             <div className="form-group">
               <label>Collection address</label>
@@ -537,7 +590,7 @@ function CreateCollectionModal({ onClose, onCreated }: { onClose: () => void; on
         ) : (
           <>
             <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
-              Uploads metadata to DO Spaces, runs Metaplex Core <span className="mono">createCollection</span> on-chain (signed by the admin keypair), and saves the resulting address to settings.
+              Uploads metadata to DO Spaces, runs Metaplex Core <span className="mono">createCollection</span> onchain (signed by the admin keypair), and saves the resulting address to settings.
             </p>
 
             <div className="form-group">
@@ -611,7 +664,7 @@ function CreateCollectionModal({ onClose, onCreated }: { onClose: () => void; on
             <div className="modal-actions">
               <button className="btn-secondary" onClick={onClose} disabled={creating}>Cancel</button>
               <button className="btn-primary" style={{ width: 'auto' }} onClick={handleCreate} disabled={creating || uploading}>
-                {creating ? 'Creating on-chain…' : 'Upload & Create Collection'}
+                {creating ? 'Creating onchain…' : 'Upload & Create Collection'}
               </button>
             </div>
           </>

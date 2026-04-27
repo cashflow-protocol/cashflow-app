@@ -1413,7 +1413,7 @@ router.post('/create-vault', async (req, res) => {
 /**
  * POST /confirm-vault
  * Called by mobile after signing and sending a vault creation tx (Seeker/android_gms mode).
- * Updates the VaultPayment record to 'used' with the on-chain signature.
+ * Updates the VaultPayment record to 'used' with the onchain signature.
  */
 router.post('/confirm-vault', async (req, res) => {
   try {

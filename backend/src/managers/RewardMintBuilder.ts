@@ -14,22 +14,38 @@ import {
   createSignerFromKeypair,
   type Instruction as UmiInstruction,
 } from '@metaplex-foundation/umi';
-import { mplCore, create as createCoreAsset } from '@metaplex-foundation/mpl-core';
+import {
+  mplCore,
+  create as createCoreAsset,
+  fetchAssetV1,
+  updatePlugin,
+} from '@metaplex-foundation/mpl-core';
 import { getAdminTxFeePayerKeypair } from '../services/adminFeePayer';
-import type { RewardTask } from '../models/RewardTask';
+import * as storage from '../services/storageManager';
 import type { SerializedInstruction } from '../types';
 import { getSetting, APP_SETTING_KEYS } from '../models/AppSetting';
 
-export interface BuildMintTransactionResult {
-  /** Base64-encoded VersionedTransaction containing the Metaplex Core create instruction. */
+const DEFAULT_PASSPORT_IMAGE_URL = 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/rewards/badges/passport.png';
+const PASSPORT_METADATA_KEY = 'rewards/metadata/passport.json';
+
+export interface BuildActivationTransactionResult {
   mintTransactionBase64: string;
-  /** Pubkey of the new asset (base58). */
   assetAddress: string;
-  /** Inner instructions to be wrapped in the user's vault transaction execute (fee transfer). */
   innerInstructions: SerializedInstruction[];
-  /** Recent blockhash used for the mint transaction. */
   blockhash: string;
+  collectionAddress: string;
 }
+
+/**
+ * Activation fee charged for minting a Cashflow Passport. Read at request time
+ * so the value can be tuned without redeploying. Defaults to 0.03 SOL.
+ */
+export function getCashflowPassportActivationFeeLamports(): bigint {
+  const raw = process.env.CASHFLOW_PASSPORT_ACTIVATION_FEE_LAMPORTS;
+  if (raw && /^\d+$/.test(raw)) return BigInt(raw);
+  return 30_000_000n;
+}
+
 
 /**
  * Convert a Umi instruction to a web3.js TransactionInstruction.
@@ -85,18 +101,76 @@ export class RewardMintBuilder {
     return value;
   }
 
-  async buildMintTransaction(params: {
-    task: RewardTask;
+  /**
+   * Resolve the metadata URI for the Cashflow Passport asset. Lazily
+   * generates and uploads a metadata JSON to DO Spaces on first call so
+   * Solscan/wallets can render the badge image. Cached in-process; the JSON
+   * itself is identical across users so upserting is idempotent.
+   *
+   * Override via CASHFLOW_PASSPORT_METADATA_URI to point at a hand-curated JSON.
+   */
+  private cachedPassportMetadataUri: string | null = null;
+  async getCashflowPassportMetadataUri(): Promise<string> {
+    if (process.env.CASHFLOW_PASSPORT_METADATA_URI) {
+      return process.env.CASHFLOW_PASSPORT_METADATA_URI;
+    }
+    if (this.cachedPassportMetadataUri) return this.cachedPassportMetadataUri;
+
+    const imageUrl = process.env.CASHFLOW_PASSPORT_IMAGE_URL ?? DEFAULT_PASSPORT_IMAGE_URL;
+    const name = process.env.CASHFLOW_PASSPORT_NAME ?? 'Cashflow Passport';
+
+    if (!storage.isConfigured()) {
+      // Without DO Spaces we can't host JSON — fall back to the bare PNG URL
+      // (Solscan won't render the title but the image will load).
+      this.cachedPassportMetadataUri = imageUrl;
+      return imageUrl;
+    }
+
+    const metadata = {
+      name,
+      description: 'Soulbound onchain Cashflow Passport.',
+      image: imageUrl,
+      external_url: 'https://cashflow.fun',
+      attributes: [],
+      properties: {
+        files: [{ uri: imageUrl, type: 'image/png' }],
+        category: 'image',
+      },
+    };
+
+    const url = await storage.uploadFile(
+      Buffer.from(JSON.stringify(metadata, null, 2), 'utf-8'),
+      PASSPORT_METADATA_KEY,
+      'application/json',
+    );
+    this.cachedPassportMetadataUri = url;
+    return url;
+  }
+
+  /**
+   * Build the standalone Metaplex Core mint transaction for a user's
+   * "Cashflow Passport" — a single soulbound NFT that hosts earned-badge entries
+   * via the Attributes plugin.
+   *
+   * Returns a base64-encoded VersionedTransaction pre-signed by the admin
+   * keypair AND the asset keypair (mobile appends to the Jito bundle as-is),
+   * plus inner instructions (SystemProgram.transfer vault → treasury) for
+   * the user's vault execute.
+   *
+   * Soulbound enforcement: PermanentFreezeDelegate plugin with frozen=true
+   * means the asset can never be transferred — even by the admin update
+   * authority. The Attributes plugin is pre-initialized so admin can append
+   * earned-badge entries later without paying allocation rent.
+   */
+  async buildCashflowPassportMintTransaction(params: {
     vaultAddress: string;
-  }): Promise<BuildMintTransactionResult> {
-    const { task, vaultAddress } = params;
+  }): Promise<BuildActivationTransactionResult> {
+    const { vaultAddress } = params;
     const collectionAddress = await this.getCollectionAddress();
 
-    // ── Generate ephemeral asset keypair ──
     const assetKeypair = Keypair.generate();
     const assetAddress = assetKeypair.publicKey.toBase58();
 
-    // ── Set up Umi with admin keypair ──
     const adminKeypair = getAdminTxFeePayerKeypair();
     const umi = createUmi(this.rpc.rpcEndpoint).use(mplCore());
     const umiAdminKeypair = umi.eddsa.createKeypairFromSecretKey(adminKeypair.secretKey);
@@ -105,33 +179,32 @@ export class RewardMintBuilder {
     const umiAssetKeypair = umi.eddsa.createKeypairFromSecretKey(assetKeypair.secretKey);
     const umiAssetSigner = createSignerFromKeypair(umi, umiAssetKeypair);
 
-    // ── Build the Metaplex Core create instruction ──
+    const metadataUri = await this.getCashflowPassportMetadataUri();
+    const name = process.env.CASHFLOW_PASSPORT_NAME ?? 'Cashflow Passport';
+
     const createBuilder = createCoreAsset(umi, {
       asset: umiAssetSigner,
       collection: { publicKey: umiPublicKey(collectionAddress) } as any,
-      name: task.title,
-      uri: task.metadataUri,
+      name,
+      uri: metadataUri,
       owner: umiPublicKey(vaultAddress),
-      authority: umi.identity, // admin
-      payer: umi.identity,     // admin pays rent
+      authority: umi.identity,
+      payer: umi.identity,
       plugins: [
-        {
-          type: 'PermanentFreezeDelegate',
-          frozen: true,
-        },
+        { type: 'Attributes', attributeList: [] },
+        { type: 'PermanentFreezeDelegate', frozen: true },
       ],
     });
 
     const umiInstructions = createBuilder.getInstructions();
     const web3Instructions = umiInstructions.map(umiInstructionToWeb3);
 
-    // ── Compose the standalone mint transaction (admin + asset signers) ──
     const { blockhash } = await this.rpc.getLatestBlockhash('confirmed');
     const message = new TransactionMessage({
       payerKey: adminKeypair.publicKey,
       recentBlockhash: blockhash,
       instructions: [
-        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }),
         ...web3Instructions,
       ],
     }).compileToV0Message();
@@ -141,9 +214,8 @@ export class RewardMintBuilder {
 
     const mintTransactionBase64 = Buffer.from(tx.serialize()).toString('base64');
 
-    // ── Build inner instructions for the vault execute ──
-    const feeLamports = BigInt(task.mintFeeLamports);
-    if (feeLamports <= 0n) throw new Error('Invalid mintFeeLamports for task');
+    const feeLamports = getCashflowPassportActivationFeeLamports();
+    if (feeLamports <= 0n) throw new Error('Invalid CASHFLOW_PASSPORT_ACTIVATION_FEE_LAMPORTS');
 
     const transferIx = SystemProgram.transfer({
       fromPubkey: new PublicKey(vaultAddress),
@@ -168,6 +240,116 @@ export class RewardMintBuilder {
       assetAddress,
       innerInstructions,
       blockhash,
+      collectionAddress,
+    };
+  }
+
+  /**
+   * Append a `{ key, value }` entry to the Attributes plugin on the user's
+   * Cashflow Passport asset, then send the transaction signed only by the admin
+   * keypair (admin holds UpdateAuthority — no user signature needed).
+   *
+   * Returns the resulting signature (string). Throws on RPC/build failure.
+   */
+  async appendBadgeAttribute(params: {
+    assetAddress: string;
+    key: string;
+    value: string;
+  }): Promise<string> {
+    const { assetAddress, key, value } = params;
+    const collectionAddress = await this.getCollectionAddress();
+
+    const adminKeypair = getAdminTxFeePayerKeypair();
+    const umi = createUmi(this.rpc.rpcEndpoint).use(mplCore());
+    const umiAdminKeypair = umi.eddsa.createKeypairFromSecretKey(adminKeypair.secretKey);
+    umi.use(keypairIdentity(umiAdminKeypair));
+
+    // Fetch current asset state to read the existing attributeList. The
+    // Attributes plugin update REPLACES the list, so we must include all
+    // existing entries plus the new one, and dedupe on key.
+    const asset = await fetchAssetV1(umi, umiPublicKey(assetAddress));
+    const existing = asset.attributes?.attributeList ?? [];
+
+    if (existing.some((a) => a.key === key)) {
+      // Idempotent: badge already present. Return a sentinel so callers can
+      // skip onchain work.
+      return '';
+    }
+
+    const nextList = [...existing, { key, value }];
+
+    const builder = updatePlugin(umi, {
+      asset: umiPublicKey(assetAddress),
+      collection: umiPublicKey(collectionAddress),
+      plugin: { type: 'Attributes', attributeList: nextList },
+    });
+
+    const result = await builder.sendAndConfirm(umi, { confirm: { commitment: 'confirmed' } });
+    return Buffer.from(result.signature).toString('base64');
+  }
+
+  /**
+   * Build (but do not send) the Metaplex Core `updatePlugin` transaction that
+   * appends a badge attribute to the user's Cashflow Passport.
+   *
+   * Returns an admin-pre-signed VersionedTransaction for mobile to bundle as
+   * TX5. No inner instructions are needed — the mobile's executeVaultTransaction
+   * already bundles createCoverFromSquadInstruction in TX4 to reimburse admin
+   * gas from the vault's spending limit PDA.
+   */
+  async buildBadgeMintTransaction(params: {
+    assetAddress: string;
+    key: string;
+    value: string;
+  }): Promise<{
+    mintTransactionBase64: string;
+    innerInstructions: SerializedInstruction[];
+    blockhash: string;
+    collectionAddress: string;
+    alreadyPresent: boolean;
+  }> {
+    const { assetAddress, key, value } = params;
+    const collectionAddress = await this.getCollectionAddress();
+
+    const adminKeypair = getAdminTxFeePayerKeypair();
+    const umi = createUmi(this.rpc.rpcEndpoint).use(mplCore());
+    const umiAdminKeypair = umi.eddsa.createKeypairFromSecretKey(adminKeypair.secretKey);
+    umi.use(keypairIdentity(umiAdminKeypair));
+
+    const asset = await fetchAssetV1(umi, umiPublicKey(assetAddress));
+    const existing = asset.attributes?.attributeList ?? [];
+    const alreadyPresent = existing.some((a) => a.key === key);
+    const nextList = alreadyPresent ? [...existing] : [...existing, { key, value }];
+
+    const updateBuilder = updatePlugin(umi, {
+      asset: umiPublicKey(assetAddress),
+      collection: umiPublicKey(collectionAddress),
+      plugin: { type: 'Attributes', attributeList: nextList },
+    });
+
+    const umiInstructions = updateBuilder.getInstructions();
+    const web3Instructions = umiInstructions.map(umiInstructionToWeb3);
+
+    const { blockhash } = await this.rpc.getLatestBlockhash('confirmed');
+    const message = new TransactionMessage({
+      payerKey: adminKeypair.publicKey,
+      recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ...web3Instructions,
+      ],
+    }).compileToV0Message();
+
+    const tx = new VersionedTransaction(message);
+    tx.sign([adminKeypair]);
+    const mintTransactionBase64 = Buffer.from(tx.serialize()).toString('base64');
+
+    return {
+      mintTransactionBase64,
+      innerInstructions: [],
+      blockhash,
+      collectionAddress,
+      alreadyPresent,
     };
   }
 }

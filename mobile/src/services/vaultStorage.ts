@@ -15,7 +15,7 @@ export interface VaultData {
   createdAt: string;
   walletAddress?: string;
   seekerMode?: boolean;
-  /** false while vault creation tx is in-flight; true once landed on-chain */
+  /** false while vault creation tx is in-flight; true once landed onchain */
   isInitialized?: boolean;
 }
 

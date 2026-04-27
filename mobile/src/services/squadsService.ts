@@ -911,7 +911,7 @@ export async function createMultisig(
  *
  * - Standard mode (iOS/web): backend signs + sends the tx (admin pays gas).
  * - Seeker / android_gms: backend returns a partially-signed tx; mobile
- *   signs via MWA and sends on-chain, then calls confirm-vault.
+ *   signs via MWA and sends onchain, then calls confirm-vault.
  *
  * Keypairs are generated locally as usual — only public keys are sent to backend.
  */
@@ -1135,7 +1135,7 @@ export async function addMember(
   console.log('[addMember] devicePubkey:', ctx.devicePubkey.toBase58());
   console.log('[addMember] walletPubkey:', ctx.walletPubkey?.toBase58());
   console.log('[addMember] cloudPubkey:', ctx.cloudPubkey?.toBase58());
-  console.log('[addMember] on-chain members:', multisigAccount.members.map((m: any) => m.key.toBase58()));
+  console.log('[addMember] onchain members:', multisigAccount.members.map((m: any) => m.key.toBase58()));
   console.log('[addMember] newMember:', newMemberAddress);
 
   // TX1: create config tx + proposal + approvals

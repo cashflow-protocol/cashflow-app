@@ -8,6 +8,14 @@ interface Props {
   onPress?: () => void;
   /** Compact horizontal-card variant for the home section. */
   compact?: boolean;
+  /** Has the user activated their Cashflow Passport? Affects the CTA copy
+   *  for claimable badges — pre-activation we tell them to activate; once
+   *  activated the user clicks Mint per badge. */
+  passportActivated?: boolean;
+  /** Tap handler for the inline Mint CTA on claimable + activated cards. */
+  onMint?: () => void;
+  /** True while this card's badge is being minted (overrides status). */
+  minting?: boolean;
 }
 
 function isUsdBased(verifierType: TaskWithProgress['verifierType']): boolean {
@@ -43,26 +51,36 @@ function progressFraction(task: TaskWithProgress): number {
   return Math.max(0, Math.min(1, current / target));
 }
 
-function ctaLabel(task: TaskWithProgress): string {
+function ctaLabel(task: TaskWithProgress, passportActivated: boolean): string {
   switch (task.status) {
     case 'claimable':
-      return `Mint`;
+      return passportActivated ? 'Mint' : 'Activate Passport';
     case 'mint_pending':
       return 'Minting…';
     case 'minted':
-      return 'Minted';
+      return 'Earned';
     case 'in_progress':
     default:
       return 'Locked';
   }
 }
 
-export default function RewardBadgeCard({ task, onPress, compact }: Props) {
+export default function RewardBadgeCard({ task, onPress, compact, passportActivated = false, onMint, minting = false }: Props) {
   const { colors } = useTheme();
   const fraction = progressFraction(task);
   const claimable = task.status === 'claimable';
   const minted = task.status === 'minted';
-  const pending = task.status === 'mint_pending';
+  const pending = task.status === 'mint_pending' || minting;
+  const canMintInline = claimable && passportActivated && !!onMint && !minting;
+  const ctaHighlighted = claimable || pending;
+
+  const handleCtaPress = () => {
+    if (canMintInline) {
+      onMint?.();
+      return;
+    }
+    onPress?.();
+  };
 
   return (
     <TouchableOpacity
@@ -105,15 +123,30 @@ export default function RewardBadgeCard({ task, onPress, compact }: Props) {
         />
       </View>
 
-      <View style={[styles.cta, claimable && { backgroundColor: colors.accentBlueDark }, minted && { backgroundColor: colors.cardSecondary }]}>
+      <TouchableOpacity
+        activeOpacity={canMintInline ? 0.85 : 1}
+        onPress={canMintInline ? handleCtaPress : onPress}
+        disabled={pending}
+        style={[
+          styles.cta,
+          ctaHighlighted && { backgroundColor: colors.accentBlueDark },
+          minted && { backgroundColor: colors.cardSecondary },
+        ]}
+      >
         {pending ? (
-          <ActivityIndicator size="small" color={colors.textPrimary} />
+          <ActivityIndicator size="small" color="#fff" />
         ) : (
-          <Text style={[styles.ctaText, claimable && styles.ctaTextClaimable, minted && { color: colors.textSecondary }]}>
-            {ctaLabel(task)}
+          <Text
+            style={[
+              styles.ctaText,
+              ctaHighlighted && styles.ctaTextClaimable,
+              minted && { color: colors.accentGreen },
+            ]}
+          >
+            {ctaLabel(task, passportActivated)}
           </Text>
         )}
-      </View>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 }

@@ -307,6 +307,10 @@ export class RewardManager {
       { upsert: true, new: true },
     );
 
+    // No auto-mint: when the verifier flips to satisfied we leave progress at
+    // CLAIMABLE and require the user to click Mint in the UI. The user pays
+    // gas; admin reimburses signing via the inner-instruction transfer.
+
     return {
       status: newStatus,
       currentValue: result.currentValue,

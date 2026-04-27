@@ -462,7 +462,7 @@ export class JupiterManager {
       });
       swapParams.feeAccount = feeAta as string;
 
-      // Ensure the fee ATA exists on-chain (paid by admin, not the user's vault).
+      // Ensure the fee ATA exists onchain (paid by admin, not the user's vault).
       try {
         const ataInfo = await this.rpc.getAccountInfo(feeAta).send();
         if (!ataInfo.value) {
@@ -771,7 +771,7 @@ export class JupiterManager {
   }
 
   /**
-   * Create a fee ATA on-chain using the admin fee payer (not the user's vault).
+   * Create a fee ATA onchain using the admin fee payer (not the user's vault).
    * Called once per new output token — subsequent swaps see the ATA already exists.
    */
   private async createFeeAta(owner: string, mint: string, tokenProgram?: string): Promise<void> {
