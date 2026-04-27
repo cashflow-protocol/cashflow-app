@@ -14,6 +14,9 @@ interface Props {
   /** Has the user activated their Cashflow Passport? Drives the
    *  Earned-vs-Activate-to-claim copy on the status pill. */
   passportActivated?: boolean;
+  /** Called when the user taps the "Activate Passport" pill (only shown
+   *  when a badge is claimable AND the passport isn't activated yet). */
+  onActivatePassport?: () => void;
 }
 
 function isUsdBased(verifierType: TaskWithProgress['verifierType']): boolean {
@@ -40,7 +43,7 @@ function formatProgressLabel(task: TaskWithProgress): string {
   return `${task.currentValue} of ${task.targetValue}`;
 }
 
-export default function RewardBadgeSheet({ task, visible, onClose, onAttestSeeker, attesting, passportActivated = false }: Props) {
+export default function RewardBadgeSheet({ task, visible, onClose, onAttestSeeker, attesting, passportActivated = false, onActivatePassport }: Props) {
   const { colors } = useTheme();
   if (!task) return <BottomSheet visible={visible} onClose={onClose}><View /></BottomSheet>;
 
@@ -91,6 +94,14 @@ export default function RewardBadgeSheet({ task, visible, onClose, onAttestSeeke
               <Text style={[styles.ctaText, { color: '#fff' }]}>Verify on Seeker</Text>
             )}
           </TouchableOpacity>
+        ) : claimable && !passportActivated ? (
+          <TouchableOpacity
+            style={[styles.cta, { backgroundColor: colors.accentBlueDark }]}
+            onPress={onActivatePassport}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.ctaText, { color: '#fff' }]}>Activate Passport to claim</Text>
+          </TouchableOpacity>
         ) : (
           <View style={[styles.cta, { backgroundColor: colors.cardSecondary }]}>
             {pending ? (
@@ -100,9 +111,7 @@ export default function RewardBadgeSheet({ task, visible, onClose, onAttestSeeke
                 {minted
                   ? 'Earned'
                   : claimable
-                    ? passportActivated
-                      ? 'Earned — adding to Cashflow Passport…'
-                      : 'Earned — activate your Cashflow Passport to claim'
+                    ? 'Earned — adding to Cashflow Passport…'
                     : 'Keep using Cashflow to unlock'}
               </Text>
             )}

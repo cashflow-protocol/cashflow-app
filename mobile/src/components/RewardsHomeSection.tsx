@@ -8,9 +8,10 @@ import type { TaskWithProgress } from '../types/rewards';
 
 interface Props {
   onSelectTask?: (task: TaskWithProgress) => void;
+  onActivatePassport?: () => void;
 }
 
-export default function RewardsHomeSection({ onSelectTask }: Props) {
+export default function RewardsHomeSection({ onSelectTask, onActivatePassport }: Props) {
   const { colors } = useTheme();
   const { tasks, cashflowPassport, loading } = useRewards();
 
@@ -35,7 +36,10 @@ export default function RewardsHomeSection({ onSelectTask }: Props) {
   return (
     <View style={styles.container}>
       {!cashflowPassport.activated && !loading && (
-        <ActivateCashflowPassportCard feeLamports={cashflowPassport.feeLamports} />
+        <ActivateCashflowPassportCard
+          feeLamports={cashflowPassport.feeLamports}
+          onPress={() => onActivatePassport?.()}
+        />
       )}
       {loading ? (
         <ActivityIndicator size="small" color={colors.accentBlueDark} style={styles.loader} />

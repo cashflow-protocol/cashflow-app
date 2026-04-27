@@ -717,7 +717,7 @@ interface SquadInfo {
 const squadLookupCache = new Map<string, { value: SquadInfo | null; expiresAt: number }>();
 
 /**
- * Read a multisig's members directly on-chain. Mirrors the mobile pattern in
+ * Read a multisig's members directly onchain. Mirrors the mobile pattern in
  * mobile/src/services/squadsService.ts:getMultisigInfo. Cached by multisig
  * address so repeated page loads don't re-fetch the same accounts.
  */
@@ -790,7 +790,7 @@ router.get('/users', async (req, res) => {
     const usersWithPush = new Set(tokensWithUsers.map(String));
 
     // Resolve each user's multisig address via VaultPayment (one batched query)
-    // then read members directly on-chain (parallel, best-effort).
+    // then read members directly onchain (parallel, best-effort).
     const pageVaults = users.map((u) => u.vaultAddress);
     const payments = await VaultPaymentModel.find(
       { vaultAddress: { $in: pageVaults }, multisigAddress: { $exists: true, $ne: null } },
@@ -1544,7 +1544,7 @@ router.post('/rewards/upload-image', rewardImageUpload.single('image'), async (r
  * POST /rewards/create-collection
  * Body: { name, description, imageUrl, externalUrl?, metadata? }
  * One-shot: uploads collection metadata JSON to DO Spaces, runs Metaplex Core
- * createCollection on-chain (admin keypair signs), saves the resulting collection
+ * createCollection onchain (admin keypair signs), saves the resulting collection
  * address into AppSettings, and returns { address, metadataUri, signature }.
  *
  * If `metadata` (object) is provided, it overrides the auto-generated JSON.

@@ -69,7 +69,7 @@ export default function PrivacyPolicyPage() {
         <p>
           We retain your personal information only for as long as necessary to fulfil the purposes
           described in this policy, unless a longer retention period is required or permitted by law.
-          On-chain transaction data is permanent and cannot be deleted.
+          Onchain transaction data is permanent and cannot be deleted.
         </p>
 
         <h2>6. Data Security</h2>

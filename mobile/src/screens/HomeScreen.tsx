@@ -25,6 +25,7 @@ import AssetRow from '../components/AssetRow';
 import EarnTokenItem from '../components/EarnTokenItem';
 import RewardsHomeSection from '../components/RewardsHomeSection';
 import RewardBadgeSheet from '../components/RewardBadgeSheet';
+import ActivateCashflowPassportSheet from '../components/ActivateCashflowPassportSheet';
 import SectionCard from '../components/SectionCard';
 import StatBox from '../components/StatBox';
 import type { TaskWithProgress } from '../types/rewards';
@@ -77,7 +78,13 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRewardTask, setSelectedRewardTask] = useState<TaskWithProgress | null>(null);
   const [attestingSeeker, setAttestingSeeker] = useState(false);
+  const [activatePassportVisible, setActivatePassportVisible] = useState(false);
   const { showToast } = useToast();
+
+  const openActivatePassport = React.useCallback(() => {
+    setSelectedRewardTask(null);
+    setActivatePassportVisible(true);
+  }, []);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [convertModalVisible, setConvertModalVisible] = useState(false);
   const [receiveModalVisible, setReceiveModalVisible] = useState(false);
@@ -324,7 +331,10 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         )}
 
         {/* Rewards Section */}
-        <RewardsHomeSection onSelectTask={(task) => setSelectedRewardTask(task)} />
+        <RewardsHomeSection
+          onSelectTask={(task) => setSelectedRewardTask(task)}
+          onActivatePassport={openActivatePassport}
+        />
 
         {/* Useful Section */}
         <SectionCard title="Useful">
@@ -363,6 +373,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         onClose={() => setSelectedRewardTask(null)}
         attesting={attestingSeeker}
         passportActivated={cashflowPassport.activated}
+        onActivatePassport={openActivatePassport}
         onAttestSeeker={async () => {
           if (attestingSeeker) return;
           setAttestingSeeker(true);
@@ -379,6 +390,11 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
             setAttestingSeeker(false);
           }
         }}
+      />
+      <ActivateCashflowPassportSheet
+        visible={activatePassportVisible}
+        onClose={() => setActivatePassportVisible(false)}
+        feeLamports={cashflowPassport.feeLamports}
       />
       <ComingSoonModal
         visible={profileModalVisible}

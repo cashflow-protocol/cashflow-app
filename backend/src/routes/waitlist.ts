@@ -409,7 +409,7 @@ router.post('/payment-submit', async (req: Request, res: Response) => {
       return;
     }
 
-    // `sendAndConfirm` confirmed the tx on-chain. There's a brief eventual-consistency
+    // `sendAndConfirm` confirmed the tx onchain. There's a brief eventual-consistency
     // window before `getTransaction` returns the parsed form — poll for it. If polling
     // times out, we still mark the entry paid (we have a confirmed signature) so the
     // user isn't stuck. A background job can re-verify delta/memo later.
@@ -452,7 +452,7 @@ router.post('/payment-submit', async (req: Request, res: Response) => {
         return;
       }
     } else if (txRes?.meta?.err) {
-      res.status(400).json({ success: false, error: 'Transaction failed on-chain' });
+      res.status(400).json({ success: false, error: 'Transaction failed onchain' });
       return;
     }
     // else: txRes is null after 20s of polling → trust the confirmed signature and proceed

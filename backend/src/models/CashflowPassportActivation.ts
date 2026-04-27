@@ -12,7 +12,10 @@ export enum CashflowPassportActivationStatus {
     collection: 'cashflow_passport_activations',
   },
 })
-@index({ vaultAddress: 1 }, { unique: true })
+// Not unique — a vault may accumulate multiple FAILED rows from prior
+// attempts, plus one in-flight PENDING. The source of truth for "the user
+// has activated" is User.cashflowPassportAddress, not this collection.
+@index({ vaultAddress: 1, status: 1 })
 @index({ assetAddress: 1 }, { unique: true, sparse: true })
 @index({ status: 1, createdAt: 1 })
 export class CashflowPassportActivation {

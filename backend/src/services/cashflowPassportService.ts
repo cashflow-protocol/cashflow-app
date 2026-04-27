@@ -35,7 +35,7 @@ export interface ActivationBuildResult {
  *
  * If a PENDING activation already exists, fail it (the previous attempt likely
  * never landed) and create a new one. Recovery cron can reconcile by checking
- * signatures on-chain.
+ * signatures onchain.
  */
 export async function buildActivation(vaultAddress: string): Promise<ActivationBuildResult> {
   const user = await UserModel.findOne({ vaultAddress }, { cashflowPassportAddress: 1 }).lean();
@@ -73,7 +73,7 @@ export async function buildActivation(vaultAddress: string): Promise<ActivationB
 }
 
 /**
- * Record bundle signatures from the mobile and try to verify on-chain
+ * Record bundle signatures from the mobile and try to verify onchain
  * synchronously. On confirm, writes User.cashflowPassportAddress and triggers
  * the auto-add for any already-claimable badges.
  */
@@ -94,7 +94,7 @@ export async function recordAndConfirmActivation(
 }
 
 /**
- * Check signatures on-chain. Promote PENDING → CONFIRMED + write User
+ * Check signatures onchain. Promote PENDING → CONFIRMED + write User
  * fields + enqueue badge auto-adds. Or PENDING → FAILED. Returns 'pending'
  * if signatures haven't landed yet.
  */

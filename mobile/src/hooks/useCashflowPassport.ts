@@ -13,7 +13,7 @@ import { invalidateRewards } from './useRewards';
  *      Metaplex Core mint TX.
  *   2. Mobile bundles them via executeVaultTransaction (TX1-TX4 + TX5).
  *   3. POST /rewards/v2/cashflow-passport/activate/confirm — backend verifies
- *      bundle signatures on-chain and writes User.cashflowPassportAddress,
+ *      bundle signatures onchain and writes User.cashflowPassportAddress,
  *      then kicks off auto-add for any already-claimable badges.
  *   4. invalidateRewards() so the UI shows the activated state and any
  *      newly-minted attributes.

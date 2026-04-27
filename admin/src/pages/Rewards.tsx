@@ -567,7 +567,7 @@ function CreateCollectionModal({ onClose, onCreated }: { onClose: () => void; on
         {result ? (
           <>
             <p style={{ fontSize: 13, color: '#19C394', marginBottom: 16 }}>
-              Collection created on-chain and saved to settings.
+              Collection created onchain and saved to settings.
             </p>
             <div className="form-group">
               <label>Collection address</label>
@@ -590,7 +590,7 @@ function CreateCollectionModal({ onClose, onCreated }: { onClose: () => void; on
         ) : (
           <>
             <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
-              Uploads metadata to DO Spaces, runs Metaplex Core <span className="mono">createCollection</span> on-chain (signed by the admin keypair), and saves the resulting address to settings.
+              Uploads metadata to DO Spaces, runs Metaplex Core <span className="mono">createCollection</span> onchain (signed by the admin keypair), and saves the resulting address to settings.
             </p>
 
             <div className="form-group">
@@ -664,7 +664,7 @@ function CreateCollectionModal({ onClose, onCreated }: { onClose: () => void; on
             <div className="modal-actions">
               <button className="btn-secondary" onClick={onClose} disabled={creating}>Cancel</button>
               <button className="btn-primary" style={{ width: 'auto' }} onClick={handleCreate} disabled={creating || uploading}>
-                {creating ? 'Creating on-chain…' : 'Upload & Create Collection'}
+                {creating ? 'Creating onchain…' : 'Upload & Create Collection'}
               </button>
             </div>
           </>

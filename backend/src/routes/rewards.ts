@@ -156,7 +156,7 @@ router.post('/cashflow-passport/activate', async (req: AuthenticatedRequest, res
 /**
  * POST /rewards/v2/cashflow-passport/activate/confirm
  * Body: { activationId, bundleSignatures: string[] }
- * Mobile calls this after submitting the bundle. We verify on-chain
+ * Mobile calls this after submitting the bundle. We verify onchain
  * synchronously; the recovery cron is the failsafe for slow confirms.
  */
 router.post('/cashflow-passport/activate/confirm', async (req: AuthenticatedRequest, res: Response) => {

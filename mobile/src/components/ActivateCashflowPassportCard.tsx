@@ -1,13 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { useCashflowPassportActivation } from '../hooks/useCashflowPassport';
-import { useToast } from '../contexts/ToastContext';
 
 const passportIcon = require('../assets/passport.png');
 
 interface Props {
   feeLamports: string;
+  onPress: () => void;
 }
 
 function formatSol(lamports: string): string {
@@ -15,49 +14,28 @@ function formatSol(lamports: string): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
 }
 
-export default function ActivateCashflowPassportCard({ feeLamports }: Props) {
+export default function ActivateCashflowPassportCard({ feeLamports, onPress }: Props) {
   const { colors } = useTheme();
-  const { activate, activating } = useCashflowPassportActivation();
-  const { showToast } = useToast();
-  const [busy, setBusy] = useState(false);
-
-  const handlePress = async () => {
-    if (busy || activating) return;
-    setBusy(true);
-    try {
-      await activate();
-      showToast('Cashflow Passport activated', 'Earned badges will appear automatically', 'success');
-    } catch (err: any) {
-      showToast('Activation failed', err?.message ?? 'Please try again', 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
+    <TouchableOpacity
+      style={[styles.container, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
       <View style={styles.row}>
         <Image source={passportIcon} style={styles.iconImage} resizeMode="contain" />
         <View style={styles.copy}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Activate Cashflow Passport</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            One-time {formatSol(feeLamports)} SOL. Earned badges are added automatically — no extra fees.
+            All your reward badges will be in your Cashflow Passport. Mint it once - use forever.
           </Text>
         </View>
       </View>
-      <TouchableOpacity
-        style={[styles.cta, { backgroundColor: colors.accentBlueDark }, busy && styles.ctaDisabled]}
-        onPress={handlePress}
-        activeOpacity={0.85}
-        disabled={busy || activating}
-      >
-        {busy || activating ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.ctaText}>Activate</Text>
-        )}
-      </TouchableOpacity>
-    </View>
+      <View style={[styles.cta, { backgroundColor: colors.accentBlueDark }]}>
+        <Text style={styles.ctaText}>Activate</Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -79,6 +57,7 @@ const styles = StyleSheet.create({
   iconImage: {
     width: 56,
     height: 56,
+    borderRadius: 28,
   },
   copy: {
     flex: 1,
@@ -97,9 +76,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  ctaDisabled: {
-    opacity: 0.6,
   },
   ctaText: {
     color: '#fff',
