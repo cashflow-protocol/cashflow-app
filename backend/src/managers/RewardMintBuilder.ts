@@ -289,22 +289,19 @@ export class RewardMintBuilder {
   }
 
   /**
-   * Build (but do not send) the Metaplex Core `updatePlugin` transaction that
-   * appends a badge attribute to the user's Cashflow Passport.
+   * Build the Metaplex Core `updatePlugin` instructions that append a badge
+   * attribute to the user's Cashflow Passport.
    *
-   * Returns an admin-pre-signed VersionedTransaction for mobile to bundle as
-   * TX5. No inner instructions are needed — the mobile's executeVaultTransaction
-   * already bundles createCoverFromSquadInstruction in TX4 to reimburse admin
-   * gas from the vault's spending limit PDA.
+   * Returns serialized instructions (not a pre-signed TX) so the mobile can
+   * combine them with the gas-cover instruction in a single VersionedTransaction.
+   * Admin co-signing happens server-side at submission via /solana/v2/send-bundle.
    */
   async buildBadgeMintTransaction(params: {
     assetAddress: string;
     key: string;
     value: string;
   }): Promise<{
-    mintTransactionBase64: string;
-    innerInstructions: SerializedInstruction[];
-    blockhash: string;
+    updatePluginInstructions: SerializedInstruction[];
     collectionAddress: string;
     alreadyPresent: boolean;
   }> {
@@ -330,24 +327,18 @@ export class RewardMintBuilder {
     const umiInstructions = updateBuilder.getInstructions();
     const web3Instructions = umiInstructions.map(umiInstructionToWeb3);
 
-    const { blockhash } = await this.rpc.getLatestBlockhash('confirmed');
-    const message = new TransactionMessage({
-      payerKey: adminKeypair.publicKey,
-      recentBlockhash: blockhash,
-      instructions: [
-        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
-        ...web3Instructions,
-      ],
-    }).compileToV0Message();
-
-    const tx = new VersionedTransaction(message);
-    tx.sign([adminKeypair]);
-    const mintTransactionBase64 = Buffer.from(tx.serialize()).toString('base64');
+    const updatePluginInstructions: SerializedInstruction[] = web3Instructions.map((ix) => ({
+      programId: ix.programId.toBase58(),
+      accounts: ix.keys.map((k) => ({
+        pubkey: k.pubkey.toBase58(),
+        isSigner: k.isSigner,
+        isWritable: k.isWritable,
+      })),
+      data: Buffer.from(ix.data).toString('base64'),
+    }));
 
     return {
-      mintTransactionBase64,
-      innerInstructions: [],
-      blockhash,
+      updatePluginInstructions,
       collectionAddress,
       alreadyPresent,
     };

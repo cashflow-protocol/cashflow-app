@@ -360,9 +360,7 @@ class ApiService {
     badgeMintId: string;
     assetAddress: string;
     collectionAddress: string;
-    innerInstructions: SerializedInstruction[];
-    mintTransactionBase64: string;
-    blockhash: string;
+    updatePluginInstructions: SerializedInstruction[];
   }> {
     const res = await this.signedPost<{
       success: boolean;
@@ -370,9 +368,7 @@ class ApiService {
         badgeMintId: string;
         assetAddress: string;
         collectionAddress: string;
-        innerInstructions: SerializedInstruction[];
-        mintTransactionBase64: string;
-        blockhash: string;
+        updatePluginInstructions: SerializedInstruction[];
       };
     }>('/rewards/v2/badge/mint', { taskSlug });
     return res.data;

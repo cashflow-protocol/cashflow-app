@@ -1,19 +1,21 @@
 import { useCallback, useState } from 'react';
 import apiService from '../services/apiService';
 import { getVault } from '../services/vaultStorage';
-import { executeVaultTransaction } from '../services/squadsService';
+import { executeAdminInstructionsWithGasCover } from '../services/squadsService';
 import { logError } from '../services/analyticsService';
 import { invalidateRewards } from './useRewards';
 
 /**
  * Per-badge mint flow.
  *
- *   1. POST /rewards/v2/badge/mint { taskSlug } — backend builds inner
- *      instructions (gas reimbursement vault → admin) plus an admin-pre-signed
- *      Metaplex Core updatePlugin TX that appends the badge attribute.
- *   2. Mobile bundles them via executeVaultTransaction (TX1-TX4 + TX5).
- *   3. POST /rewards/v2/badge/mint/confirm — backend verifies bundle
- *      signatures onchain and flips progress to MINTED.
+ *   1. POST /rewards/v2/badge/mint { taskSlug } — backend returns serialized
+ *      Metaplex Core updatePlugin instructions (admin = updateAuthority + fee payer).
+ *   2. Mobile builds a single VersionedTransaction with
+ *      [...updatePluginIxs, jitoTip, createCoverFromSquadInstruction], signs
+ *      as the cover member, and submits via /solana/v2/send-bundle which
+ *      co-signs as admin server-side.
+ *   3. POST /rewards/v2/badge/mint/confirm — backend verifies the signature
+ *      onchain and flips progress to MINTED.
  *   4. invalidateRewards() so the UI shows the minted state.
  */
 export function useBadgeMint() {
@@ -29,12 +31,9 @@ export function useBadgeMint() {
 
       const built = await apiService.mintBadge(taskSlug);
 
-      const result = await executeVaultTransaction(
+      const result = await executeAdminInstructionsWithGasCover(
         vault.multisigAddress,
-        built.innerInstructions,
-        undefined,
-        undefined,
-        [built.mintTransactionBase64],
+        built.updatePluginInstructions,
       );
 
       await apiService
