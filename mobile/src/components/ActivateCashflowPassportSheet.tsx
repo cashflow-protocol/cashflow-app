@@ -14,7 +14,9 @@ interface Props {
 }
 
 function formatSol(lamports: string): string {
+  if (!lamports) return '—';
   const n = Number(lamports) / 1_000_000_000;
+  if (!Number.isFinite(n)) return '—';
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
 }
 

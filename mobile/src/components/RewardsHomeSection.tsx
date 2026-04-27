@@ -36,10 +36,7 @@ export default function RewardsHomeSection({ onSelectTask, onActivatePassport }:
   return (
     <View style={styles.container}>
       {!cashflowPassport.activated && !loading && (
-        <ActivateCashflowPassportCard
-          feeLamports={cashflowPassport.feeLamports}
-          onPress={() => onActivatePassport?.()}
-        />
+        <ActivateCashflowPassportCard onPress={() => onActivatePassport?.()} />
       )}
       {loading ? (
         <ActivityIndicator size="small" color={colors.accentBlueDark} style={styles.loader} />

@@ -5,16 +5,10 @@ import { useTheme } from '../theme/ThemeContext';
 const passportIcon = require('../assets/passport.png');
 
 interface Props {
-  feeLamports: string;
   onPress: () => void;
 }
 
-function formatSol(lamports: string): string {
-  const n = Number(lamports) / 1_000_000_000;
-  return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
-}
-
-export default function ActivateCashflowPassportCard({ feeLamports, onPress }: Props) {
+export default function ActivateCashflowPassportCard({ onPress }: Props) {
   const { colors } = useTheme();
 
   return (

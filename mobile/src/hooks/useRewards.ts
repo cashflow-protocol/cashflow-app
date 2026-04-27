@@ -7,6 +7,10 @@ export interface CashflowPassportState {
   address: string | null;
   activated: boolean;
   activatedAt: string | null;
+  /** Lamports the user pays to mint their Passport. Sourced from the backend
+   *  (env: CASHFLOW_PASSPORT_ACTIVATION_FEE_LAMPORTS) on every /tasks fetch.
+   *  Empty string means we haven't received the value yet — UI should show
+   *  a loading placeholder rather than guess. */
   feeLamports: string;
 }
 
@@ -14,7 +18,7 @@ const DEFAULT_CASHFLOW_PASSPORT: CashflowPassportState = {
   address: null,
   activated: false,
   activatedAt: null,
-  feeLamports: '20000000',
+  feeLamports: '',
 };
 
 let cachedTasks: TaskWithProgress[] | null = null;

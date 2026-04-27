@@ -37,14 +37,13 @@ export interface BuildActivationTransactionResult {
 }
 
 /**
- * Activation fee charged for minting a Cashflow Passport. Read at request time so the
- * value can be tuned without redeploying. Defaults to 0.02 SOL (matches the old
- * per-badge fee).
+ * Activation fee charged for minting a Cashflow Passport. Read at request time
+ * so the value can be tuned without redeploying. Defaults to 0.03 SOL.
  */
 export function getCashflowPassportActivationFeeLamports(): bigint {
   const raw = process.env.CASHFLOW_PASSPORT_ACTIVATION_FEE_LAMPORTS;
   if (raw && /^\d+$/.test(raw)) return BigInt(raw);
-  return 20_000_000n;
+  return 30_000_000n;
 }
 
 /**
