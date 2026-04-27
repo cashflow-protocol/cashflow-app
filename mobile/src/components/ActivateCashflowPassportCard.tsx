@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useCashflowPassportActivation } from '../hooks/useCashflowPassport';
 import { useToast } from '../contexts/ToastContext';
+
+const passportIcon = require('../assets/passport.png');
 
 interface Props {
   feeLamports: string;
@@ -35,9 +37,7 @@ export default function ActivateCashflowPassportCard({ feeLamports }: Props) {
   return (
     <View style={[styles.container, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}>
       <View style={styles.row}>
-        <View style={[styles.iconBox, { backgroundColor: colors.cardSecondary }]}>
-          <Text style={styles.icon}>★</Text>
-        </View>
+        <Image source={passportIcon} style={styles.iconImage} resizeMode="contain" />
         <View style={styles.copy}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Activate Cashflow Passport</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
@@ -76,15 +76,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  icon: {
-    fontSize: 22,
+  iconImage: {
+    width: 56,
+    height: 56,
   },
   copy: {
     flex: 1,

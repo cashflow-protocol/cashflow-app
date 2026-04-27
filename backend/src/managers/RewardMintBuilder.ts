@@ -21,8 +21,12 @@ import {
   updatePlugin,
 } from '@metaplex-foundation/mpl-core';
 import { getAdminTxFeePayerKeypair } from '../services/adminFeePayer';
+import * as storage from '../services/storageManager';
 import type { SerializedInstruction } from '../types';
 import { getSetting, APP_SETTING_KEYS } from '../models/AppSetting';
+
+const DEFAULT_PASSPORT_IMAGE_URL = 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/rewards/badges/passport.png';
+const PASSPORT_METADATA_KEY = 'rewards/metadata/passport.json';
 
 export interface BuildActivationTransactionResult {
   mintTransactionBase64: string;
@@ -98,6 +102,52 @@ export class RewardMintBuilder {
   }
 
   /**
+   * Resolve the metadata URI for the Cashflow Passport asset. Lazily
+   * generates and uploads a metadata JSON to DO Spaces on first call so
+   * Solscan/wallets can render the badge image. Cached in-process; the JSON
+   * itself is identical across users so upserting is idempotent.
+   *
+   * Override via CASHFLOW_PASSPORT_METADATA_URI to point at a hand-curated JSON.
+   */
+  private cachedPassportMetadataUri: string | null = null;
+  async getCashflowPassportMetadataUri(): Promise<string> {
+    if (process.env.CASHFLOW_PASSPORT_METADATA_URI) {
+      return process.env.CASHFLOW_PASSPORT_METADATA_URI;
+    }
+    if (this.cachedPassportMetadataUri) return this.cachedPassportMetadataUri;
+
+    const imageUrl = process.env.CASHFLOW_PASSPORT_IMAGE_URL ?? DEFAULT_PASSPORT_IMAGE_URL;
+    const name = process.env.CASHFLOW_PASSPORT_NAME ?? 'Cashflow Passport';
+
+    if (!storage.isConfigured()) {
+      // Without DO Spaces we can't host JSON — fall back to the bare PNG URL
+      // (Solscan won't render the title but the image will load).
+      this.cachedPassportMetadataUri = imageUrl;
+      return imageUrl;
+    }
+
+    const metadata = {
+      name,
+      description: 'Soulbound on-chain passport. Earned Cashflow badges live on this asset as Attributes.',
+      image: imageUrl,
+      external_url: 'https://cashflow.fun',
+      attributes: [],
+      properties: {
+        files: [{ uri: imageUrl, type: 'image/png' }],
+        category: 'image',
+      },
+    };
+
+    const url = await storage.uploadFile(
+      Buffer.from(JSON.stringify(metadata, null, 2), 'utf-8'),
+      PASSPORT_METADATA_KEY,
+      'application/json',
+    );
+    this.cachedPassportMetadataUri = url;
+    return url;
+  }
+
+  /**
    * Build the standalone Metaplex Core mint transaction for a user's
    * "Cashflow Passport" — a single soulbound NFT that hosts earned-badge entries
    * via the Attributes plugin.
@@ -129,7 +179,7 @@ export class RewardMintBuilder {
     const umiAssetKeypair = umi.eddsa.createKeypairFromSecretKey(assetKeypair.secretKey);
     const umiAssetSigner = createSignerFromKeypair(umi, umiAssetKeypair);
 
-    const metadataUri = process.env.CASHFLOW_PASSPORT_METADATA_URI ?? '';
+    const metadataUri = await this.getCashflowPassportMetadataUri();
     const name = process.env.CASHFLOW_PASSPORT_NAME ?? 'Cashflow Passport';
 
     const createBuilder = createCoreAsset(umi, {
