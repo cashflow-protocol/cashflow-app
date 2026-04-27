@@ -5,11 +5,11 @@ import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
 import { JupiterManager, KaminoManager, DriftManager, PerenaManager, SolomonManager, OnreManager, DBManager, PriceManager, TokenManager } from '../managers';
 import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from '../models';
 import { NotificationType } from '../models';
-import { MintedBadgeModel, MintedBadgeStatus } from '../models/MintedBadge';
+import { CashflowIdActivationModel, CashflowIdActivationStatus } from '../models/CashflowIdActivation';
+import { tryConfirmActivation, failActivation } from './cashflowIdService';
 import { dispatchSystemNotification } from './notificationService';
 import { sendWaitlistPushNotification, cleanupExpiredRTDBNotifications } from './firebaseManager';
 import { onTransactionConfirmed, markFeeTransactionFailed } from './feeService';
-import { tryConfirmBadgeMint, failBadgeMint } from './badgeMintConfirmation';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
@@ -236,47 +236,41 @@ async function approveTopWaitlistUsers() {
   }
 }
 
-/**
- * Recover pending Metaplex Core badge mints. For each MintedBadge in pending
- * status older than the grace window, query its bundleSignatures on-chain.
- * Promote to confirmed (and update UserRewardProgress) or failed (rolling
- * back the slot + resetting progress to claimable).
- */
+/** Recovery windows for pending Metaplex ops (Cashflow ID activations). */
 const RECOVER_GRACE_MS = 10 * 60 * 1000;
 const RECOVER_FAIL_AFTER_MS = 30 * 60 * 1000;
 
-async function recoverPendingMints() {
+async function recoverPendingActivations() {
   try {
     const cutoff = new Date(Date.now() - RECOVER_GRACE_MS);
-    const pending = await MintedBadgeModel.find({
-      status: MintedBadgeStatus.PENDING,
+    const pending = await CashflowIdActivationModel.find({
+      status: CashflowIdActivationStatus.PENDING,
       createdAt: { $lte: cutoff },
     }).limit(100);
 
     if (pending.length === 0) return;
-    console.log(`[Cron] recoverPendingMints: ${pending.length} pending mint(s)`);
+    console.log(`[Cron] recoverPendingActivations: ${pending.length} pending`);
 
-    for (const badge of pending) {
-      const createdAt = (badge as any).createdAt as Date | undefined;
+    for (const activation of pending) {
+      const createdAt = (activation as any).createdAt as Date | undefined;
       const expired = createdAt && Date.now() - createdAt.getTime() > RECOVER_FAIL_AFTER_MS;
       try {
-        if (badge.bundleSignatures.filter((s) => !!s).length === 0) {
-          if (expired) await failBadgeMint(badge);
+        if (activation.bundleSignatures.filter((s) => !!s).length === 0) {
+          if (expired) await failActivation(activation);
           continue;
         }
-        const outcome = await tryConfirmBadgeMint(badge);
+        const outcome = await tryConfirmActivation(activation);
         if (outcome === 'confirmed') {
-          console.log(`[Cron] Mint ${badge.assetAddress} CONFIRMED`);
+          console.log(`[Cron] Cashflow ID ${activation.assetAddress} CONFIRMED`);
         } else if (outcome === 'pending' && expired) {
-          // Signatures were recorded but never landed onchain in the failure window.
-          await failBadgeMint(badge);
+          await failActivation(activation);
         }
       } catch (err) {
-        console.error(`[Cron] Recovery error for badge ${badge._id}:`, err);
+        console.error(`[Cron] Recovery error for activation ${activation._id}:`, err);
       }
     }
   } catch (error) {
-    console.error('[Cron] Failed to recover pending mints:', error);
+    console.error('[Cron] Failed to recover pending activations:', error);
   }
 }
 
@@ -354,8 +348,8 @@ export async function initializeScheduler() {
     timezone: 'UTC',
   });
 
-  // Recover stuck reward badge mints every 5 minutes
-  cron.schedule('*/5 * * * *', recoverPendingMints, {
+  // Recover stuck Cashflow ID activations every 5 minutes
+  cron.schedule('*/5 * * * *', recoverPendingActivations, {
     timezone: 'UTC',
   });
 

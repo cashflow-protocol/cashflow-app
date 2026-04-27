@@ -15,10 +15,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
 import { useAssets } from '../hooks/useAssets';
 import { useEarnTokens } from '../hooks/useEarnTokens';
-import { useRewards, invalidateRewards } from '../hooks/useRewards';
+import { invalidateRewards } from '../hooks/useRewards';
 import { attestSeekerIfNeeded } from '../services/rewardsService';
 import { useToast } from '../contexts/ToastContext';
-import { logBadgeMintAttempt, logBadgeMintSuccess, logBadgeMintError } from '../services/analyticsService';
 import { useSolPrice } from '../hooks/useSolPrice';
 import { useSuggestions } from '../hooks/useSuggestions';
 import ActionButton from '../components/ActionButton';
@@ -76,9 +75,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
   const { suggestions, refresh: refreshSuggestions } = useSuggestions();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRewardTask, setSelectedRewardTask] = useState<TaskWithProgress | null>(null);
-  const [mintingTaskSlug, setMintingTaskSlug] = useState<string | null>(null);
   const [attestingSeeker, setAttestingSeeker] = useState(false);
-  const { mint: mintReward } = useRewards();
   const { showToast } = useToast();
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [convertModalVisible, setConvertModalVisible] = useState(false);
@@ -363,7 +360,6 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         task={selectedRewardTask}
         visible={selectedRewardTask !== null}
         onClose={() => setSelectedRewardTask(null)}
-        minting={mintingTaskSlug !== null && mintingTaskSlug === selectedRewardTask?.slug}
         attesting={attestingSeeker}
         onAttestSeeker={async () => {
           if (attestingSeeker) return;
@@ -372,30 +368,13 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
             const ok = await attestSeekerIfNeeded();
             invalidateRewards();
             if (ok) {
-              showToast('Seeker verified', 'You can now claim this badge', 'success');
+              showToast('Seeker verified', 'Adding badge to your Cashflow ID…', 'success');
               setSelectedRewardTask(null);
             }
           } catch (err: any) {
             showToast('Verification failed', err?.message ?? 'Please try again', 'error');
           } finally {
             setAttestingSeeker(false);
-          }
-        }}
-        onMint={async (task) => {
-          if (mintingTaskSlug) return; // already minting
-          logBadgeMintAttempt(task.slug);
-          setMintingTaskSlug(task.slug);
-          try {
-            await mintReward(task.slug);
-            logBadgeMintSuccess(task.slug);
-            showToast('Badge minted', task.title, 'success');
-            setSelectedRewardTask(null);
-          } catch (err: any) {
-            const msg = err?.message ?? 'Mint failed';
-            logBadgeMintError(task.slug, msg);
-            showToast('Mint failed', msg, 'error');
-          } finally {
-            setMintingTaskSlug(null);
           }
         }}
       />

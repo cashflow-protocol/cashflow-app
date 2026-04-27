@@ -17,6 +17,7 @@ import {
   FeeTransactionModel,
   RecoveryProposalModel,
   MintedBadgeModel,
+  CashflowIdActivationModel,
 } from '../models';
 import { EarnTokenType } from '../types';
 
@@ -275,5 +276,7 @@ export class DBManager {
     await UserCostBasisModel.syncIndexes();
     await FeeTransactionModel.syncIndexes();
     await RecoveryProposalModel.syncIndexes();
+    await MintedBadgeModel.syncIndexes();
+    await CashflowIdActivationModel.syncIndexes();
   }
 }

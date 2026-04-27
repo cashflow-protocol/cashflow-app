@@ -1235,7 +1235,11 @@ router.get('/rewards/diagnose', async (req, res) => {
       return;
     }
 
-    const task = await RewardTaskModel.findOne({ slug: taskSlug }).lean();
+    const [task, user, progress] = await Promise.all([
+      RewardTaskModel.findOne({ slug: taskSlug }).lean(),
+      UserModel.findOne({ vaultAddress }, { cashflowIdAddress: 1, cashflowIdActivatedAt: 1 }).lean(),
+      UserRewardProgressModel.findOne({ vaultAddress, taskSlug }).lean(),
+    ]);
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
@@ -1302,6 +1306,20 @@ router.get('/rewards/diagnose', async (req, res) => {
         verifierType: task.verifierType,
         verifierConfig: task.verifierConfig,
       },
+      cashflowId: {
+        address: user?.cashflowIdAddress ?? null,
+        activated: !!user?.cashflowIdAddress,
+        activatedAt: user?.cashflowIdActivatedAt ?? null,
+      },
+      progress: progress
+        ? {
+            status: progress.status,
+            currentValue: progress.currentValue,
+            targetValue: progress.targetValue,
+            completedAt: (progress as any).completedAt ?? null,
+            lastEvaluatedAt: (progress as any).lastEvaluatedAt ?? null,
+          }
+        : null,
       txQuery,
       matchingTransactions: txDetails,
       totalUsd,
@@ -1372,6 +1390,26 @@ router.post('/rewards/backfill-user-vault', async (_req, res) => {
   } catch (error) {
     console.error('Admin backfill-user-vault error:', error);
     res.status(500).json({ success: false, error: 'Backfill failed' });
+  }
+});
+
+/**
+ * POST /rewards/reset-minted-progress
+ * Flips all UserRewardProgress with status MINTED or MINT_PENDING back to
+ * IN_PROGRESS so the new Cashflow ID + Attributes flow can re-credit those
+ * badges as attributes. Old standalone MintedBadge NFTs remain in wallets
+ * (soulbound, can't burn).
+ */
+router.post('/rewards/reset-minted-progress', async (_req, res) => {
+  try {
+    const result = await UserRewardProgressModel.updateMany(
+      { status: { $in: [RewardProgressStatus.MINTED, RewardProgressStatus.MINT_PENDING] } },
+      { $unset: { lastEvaluatedAt: '', completedAt: '' }, $set: { status: RewardProgressStatus.IN_PROGRESS } },
+    );
+    res.json({ success: true, modifiedCount: result.modifiedCount });
+  } catch (error) {
+    console.error('Admin reset-minted-progress error:', error);
+    res.status(500).json({ success: false, error: 'Reset failed' });
   }
 });
 

@@ -14,21 +14,33 @@ import {
   createSignerFromKeypair,
   type Instruction as UmiInstruction,
 } from '@metaplex-foundation/umi';
-import { mplCore, create as createCoreAsset } from '@metaplex-foundation/mpl-core';
+import {
+  mplCore,
+  create as createCoreAsset,
+  fetchAssetV1,
+  updatePlugin,
+} from '@metaplex-foundation/mpl-core';
 import { getAdminTxFeePayerKeypair } from '../services/adminFeePayer';
-import type { RewardTask } from '../models/RewardTask';
 import type { SerializedInstruction } from '../types';
 import { getSetting, APP_SETTING_KEYS } from '../models/AppSetting';
 
-export interface BuildMintTransactionResult {
-  /** Base64-encoded VersionedTransaction containing the Metaplex Core create instruction. */
+export interface BuildActivationTransactionResult {
   mintTransactionBase64: string;
-  /** Pubkey of the new asset (base58). */
   assetAddress: string;
-  /** Inner instructions to be wrapped in the user's vault transaction execute (fee transfer). */
   innerInstructions: SerializedInstruction[];
-  /** Recent blockhash used for the mint transaction. */
   blockhash: string;
+  collectionAddress: string;
+}
+
+/**
+ * Activation fee charged for minting a Cashflow ID. Read at request time so the
+ * value can be tuned without redeploying. Defaults to 0.02 SOL (matches the old
+ * per-badge fee).
+ */
+export function getCashflowIdActivationFeeLamports(): bigint {
+  const raw = process.env.CASHFLOW_ID_ACTIVATION_FEE_LAMPORTS;
+  if (raw && /^\d+$/.test(raw)) return BigInt(raw);
+  return 20_000_000n;
 }
 
 /**
@@ -85,18 +97,30 @@ export class RewardMintBuilder {
     return value;
   }
 
-  async buildMintTransaction(params: {
-    task: RewardTask;
+  /**
+   * Build the standalone Metaplex Core mint transaction for a user's
+   * "Cashflow ID" — a single soulbound NFT that hosts earned-badge entries
+   * via the Attributes plugin.
+   *
+   * Returns a base64-encoded VersionedTransaction pre-signed by the admin
+   * keypair AND the asset keypair (mobile appends to the Jito bundle as-is),
+   * plus inner instructions (SystemProgram.transfer vault → treasury) for
+   * the user's vault execute.
+   *
+   * Soulbound enforcement: PermanentFreezeDelegate plugin with frozen=true
+   * means the asset can never be transferred — even by the admin update
+   * authority. The Attributes plugin is pre-initialized so admin can append
+   * earned-badge entries later without paying allocation rent.
+   */
+  async buildCashflowIdMintTransaction(params: {
     vaultAddress: string;
-  }): Promise<BuildMintTransactionResult> {
-    const { task, vaultAddress } = params;
+  }): Promise<BuildActivationTransactionResult> {
+    const { vaultAddress } = params;
     const collectionAddress = await this.getCollectionAddress();
 
-    // ── Generate ephemeral asset keypair ──
     const assetKeypair = Keypair.generate();
     const assetAddress = assetKeypair.publicKey.toBase58();
 
-    // ── Set up Umi with admin keypair ──
     const adminKeypair = getAdminTxFeePayerKeypair();
     const umi = createUmi(this.rpc.rpcEndpoint).use(mplCore());
     const umiAdminKeypair = umi.eddsa.createKeypairFromSecretKey(adminKeypair.secretKey);
@@ -105,33 +129,32 @@ export class RewardMintBuilder {
     const umiAssetKeypair = umi.eddsa.createKeypairFromSecretKey(assetKeypair.secretKey);
     const umiAssetSigner = createSignerFromKeypair(umi, umiAssetKeypair);
 
-    // ── Build the Metaplex Core create instruction ──
+    const metadataUri = process.env.CASHFLOW_ID_METADATA_URI ?? '';
+    const name = process.env.CASHFLOW_ID_NAME ?? 'Cashflow ID';
+
     const createBuilder = createCoreAsset(umi, {
       asset: umiAssetSigner,
       collection: { publicKey: umiPublicKey(collectionAddress) } as any,
-      name: task.title,
-      uri: task.metadataUri,
+      name,
+      uri: metadataUri,
       owner: umiPublicKey(vaultAddress),
-      authority: umi.identity, // admin
-      payer: umi.identity,     // admin pays rent
+      authority: umi.identity,
+      payer: umi.identity,
       plugins: [
-        {
-          type: 'PermanentFreezeDelegate',
-          frozen: true,
-        },
+        { type: 'Attributes', attributeList: [] },
+        { type: 'PermanentFreezeDelegate', frozen: true },
       ],
     });
 
     const umiInstructions = createBuilder.getInstructions();
     const web3Instructions = umiInstructions.map(umiInstructionToWeb3);
 
-    // ── Compose the standalone mint transaction (admin + asset signers) ──
     const { blockhash } = await this.rpc.getLatestBlockhash('confirmed');
     const message = new TransactionMessage({
       payerKey: adminKeypair.publicKey,
       recentBlockhash: blockhash,
       instructions: [
-        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }),
         ...web3Instructions,
       ],
     }).compileToV0Message();
@@ -141,9 +164,8 @@ export class RewardMintBuilder {
 
     const mintTransactionBase64 = Buffer.from(tx.serialize()).toString('base64');
 
-    // ── Build inner instructions for the vault execute ──
-    const feeLamports = BigInt(task.mintFeeLamports);
-    if (feeLamports <= 0n) throw new Error('Invalid mintFeeLamports for task');
+    const feeLamports = getCashflowIdActivationFeeLamports();
+    if (feeLamports <= 0n) throw new Error('Invalid CASHFLOW_ID_ACTIVATION_FEE_LAMPORTS');
 
     const transferIx = SystemProgram.transfer({
       fromPubkey: new PublicKey(vaultAddress),
@@ -168,6 +190,51 @@ export class RewardMintBuilder {
       assetAddress,
       innerInstructions,
       blockhash,
+      collectionAddress,
     };
+  }
+
+  /**
+   * Append a `{ key, value }` entry to the Attributes plugin on the user's
+   * Cashflow ID asset, then send the transaction signed only by the admin
+   * keypair (admin holds UpdateAuthority — no user signature needed).
+   *
+   * Returns the resulting signature (string). Throws on RPC/build failure.
+   */
+  async appendBadgeAttribute(params: {
+    assetAddress: string;
+    key: string;
+    value: string;
+  }): Promise<string> {
+    const { assetAddress, key, value } = params;
+    const collectionAddress = await this.getCollectionAddress();
+
+    const adminKeypair = getAdminTxFeePayerKeypair();
+    const umi = createUmi(this.rpc.rpcEndpoint).use(mplCore());
+    const umiAdminKeypair = umi.eddsa.createKeypairFromSecretKey(adminKeypair.secretKey);
+    umi.use(keypairIdentity(umiAdminKeypair));
+
+    // Fetch current asset state to read the existing attributeList. The
+    // Attributes plugin update REPLACES the list, so we must include all
+    // existing entries plus the new one, and dedupe on key.
+    const asset = await fetchAssetV1(umi, umiPublicKey(assetAddress));
+    const existing = asset.attributes?.attributeList ?? [];
+
+    if (existing.some((a) => a.key === key)) {
+      // Idempotent: badge already present. Return a sentinel so callers can
+      // skip onchain work.
+      return '';
+    }
+
+    const nextList = [...existing, { key, value }];
+
+    const builder = updatePlugin(umi, {
+      asset: umiPublicKey(assetAddress),
+      collection: umiPublicKey(collectionAddress),
+      plugin: { type: 'Attributes', attributeList: nextList },
+    });
+
+    const result = await builder.sendAndConfirm(umi, { confirm: { commitment: 'confirmed' } });
+    return Buffer.from(result.signature).toString('base64');
   }
 }

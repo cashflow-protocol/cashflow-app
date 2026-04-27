@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useRewards } from '../hooks/useRewards';
 import RewardBadgeCard from './RewardBadgeCard';
+import ActivateCashflowIdCard from './ActivateCashflowIdCard';
 import type { TaskWithProgress } from '../types/rewards';
 
 interface Props {
@@ -11,7 +12,7 @@ interface Props {
 
 export default function RewardsHomeSection({ onSelectTask }: Props) {
   const { colors } = useTheme();
-  const { tasks, loading } = useRewards();
+  const { tasks, cashflowId, loading } = useRewards();
 
   // Sort: claimable first, then in_progress, then mint_pending, then minted; tie-break by sortOrder.
   const ordered = useMemo(() => {
@@ -28,13 +29,17 @@ export default function RewardsHomeSection({ onSelectTask }: Props) {
     });
   }, [tasks]);
 
-  if (!loading && ordered.length === 0) return null;
+  // Section is hidden only when there are no tasks AND no activation state to show.
+  if (!loading && ordered.length === 0 && cashflowId.activated) return null;
 
   return (
     <View style={styles.container}>
+      {!cashflowId.activated && !loading && (
+        <ActivateCashflowIdCard feeLamports={cashflowId.feeLamports} />
+      )}
       {loading ? (
         <ActivityIndicator size="small" color={colors.accentBlueDark} style={styles.loader} />
-      ) : (
+      ) : ordered.length > 0 ? (
         <View style={styles.listWrapper}>
           <FlatList
             horizontal
@@ -48,7 +53,7 @@ export default function RewardsHomeSection({ onSelectTask }: Props) {
             )}
           />
         </View>
-      )}
+      ) : null}
     </View>
   );
 }

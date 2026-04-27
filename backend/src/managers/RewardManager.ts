@@ -14,6 +14,13 @@ import {
 import { MintedBadgeModel } from '../models/MintedBadge';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants/tokens';
 import { PriceManager } from './PriceManager';
+import { tryAddBadgeAttribute } from '../services/badgeAttributeService';
+
+/** Wrapper so we can use a method reference inside evaluateTask without
+ *  pulling in the whole service eagerly above. */
+async function autoAddBadge(vaultAddress: string, taskSlug: string): Promise<void> {
+  await tryAddBadgeAttribute(vaultAddress, taskSlug).catch(() => undefined);
+}
 
 const priceManager = new PriceManager();
 
@@ -306,6 +313,17 @@ export class RewardManager {
       },
       { upsert: true, new: true },
     );
+
+    // If the verifier just flipped to satisfied, auto-add the badge attribute.
+    // Terminal states (MINTED, MINT_PENDING) early-returned above, so this
+    // only runs for IN_PROGRESS / CLAIMABLE / new docs. tryAddBadgeAttribute
+    // itself short-circuits if the user has no Cashflow ID yet — that case
+    // leaves the progress at CLAIMABLE so activation picks it up later.
+    if (result.satisfied) {
+      autoAddBadge(vaultAddress, task.slug).catch((err) =>
+        console.error(`[RewardManager] auto-add ${task.slug} for ${vaultAddress} failed:`, err),
+      );
+    }
 
     return {
       status: newStatus,

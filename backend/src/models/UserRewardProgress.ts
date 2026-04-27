@@ -38,9 +38,6 @@ export class UserRewardProgress {
   public completedAt?: Date;
 
   @prop()
-  public mintedBadgeId?: string;
-
-  @prop()
   public lastEvaluatedAt?: Date;
 
   /** Verifier-specific attestations, e.g. { seeker: { walletAddress, attestedAt } } */
