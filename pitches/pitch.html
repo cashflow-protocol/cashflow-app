@@ -3,54 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cashflow - Wealth Engine on Solana.</title>
+    <title>Cashflow - Wealth Engine on Solana</title>
 
-    <!-- Geologica: the same font monobank.ua uses -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Geologica:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
     <style>
         /* ===========================================
-           CSS CUSTOM PROPERTIES
-           Monobank-inspired dark premium palette
+           DESIGN TOKENS
+           Editorial dark palette · Solana green accent
            =========================================== */
         :root {
-            --bg-deep: #08080f;
-            --bg-card: rgba(255, 255, 255, 0.04);
-            --bg-card-hover: rgba(255, 255, 255, 0.07);
-            --border-subtle: rgba(255, 255, 255, 0.07);
-            --border-accent: rgba(98, 86, 202, 0.25);
+            /* Background */
+            --bg: #0a0a0b;
+            --bg-2: #111114;
+            --surface: #16161a;
+            --surface-2: #1d1d22;
 
-            --gradient-purple: #6256ca;
-            --gradient-blue: #4f75ff;
-            --accent-cyan: #03fbff;
-            --accent-green: #00e676;
-            --accent-yellow: #ffd600;
-            --accent-red: #ff5252;
+            /* Borders */
+            --line: rgba(245, 240, 232, 0.08);
+            --line-2: rgba(245, 240, 232, 0.16);
+            --line-strong: rgba(245, 240, 232, 0.32);
 
-            --text-primary: #ffffff;
-            --text-secondary: rgba(255, 255, 255, 0.55);
-            --text-tertiary: rgba(255, 255, 255, 0.3);
+            /* Brand accent - Solana green */
+            --green: #14F195;
+            --green-12: rgba(20, 241, 149, 0.12);
+            --green-20: rgba(20, 241, 149, 0.2);
+            --green-glow: rgba(20, 241, 149, 0.4);
 
-            --font: 'Geologica', system-ui, -apple-system, sans-serif;
-            --title-size: clamp(2rem, 5.5vw, 4rem);
-            --hero-size: clamp(3rem, 10vw, 7rem);
-            --h2-size: clamp(1.25rem, 3.5vw, 2.5rem);
-            --h3-size: clamp(0.9rem, 2vw, 1.4rem);
-            --body-size: clamp(0.7rem, 1.3vw, 1rem);
-            --small-size: clamp(0.6rem, 1vw, 0.85rem);
-            --tiny-size: clamp(0.55rem, 0.85vw, 0.75rem);
+            /* Text - warm cream */
+            --text: #f5f0e8;
+            --text-muted: rgba(245, 240, 232, 0.62);
+            --text-faint: rgba(245, 240, 232, 0.32);
 
-            --slide-padding: clamp(1.25rem, 4vw, 4rem);
-            --content-gap: clamp(0.75rem, 2vw, 2rem);
-            --card-gap: clamp(0.5rem, 1.2vw, 1rem);
-            --card-radius: clamp(16px, 2.5vw, 32px);
-            --card-padding: clamp(0.75rem, 1.8vw, 1.5rem);
+            /* Status */
+            --good: #14F195;
+            --warn: #ffc857;
+            --bad: #ff6b6b;
 
-            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-            --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-            --duration: 0.7s;
+            /* Typography */
+            --sans: 'Inter Tight', system-ui, -apple-system, sans-serif;
+            --serif: 'Instrument Serif', Georgia, serif;
+            --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+            /* Sizes - vmin for hero scales to both axes */
+            --t-mono: clamp(0.62rem, 0.78vw, 0.74rem);
+            --t-small: clamp(0.78rem, 1vw, 0.9rem);
+            --t-body: clamp(0.88rem, 1.1vw, 1rem);
+            --t-h3: clamp(1rem, 1.5vw, 1.3rem);
+            --t-h2: clamp(1.3rem, 2.2vw, 1.85rem);
+            --t-title: clamp(1.6rem, 4vmin, 2.8rem);
+            --t-display: clamp(2rem, 7vmin, 4.5rem);
+            --t-hero: clamp(2.6rem, 8.5vmin, 5.4rem);
+
+            /* Layout */
+            --pad: clamp(1.25rem, 3vw, 3rem);
+            --gap: clamp(0.7rem, 1.4vw, 1.4rem);
+            --gap-sm: clamp(0.4rem, 0.8vw, 0.75rem);
+            --radius: clamp(8px, 1.2vw, 14px);
+            --radius-lg: clamp(16px, 2vw, 24px);
+
+            /* Motion */
+            --ease: cubic-bezier(0.16, 1, 0.3, 1);
+            --dur: 0.7s;
         }
 
         /* ===========================================
@@ -70,101 +86,46 @@
         }
 
         body {
-            font-family: var(--font);
-            background: var(--bg-deep);
-            color: var(--text-primary);
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
             height: 100%;
             overflow-x: hidden;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            font-feature-settings: "ss01", "ss03", "cv11";
         }
 
-        /* Subtle grid pattern overlay */
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image:
-                linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
-            background-size: 60px 60px;
-            pointer-events: none;
-            z-index: 1;
-        }
-
-        /* Noise texture for depth */
+        /* Subtle film grain - replaces atmospheric orbs */
         body::after {
             content: '';
             position: fixed;
             inset: 0;
-            opacity: 0.025;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            opacity: 0.05;
+            mix-blend-mode: overlay;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
             pointer-events: none;
             z-index: 1;
         }
 
-        /* ===========================================
-           FLOATING GRADIENT ORBS
-           Creates monobank's signature atmospheric background
-           =========================================== */
-        .orb {
+        /* One single ambient glow - bottom right of viewport, never moves */
+        body::before {
+            content: '';
             position: fixed;
-            border-radius: 50%;
+            bottom: -20vh;
+            right: -10vw;
+            width: 60vw;
+            height: 60vw;
+            max-width: 800px;
+            max-height: 800px;
+            background: radial-gradient(circle, rgba(20, 241, 149, 0.06) 0%, transparent 60%);
             pointer-events: none;
             z-index: 0;
-            will-change: transform;
-        }
-
-        .orb-1 {
-            width: clamp(300px, 45vw, 650px);
-            height: clamp(300px, 45vw, 650px);
-            background: radial-gradient(circle, rgba(98, 86, 202, 0.18) 0%, transparent 70%);
-            top: -15%;
-            left: -10%;
-            filter: blur(clamp(60px, 10vw, 120px));
-            animation: orbit1 22s ease-in-out infinite;
-        }
-
-        .orb-2 {
-            width: clamp(250px, 38vw, 550px);
-            height: clamp(250px, 38vw, 550px);
-            background: radial-gradient(circle, rgba(79, 117, 255, 0.15) 0%, transparent 70%);
-            bottom: -12%;
-            right: -8%;
-            filter: blur(clamp(50px, 9vw, 110px));
-            animation: orbit2 28s ease-in-out infinite;
-        }
-
-        .orb-3 {
-            width: clamp(180px, 25vw, 380px);
-            height: clamp(180px, 25vw, 380px);
-            background: radial-gradient(circle, rgba(3, 251, 255, 0.08) 0%, transparent 70%);
-            top: 45%;
-            left: 55%;
-            filter: blur(clamp(40px, 8vw, 100px));
-            animation: orbit3 32s ease-in-out infinite;
-        }
-
-        @keyframes orbit1 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            33% { transform: translate(4%, 3%) scale(1.04); }
-            66% { transform: translate(-2%, 5%) scale(0.96); }
-        }
-
-        @keyframes orbit2 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            33% { transform: translate(-5%, -2%) scale(0.97); }
-            66% { transform: translate(3%, -4%) scale(1.03); }
-        }
-
-        @keyframes orbit3 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(-6%, 4%) scale(1.06); }
+            filter: blur(40px);
         }
 
         /* ===========================================
-           SLIDE CONTAINER
-           Each slide = exact viewport height, no scroll
+           SLIDE STRUCTURE
            =========================================== */
         .slide {
             width: 100vw;
@@ -175,74 +136,120 @@
             display: flex;
             flex-direction: column;
             justify-content: center;
-            align-items: center;
             position: relative;
             z-index: 2;
-            padding: var(--slide-padding);
+            padding: var(--pad);
         }
 
         .slide-inner {
             width: 100%;
-            max-width: 1100px;
+            max-width: 1180px;
+            margin: 0 auto;
             max-height: 100%;
             overflow: hidden;
             display: flex;
             flex-direction: column;
             justify-content: center;
-            gap: var(--content-gap);
+            gap: var(--gap);
         }
 
         /* ===========================================
-           TYPOGRAPHY
+           TYPOGRAPHY - editorial mix
            =========================================== */
-        .slide-label {
-            font-size: var(--small-size);
-            font-weight: 600;
-            letter-spacing: 0.15em;
+        .eyebrow {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            color: var(--green);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6em;
             text-transform: uppercase;
-            color: var(--accent-cyan);
-            margin-bottom: clamp(0.25rem, 0.5vw, 0.5rem);
         }
 
-        .slide-title {
-            font-size: var(--title-size);
-            font-weight: 800;
-            line-height: 1.1;
+        .eyebrow::before {
+            content: '';
+            width: 18px;
+            height: 1px;
+            background: var(--green);
+        }
+
+        .num-label {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--text-faint);
+            letter-spacing: 0.05em;
+            font-weight: 500;
+        }
+
+        .title {
+            font-family: var(--sans);
+            font-size: var(--t-title);
+            font-weight: 600;
+            line-height: 1.02;
+            letter-spacing: -0.025em;
+            color: var(--text);
+        }
+
+        .title em {
+            font-family: var(--serif);
+            font-style: italic;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+        }
+
+        .display {
+            font-family: var(--sans);
+            font-size: var(--t-display);
+            font-weight: 700;
+            line-height: 0.92;
+            letter-spacing: -0.04em;
+            color: var(--text);
+        }
+
+        .display em {
+            font-family: var(--serif);
+            font-style: italic;
+            font-weight: 400;
             letter-spacing: -0.02em;
         }
 
-        .slide-subtitle {
-            font-size: var(--h3-size);
+        .lead {
+            font-family: var(--sans);
+            font-size: var(--t-h3);
             font-weight: 400;
-            color: var(--text-secondary);
-            line-height: 1.4;
+            line-height: 1.45;
+            color: var(--text-muted);
+            max-width: 38ch;
         }
 
-        .gradient-text {
-            background: linear-gradient(135deg, #ffffff 30%, var(--accent-cyan) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .lead em {
+            font-family: var(--serif);
+            font-style: italic;
+            color: var(--text);
         }
 
-        .accent { color: var(--accent-cyan); }
+        .accent { color: var(--green); }
+
+        h2.title { font-size: var(--t-title); }
+        h3 { font-family: var(--sans); font-weight: 600; letter-spacing: -0.01em; }
 
         /* ===========================================
            REVEAL ANIMATIONS
-           Triggered by IntersectionObserver
            =========================================== */
         .reveal {
             opacity: 0;
-            transform: translateY(25px);
-            transition: opacity var(--duration) var(--ease-out-expo),
-                        transform var(--duration) var(--ease-out-expo);
+            transform: translateY(20px);
+            transition: opacity var(--dur) var(--ease),
+                        transform var(--dur) var(--ease);
         }
 
         .reveal-scale {
             opacity: 0;
-            transform: scale(0.92);
-            transition: opacity var(--duration) var(--ease-out-expo),
-                        transform var(--duration) var(--ease-out-expo);
+            transform: scale(0.96) translateY(8px);
+            transition: opacity var(--dur) var(--ease),
+                        transform var(--dur) var(--ease);
         }
 
         .slide.visible .reveal,
@@ -252,190 +259,432 @@
         }
 
         .slide.visible .reveal:nth-child(1) { transition-delay: 0.05s; }
-        .slide.visible .reveal:nth-child(2) { transition-delay: 0.12s; }
-        .slide.visible .reveal:nth-child(3) { transition-delay: 0.19s; }
-        .slide.visible .reveal:nth-child(4) { transition-delay: 0.26s; }
-        .slide.visible .reveal:nth-child(5) { transition-delay: 0.33s; }
-        .slide.visible .reveal:nth-child(6) { transition-delay: 0.40s; }
+        .slide.visible .reveal:nth-child(2) { transition-delay: 0.13s; }
+        .slide.visible .reveal:nth-child(3) { transition-delay: 0.21s; }
+        .slide.visible .reveal:nth-child(4) { transition-delay: 0.29s; }
+        .slide.visible .reveal:nth-child(5) { transition-delay: 0.37s; }
+        .slide.visible .reveal:nth-child(6) { transition-delay: 0.45s; }
 
         /* ===========================================
-           GLASS CARDS — Monobank glassmorphism
+           CARDS - flat, confident
+           No glassmorphism, no backdrop blur
            =========================================== */
-        .glass {
-            background: var(--bg-card);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--card-radius);
-            padding: var(--card-padding);
-            transition: background 0.3s ease, border-color 0.3s ease;
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            padding: clamp(1rem, 1.6vw, 1.5rem);
+            transition: border-color 0.3s ease, transform 0.3s ease, background 0.3s ease;
         }
 
-        .glass:hover {
-            background: var(--bg-card-hover);
-            border-color: rgba(255, 255, 255, 0.1);
+        .card:hover {
+            border-color: var(--line-2);
+            background: var(--surface-2);
         }
 
-        .glass-featured {
-            background: var(--bg-card);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            border: 1px solid var(--border-accent);
-            border-radius: var(--card-radius);
-            padding: var(--card-padding);
-            box-shadow: 0 0 40px rgba(98, 86, 202, 0.08);
+        .card-accent {
+            background: var(--surface);
+            border: 1px solid var(--green-20);
+            border-radius: var(--radius);
+            padding: clamp(1rem, 1.6vw, 1.5rem);
+            position: relative;
+        }
+
+        .card-accent::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(135deg, var(--green-12), transparent 60%);
+            pointer-events: none;
         }
 
         /* ===========================================
-           BADGES / PILLS
+           STAMP / BADGE - small mono pills
            =========================================== */
-        .badge-row {
+        .stamp-row {
             display: flex;
             flex-wrap: wrap;
-            gap: clamp(0.3rem, 0.7vw, 0.5rem);
+            gap: clamp(0.4rem, 0.7vw, 0.55rem);
         }
 
-        .badge {
+        .stamp {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            font-weight: 500;
+            letter-spacing: 0.02em;
+            padding: clamp(0.4rem, 0.7vw, 0.55rem) clamp(0.7rem, 1.1vw, 0.95rem);
+            background: transparent;
+            border: 1px solid var(--line-2);
+            border-radius: 4px;
+            color: var(--text-muted);
+            white-space: nowrap;
             display: inline-flex;
             align-items: center;
-            gap: 0.4em;
-            padding: clamp(0.35rem, 0.7vw, 0.55rem) clamp(0.7rem, 1.3vw, 1.1rem);
-            font-size: var(--small-size);
-            font-weight: 600;
-            color: var(--text-primary);
-            background: linear-gradient(135deg, rgba(98, 86, 202, 0.15), rgba(79, 117, 255, 0.1));
-            border: 1px solid rgba(98, 86, 202, 0.3);
-            border-radius: 100px;
-            white-space: nowrap;
-            box-shadow: 0 0 20px rgba(98, 86, 202, 0.1);
+            gap: 0.5em;
+            transition: border-color 0.25s ease, color 0.25s ease;
         }
 
-        .badge .badge-icon {
-            color: var(--accent-cyan);
-            font-size: 0.7em;
+        .stamp:hover {
+            border-color: var(--green);
+            color: var(--text);
         }
 
-        .track-record-label {
-            font-size: var(--body-size);
-            font-weight: 700;
-            color: var(--accent-cyan);
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
+        .stamp::before {
+            content: '';
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--green);
+            flex-shrink: 0;
         }
 
         /* ===========================================
-           PROTOCOL PILLS (Jupiter, Kamino, Drift)
+           PROTOCOL PILLS
            =========================================== */
         .protocol-row {
             display: flex;
-            gap: clamp(0.4rem, 1vw, 0.8rem);
+            gap: clamp(0.5rem, 1vw, 0.75rem);
             flex-wrap: wrap;
         }
 
         .protocol-pill {
             display: inline-flex;
             align-items: center;
-            gap: clamp(0.3rem, 0.5vw, 0.5rem);
-            padding: clamp(0.3rem, 0.6vw, 0.5rem) clamp(0.6rem, 1.2vw, 1rem);
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            gap: 0.5em;
+            padding: clamp(0.4rem, 0.7vw, 0.55rem) clamp(0.7rem, 1.1vw, 0.95rem);
+            background: var(--surface);
+            border: 1px solid var(--line-2);
             border-radius: 100px;
-            font-size: var(--small-size);
+            font-size: var(--t-small);
             font-weight: 500;
+            color: var(--text);
         }
 
         .protocol-pill img {
-            width: clamp(16px, 2vw, 24px);
-            height: clamp(16px, 2vw, 24px);
+            width: clamp(18px, 2.2vw, 22px);
+            height: clamp(18px, 2.2vw, 22px);
             border-radius: 50%;
         }
 
         /* ===========================================
-           GRID LAYOUTS
+           LAYOUT GRIDS
            =========================================== */
-        .grid-2x2 {
+        .grid-2 {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: var(--card-gap);
+            gap: var(--gap-sm);
         }
 
         .grid-3 {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: var(--card-gap);
+            gap: var(--gap-sm);
         }
 
-        .grid-2 {
+        .grid-4 {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: var(--card-gap);
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--gap-sm);
         }
 
         /* ===========================================
-           PROBLEM CARDS (Slide 2)
+           SLIDE 1 - HOOK (asymmetric)
            =========================================== */
-        .problem-card {
-            display: flex;
-            flex-direction: column;
-            gap: clamp(0.3rem, 0.6vw, 0.5rem);
-        }
-
-        .problem-card .icon {
-            font-size: clamp(1.2rem, 2.5vw, 1.8rem);
-            width: clamp(32px, 5vw, 48px);
-            height: clamp(32px, 5vw, 48px);
-            display: flex;
+        .hook-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: clamp(2rem, 5vw, 4rem);
             align-items: center;
-            justify-content: center;
-            background: rgba(255, 82, 82, 0.1);
-            border-radius: clamp(8px, 1.2vw, 14px);
-            flex-shrink: 0;
-        }
-
-        .problem-card h3 {
-            font-size: var(--h3-size);
-            font-weight: 700;
-        }
-
-        .problem-card p {
-            font-size: var(--small-size);
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-
-        /* ===========================================
-           COMPARISON TABLE (Slide 4)
-           =========================================== */
-        .compare-table {
             width: 100%;
         }
 
-        .compare-header {
-            display: grid;
-            grid-template-columns: 2.2fr 1fr 1.3fr 1fr;
-            padding: clamp(0.4rem, 0.8vw, 0.6rem) 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            margin-bottom: clamp(0.2rem, 0.4vw, 0.4rem);
+        .hook-left {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(1rem, 2vw, 1.75rem);
         }
 
-        .compare-header span {
-            font-size: var(--tiny-size);
-            font-weight: 600;
-            color: var(--text-tertiary);
-            text-transform: uppercase;
+        .hook-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--text-faint);
+            letter-spacing: 0.05em;
+            position: absolute;
+            top: var(--pad);
+            left: var(--pad);
+            right: var(--pad);
+            z-index: 3;
+        }
+
+        .hook-meta .dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            margin-right: 0.5em;
+            box-shadow: 0 0 8px var(--green-glow);
+            animation: pulse 2.4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .hook-headline {
+            font-family: var(--sans);
+            font-size: clamp(2.4rem, 9.5vmin, 5rem);
+            font-weight: 700;
+            line-height: 0.9;
+            letter-spacing: -0.05em;
+            color: var(--text);
+        }
+
+        .hook-headline em {
+            font-family: var(--serif);
+            font-style: italic;
+            font-weight: 400;
+            letter-spacing: -0.03em;
+            color: var(--green);
+        }
+
+        .hook-tag {
+            font-family: var(--serif);
+            font-style: italic;
+            font-size: clamp(1.1rem, 1.8vw, 1.5rem);
+            color: var(--text-muted);
+            line-height: 1.3;
+            font-weight: 400;
+        }
+
+        .hook-divider {
+            width: 100%;
+            height: 1px;
+            background: var(--line-2);
+            margin: clamp(0.4rem, 0.8vw, 0.6rem) 0;
+        }
+
+        .hook-track-label {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--text-faint);
             letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: clamp(0.4rem, 0.8vw, 0.6rem);
+        }
+
+        .hook-phone-frame {
+            position: relative;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .hook-phone-frame .phone {
+            width: 100%;
+            max-width: min(24vw, 26vh);
+            transform: rotate(2deg);
+            border-radius: clamp(18px, 2.6vw, 28px);
+            border: 1px solid var(--line-2);
+            background: var(--surface);
+            padding: clamp(3px, 0.5vw, 6px);
+            box-shadow:
+                0 30px 80px rgba(0, 0, 0, 0.5),
+                0 0 0 1px rgba(20, 241, 149, 0.04);
+            transition: transform 0.6s var(--ease);
+        }
+
+        .slide.visible .hook-phone-frame .phone {
+            animation: floatTilt 6s ease-in-out infinite 0.6s;
+        }
+
+        @keyframes floatTilt {
+            0%, 100% { transform: rotate(2deg) translateY(0); }
+            50% { transform: rotate(1deg) translateY(-12px); }
+        }
+
+        .hook-phone-frame .phone img {
+            width: 100%;
+            display: block;
+            border-radius: clamp(16px, 2.5vw, 26px);
+        }
+
+        /* Cashflow brand stamp top-right of phone */
+        .phone-stamp {
+            position: absolute;
+            top: -10px;
+            right: clamp(0px, 2vw, 30px);
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--green);
+            background: var(--bg);
+            border: 1px solid var(--green-20);
+            padding: 0.25em 0.6em;
+            border-radius: 3px;
+            transform: rotate(-3deg);
+            letter-spacing: 0.05em;
+        }
+
+        /* ===========================================
+           SLIDE 2 - PROBLEM
+           Numbered cards, no emoji
+           =========================================== */
+        .problem-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--gap-sm);
+        }
+
+        .problem-card {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.5rem, 1vw, 0.75rem);
+            padding: clamp(1.1rem, 2vw, 1.7rem);
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            position: relative;
+            transition: border-color 0.3s ease, background 0.3s ease;
+        }
+
+        .problem-card:hover {
+            border-color: var(--line-2);
+            background: var(--surface-2);
+        }
+
+        .problem-card .pnum {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--text-faint);
+            letter-spacing: 0.05em;
+            font-weight: 500;
+        }
+
+        .problem-card h3 {
+            font-size: var(--t-h3);
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: -0.01em;
+        }
+
+        .problem-card p {
+            font-size: var(--t-small);
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* ===========================================
+           SLIDE 3 - SOLUTION
+           Tilted phones · asymmetric
+           =========================================== */
+        .solution-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(2rem, 5vw, 4rem);
+            align-items: center;
+        }
+
+        .solution-text {
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap);
+        }
+
+        .solution-phones {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            min-height: clamp(180px, 28vh, 320px);
+            padding: clamp(1rem, 2.5vh, 2rem) 0;
+        }
+
+        .sol-phone {
+            border-radius: clamp(16px, 2.4vw, 24px);
+            border: 1px solid var(--line-2);
+            background: var(--surface);
+            padding: clamp(3px, 0.5vw, 5px);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45);
+            transition: transform 0.6s var(--ease);
+        }
+
+        .sol-phone img {
+            display: block;
+            width: 100%;
+            border-radius: clamp(12px, 2vw, 20px);
+        }
+
+        .sol-phone-back {
+            width: min(13vw, 15vh);
+            transform: rotate(-7deg) translateX(20%);
+            opacity: 0.85;
+        }
+
+        .sol-phone-front {
+            width: min(16vw, 19vh);
+            transform: rotate(4deg) translateX(-15%);
+            position: relative;
+            z-index: 2;
+        }
+
+        .slide.visible .sol-phone-front {
+            animation: solFront 6s ease-in-out infinite 0.4s;
+        }
+
+        @keyframes solFront {
+            0%, 100% { transform: rotate(4deg) translate(-15%, 0); }
+            50% { transform: rotate(3deg) translate(-15%, -10px); }
+        }
+
+        /* ===========================================
+           SLIDE 4 - COMPARISON
+           Cleaner table
+           =========================================== */
+        .compare {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-lg);
+            padding: clamp(1rem, 2vw, 1.75rem);
+            overflow: hidden;
+        }
+
+        .compare-head {
+            display: grid;
+            grid-template-columns: 2.4fr 1fr 1.3fr 1fr;
+            padding-bottom: clamp(0.6rem, 1vw, 0.85rem);
+            border-bottom: 1px solid var(--line-2);
+            margin-bottom: clamp(0.3rem, 0.5vw, 0.45rem);
+        }
+
+        .compare-head span {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            font-weight: 500;
+            color: var(--text-faint);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
             text-align: center;
         }
 
-        .compare-header span:first-child {
+        .compare-head span:first-child {
             text-align: left;
+        }
+
+        .compare-head .mark-cashflow {
+            color: var(--green);
         }
 
         .compare-row {
             display: grid;
-            grid-template-columns: 2.2fr 1fr 1.3fr 1fr;
-            padding: clamp(0.35rem, 0.7vw, 0.55rem) 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            grid-template-columns: 2.4fr 1fr 1.3fr 1fr;
+            padding: clamp(0.6rem, 1.1vw, 0.85rem) 0;
+            border-bottom: 1px solid var(--line);
             align-items: center;
         }
 
@@ -443,349 +692,397 @@
             border-bottom: none;
         }
 
-        .compare-row span {
-            font-size: var(--small-size);
+        .compare-row > span {
+            font-size: var(--t-small);
             text-align: center;
-        }
-
-        .compare-row span:first-child {
-            text-align: left;
             font-weight: 500;
-            color: var(--text-secondary);
         }
 
-        /* Colored dot indicators */
+        .compare-row > span:first-child {
+            text-align: left;
+            color: var(--text);
+            font-family: var(--sans);
+            letter-spacing: -0.005em;
+        }
+
         .dot {
             display: inline-block;
-            width: clamp(10px, 1.4vw, 16px);
-            height: clamp(10px, 1.4vw, 16px);
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
         }
 
-        .dot.green {
-            background: var(--accent-green);
-            box-shadow: 0 0 10px rgba(0, 230, 118, 0.35);
+        .dot.good {
+            background: var(--good);
+            box-shadow: 0 0 12px rgba(20, 241, 149, 0.45);
         }
 
-        .dot.yellow {
-            background: var(--accent-yellow);
-            box-shadow: 0 0 10px rgba(255, 214, 0, 0.3);
+        .dot.warn {
+            background: var(--warn);
+            box-shadow: 0 0 8px rgba(255, 200, 87, 0.4);
         }
 
-        .dot.red {
-            background: var(--accent-red);
-            box-shadow: 0 0 10px rgba(255, 82, 82, 0.3);
+        .dot.bad {
+            background: var(--bad);
+            box-shadow: 0 0 8px rgba(255, 107, 107, 0.4);
         }
 
-        .cashflow-col {
-            background: rgba(98, 86, 202, 0.08);
-            border-radius: 8px;
-        }
-
-        /* ===========================================
-           STEPS (Slide 5 — How It Works)
-           =========================================== */
-        .step-card {
-            display: flex;
-            flex-direction: column;
-            gap: clamp(0.3rem, 0.6vw, 0.5rem);
-        }
-
-        .step-number {
-            font-size: clamp(1.5rem, 3.5vw, 2.5rem);
-            font-weight: 800;
-            color: var(--gradient-purple);
-            opacity: 0.4;
-            line-height: 1;
-        }
-
-        .step-card h3 {
-            font-size: var(--h3-size);
-            font-weight: 700;
-        }
-
-        .step-card p {
-            font-size: var(--small-size);
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-
-        /* ===========================================
-           PHONE MOCKUPS — Abstract stroke style
-           =========================================== */
-        .phone-stroke {
+        .compare-row .col-cashflow {
+            background: var(--green-12);
+            border-radius: 6px;
             position: relative;
-            border: 1.5px solid rgba(255, 255, 255, 0.12);
-            border-radius: clamp(16px, 2.8vw, 28px);
-            padding: clamp(3px, 0.5vw, 6px);
-            background: rgba(255, 255, 255, 0.02);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-            transition: transform 0.5s var(--ease-out-expo), box-shadow 0.5s ease;
-        }
-
-        .phone-stroke:hover {
-            box-shadow: 0 12px 40px rgba(98, 86, 202, 0.15);
-        }
-
-        .phone-stroke img {
-            display: block;
-            width: 100%;
-            border-radius: clamp(13px, 2.4vw, 24px);
-        }
-
-        /* Solution slide: two-column with phones */
-        .solution-layout {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: clamp(1.5rem, 4vw, 3rem);
-            align-items: center;
-        }
-
-        .solution-text {
-            display: flex;
-            flex-direction: column;
-            gap: var(--content-gap);
-        }
-
-        .solution-phones {
-            display: flex;
-            justify-content: center;
-            align-items: flex-end;
-            gap: clamp(0.5rem, 1.2vw, 1rem);
-        }
-
-        .solution-phones .phone-stroke {
-            width: clamp(100px, 14vw, 180px);
-        }
-
-        .solution-phones .phone-stroke.featured {
-            width: clamp(120px, 17vw, 210px);
-            transform: translateY(calc(-1 * clamp(5px, 1vw, 12px)));
-        }
-
-        .slide.visible .solution-phones .phone-stroke.featured {
-            animation: phoneFloat 4s ease-in-out infinite 0.6s;
-        }
-
-        @keyframes phoneFloat {
-            0%, 100% { transform: translateY(calc(-1 * clamp(5px, 1vw, 12px))); }
-            50% { transform: translateY(calc(-1 * clamp(12px, 2vw, 22px))); }
-        }
-
-        /* Demo slide: two-column layout */
-        .demo-layout {
-            display: grid;
-            grid-template-columns: 0.7fr 1fr;
-            gap: clamp(1rem, 3vw, 2.5rem);
-            align-items: center;
-            width: 100%;
-            max-width: 1100px;
-        }
-
-        .demo-text {
-            display: flex;
-            flex-direction: column;
-            gap: var(--content-gap);
-        }
-
-        /* Seeker device with video overlay — near full height */
-        .seeker-device {
-            position: relative;
-            display: flex;
-            justify-content: center;
-            height: clamp(400px, 82vh, 750px);
-        }
-
-        .seeker-device img.seeker-img {
-            height: 100%;
-            width: auto;
-            display: block;
-            filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.4));
-        }
-
-        .seeker-device video {
-            position: absolute;
-            /* Position over the front phone screen */
-            top: 11.2%;
-            left: 38.8%;
-            width: 41.8%;
-            height: 77%;
-            object-fit: fill;
-            overflow: hidden;
-            border-radius: clamp(12.5px, 2.5vw, 27px);
-            pointer-events: none;
-        }
-
-        /* Play button overlay for demo video */
-        .video-play-btn {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 64px;
-            height: 64px;
-            background: rgba(0, 0, 0, 0.55);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10;
-            transition: opacity 0.3s, transform 0.3s;
-            backdrop-filter: blur(6px);
-        }
-        .video-play-btn:hover {
-            background: rgba(0, 0, 0, 0.7);
-            transform: translate(-50%, -50%) scale(1.1);
-        }
-        .video-play-btn::after {
-            content: '';
-            display: block;
-            width: 0;
-            height: 0;
-            border-style: solid;
-            border-width: 12px 0 12px 22px;
-            border-color: transparent transparent transparent #fff;
-            margin-left: 4px;
-        }
-        .video-play-btn.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        /* 3-step flow indicator — vertical for side layout */
-        .demo-steps {
-            display: flex;
-            flex-direction: column;
-            gap: clamp(0.3rem, 0.6vw, 0.5rem);
-        }
-
-        .demo-step-row {
-            display: flex;
-            align-items: center;
-            gap: clamp(0.4rem, 0.8vw, 0.6rem);
-        }
-
-        .demo-step-num {
-            font-size: var(--tiny-size);
-            font-weight: 700;
-            color: var(--accent-cyan);
-            width: clamp(20px, 2.5vw, 28px);
-            height: clamp(20px, 2.5vw, 28px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            border: 1px solid rgba(3, 251, 255, 0.3);
-            flex-shrink: 0;
-        }
-
-        .demo-step-label {
-            font-size: var(--small-size);
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-
-        @media (max-width: 768px) {
-            .demo-layout {
-                grid-template-columns: 1fr;
-                text-align: center;
-            }
-            .demo-text { align-items: center; }
-            .demo-steps { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: clamp(0.4rem, 1vw, 0.6rem); }
-            .demo-step-num { display: none; }
-            .seeker-device { height: clamp(250px, 55vh, 450px); }
-        }
-
-        @media (max-width: 768px) {
-            .solution-layout {
-                grid-template-columns: 1fr;
-                gap: clamp(1rem, 2vw, 1.5rem);
-            }
-            .solution-phones {
-                justify-content: center;
-            }
-            .solution-phones .phone-stroke {
-                width: clamp(80px, 22vw, 130px);
-            }
-            .solution-phones .phone-stroke.featured {
-                width: clamp(95px, 26vw, 150px);
-            }
         }
 
         /* ===========================================
-           METRIC CARDS (Slide 9 — Traction)
+           SLIDE 5 - MARKET
            =========================================== */
-        .metric-card {
+        .segment-card {
+            padding: clamp(1.4rem, 2.5vw, 2rem);
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
             display: flex;
             flex-direction: column;
-            gap: clamp(0.15rem, 0.3vw, 0.25rem);
+            gap: clamp(0.5rem, 1vw, 0.75rem);
+            transition: border-color 0.3s ease, background 0.3s ease;
         }
 
-        .metric-value {
-            font-size: var(--h2-size);
-            font-weight: 800;
-            line-height: 1.1;
+        .segment-card:hover {
+            border-color: var(--line-2);
+            background: var(--surface-2);
         }
 
-        .metric-label {
-            font-size: var(--tiny-size);
+        .segment-card h3 {
+            font-size: var(--t-h2);
             font-weight: 600;
-            color: var(--accent-cyan);
-            text-transform: uppercase;
+            letter-spacing: -0.02em;
+        }
+
+        .segment-card .seg-range {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--green);
             letter-spacing: 0.05em;
         }
 
-        .metric-desc {
-            font-size: var(--tiny-size);
-            color: var(--text-tertiary);
-            line-height: 1.3;
-        }
-
-        /* X screenshots row */
-        .traction-section-title {
-            font-size: var(--tiny-size);
-            font-weight: 600;
-            color: var(--text-secondary);
-            margin-bottom: clamp(0.3rem, 0.6vw, 0.5rem);
-        }
-
-        .x-screenshots {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: clamp(0.5rem, 1.2vw, 1rem);
-        }
-
-        .x-screenshot {
-            width: 100%;
-            border-radius: clamp(8px, 1.2vw, 14px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            object-fit: contain;
+        .segment-card p.seg-desc {
+            font-size: var(--t-small);
+            color: var(--text-muted);
+            line-height: 1.5;
         }
 
         /* ===========================================
-           ROADMAP (Slide 11)
+           SLIDE 6 - BUSINESS
            =========================================== */
-        .roadmap-col h3 {
-            font-size: var(--h3-size);
+        .revenue-item {
+            padding: clamp(1.2rem, 2.2vw, 1.7rem);
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.4rem, 0.8vw, 0.6rem);
+        }
+
+        .revenue-item h3 {
+            font-size: var(--t-h3);
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .revenue-item p {
+            font-size: var(--t-small);
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .revenue-item .pct {
+            font-family: var(--mono);
+            color: var(--green);
+            font-weight: 600;
+        }
+
+        .formula {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.3rem, 0.6vw, 0.5rem);
+            text-align: center;
+            padding: clamp(1.2rem, 2.5vw, 2rem);
+            background: linear-gradient(135deg, var(--green-12), transparent);
+            border: 1px solid var(--green-20);
+            border-radius: var(--radius-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .formula::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--green), transparent);
+            opacity: 0.5;
+        }
+
+        .formula-eq {
+            font-family: var(--mono);
+            font-size: var(--t-small);
+            color: var(--text-muted);
+            letter-spacing: 0.02em;
+        }
+
+        .formula-result {
+            font-family: var(--sans);
+            font-size: clamp(2rem, 6vmin, 3.8rem);
             font-weight: 700;
-            margin-bottom: clamp(0.3rem, 0.6vw, 0.5rem);
-            color: var(--accent-cyan);
+            color: var(--green);
+            letter-spacing: -0.04em;
+            line-height: 1;
+            font-feature-settings: "tnum";
+        }
+
+        .formula-result em {
+            font-family: var(--serif);
+            font-style: italic;
+            font-weight: 400;
+            color: var(--text);
+            font-size: 0.6em;
+            margin-left: 0.15em;
+            letter-spacing: -0.01em;
+        }
+
+        /* ===========================================
+           SLIDE 7 - TRACTION
+           Big numbers as design
+           =========================================== */
+        .traction-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--gap-sm);
+        }
+
+        .metric {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.3rem, 0.6vw, 0.5rem);
+            padding: clamp(1rem, 2vw, 1.5rem);
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+        }
+
+        .metric-value {
+            font-family: var(--sans);
+            font-size: clamp(1.7rem, 5vmin, 3rem);
+            font-weight: 700;
+            line-height: 0.95;
+            letter-spacing: -0.04em;
+            color: var(--text);
+            font-feature-settings: "tnum";
+        }
+
+        .metric-value .plus {
+            color: var(--green);
+        }
+
+        .metric-label {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--text-faint);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .metric-desc {
+            font-size: var(--t-small);
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .x-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: clamp(0.5rem, 1vw, 0.85rem);
+        }
+
+        .x-row img {
+            width: 100%;
+            border-radius: var(--radius);
+            border: 1px solid var(--line);
+            object-fit: cover;
+            object-position: top;
+            aspect-ratio: 4/3;
+            max-height: 32vh;
+            background: var(--surface);
+        }
+
+        .traction-section-label {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--text-faint);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: clamp(0.4rem, 0.8vw, 0.6rem);
+            display: flex;
+            align-items: center;
+            gap: 0.6em;
+        }
+
+        .traction-section-label::before {
+            content: '';
+            width: 14px;
+            height: 1px;
+            background: var(--text-faint);
+        }
+
+        /* ===========================================
+           SLIDE 8 - SKR
+           =========================================== */
+        .skr-banner {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            align-items: center;
+            gap: clamp(1rem, 2.5vw, 2rem);
+            padding: clamp(1.5rem, 3vw, 2.5rem);
+            background: var(--surface);
+            border: 1px solid var(--green-20);
+            border-radius: var(--radius-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .skr-banner::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 0% 0%, var(--green-12), transparent 50%);
+            pointer-events: none;
+        }
+
+        .skr-stake {
+            position: relative;
+            font-family: var(--sans);
+            font-size: clamp(1.8rem, 5vmin, 3.2rem);
+            font-weight: 700;
+            line-height: 0.95;
+            letter-spacing: -0.04em;
+            color: var(--green);
+            font-feature-settings: "tnum";
+        }
+
+        .skr-stake-unit {
+            font-family: var(--serif);
+            font-style: italic;
+            font-weight: 400;
+            color: var(--text);
+            font-size: 0.55em;
+            letter-spacing: -0.02em;
+        }
+
+        .skr-text {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.3rem, 0.5vw, 0.4rem);
+        }
+
+        .skr-text h3 {
+            font-size: var(--t-h2);
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: -0.02em;
+        }
+
+        .skr-text h3 em {
+            font-family: var(--serif);
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        .skr-text p {
+            font-size: var(--t-small);
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .benefit-card {
+            padding: clamp(1rem, 1.8vw, 1.4rem);
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.3rem, 0.6vw, 0.5rem);
+        }
+
+        .benefit-card .b-num {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--green);
+            letter-spacing: 0.05em;
+        }
+
+        .benefit-card h3 {
+            font-size: var(--t-body);
+            font-weight: 600;
+            color: var(--text);
+            margin-top: clamp(0.3rem, 0.6vw, 0.5rem);
+        }
+
+        .benefit-card p {
+            font-size: var(--t-small);
+            color: var(--text-muted);
+            line-height: 1.45;
+        }
+
+        /* ===========================================
+           SLIDE 9 - ROADMAP
+           =========================================== */
+        .roadmap-col {
+            padding: clamp(1.2rem, 2.2vw, 1.7rem);
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.6rem, 1.2vw, 0.9rem);
+            position: relative;
+        }
+
+        .roadmap-col h3 {
+            font-family: var(--sans);
+            font-size: var(--t-h3);
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: -0.01em;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+        }
+
+        .roadmap-col h3 .q-tag {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--text-faint);
+            letter-spacing: 0.06em;
+            font-weight: 500;
+            text-transform: uppercase;
         }
 
         .roadmap-col ul {
             list-style: none;
             display: flex;
             flex-direction: column;
-            gap: clamp(0.2rem, 0.4vw, 0.4rem);
+            gap: clamp(0.4rem, 0.8vw, 0.6rem);
         }
 
         .roadmap-col li {
-            font-size: var(--small-size);
-            color: var(--text-secondary);
-            line-height: 1.35;
-            padding-left: 1em;
+            font-size: var(--t-small);
+            color: var(--text-muted);
+            line-height: 1.45;
+            padding-left: 1.2em;
             position: relative;
         }
 
@@ -793,412 +1090,409 @@
             content: '';
             position: absolute;
             left: 0;
-            top: 0.5em;
-            width: 5px;
-            height: 5px;
-            border-radius: 50%;
-            background: var(--gradient-purple);
+            top: 0.6em;
+            width: 6px;
+            height: 1px;
+            background: var(--text-faint);
         }
 
         .roadmap-active {
-            border-color: var(--border-accent) !important;
-            box-shadow: 0 0 30px rgba(98, 86, 202, 0.1);
+            border-color: var(--green-20);
+            background: linear-gradient(135deg, var(--green-12), var(--surface) 50%);
         }
 
-        .roadmap-active h3 { color: #fff; }
+        .roadmap-active h3 {
+            color: var(--text);
+        }
+
+        .roadmap-active h3 .q-tag {
+            color: var(--green);
+        }
 
         .roadmap-active li {
-            color: var(--text-primary);
+            color: var(--text);
+        }
+
+        .roadmap-active li::before {
+            background: var(--green);
+            width: 8px;
+        }
+
+        .roadmap-shipped h3 .q-tag {
+            color: var(--green);
+        }
+
+        .roadmap-shipped h3 .q-tag::before {
+            content: '✓ ';
         }
 
         /* ===========================================
-           BUILDER CARD (Slide 12)
+           SLIDE 10 - BUILDER
            =========================================== */
-        .builder-achievements {
+        .builder-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: clamp(1.5rem, 3vw, 2.5rem);
+            align-items: start;
+            padding: clamp(1.5rem, 3vw, 2.5rem);
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-lg);
+        }
+
+        .builder-photo {
+            position: relative;
+        }
+
+        .builder-photo img {
+            width: clamp(120px, 18vw, 200px);
+            height: clamp(120px, 18vw, 200px);
+            border-radius: var(--radius);
+            object-fit: cover;
+            border: 1px solid var(--line-2);
+        }
+
+        .builder-photo .photo-stamp {
+            position: absolute;
+            bottom: -8px;
+            left: -8px;
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--green);
+            background: var(--bg);
+            border: 1px solid var(--green-20);
+            padding: 0.3em 0.6em;
+            border-radius: 3px;
+            letter-spacing: 0.05em;
+        }
+
+        .builder-content h3 {
+            font-family: var(--sans);
+            font-size: var(--t-h2);
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: var(--text);
+        }
+
+        .builder-content .role {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--green);
+            letter-spacing: 0.05em;
+            margin-top: clamp(0.2rem, 0.4vw, 0.3rem);
+        }
+
+        .achievements {
+            margin-top: clamp(1rem, 2vw, 1.5rem);
             display: flex;
             flex-direction: column;
-            gap: clamp(0.25rem, 0.5vw, 0.4rem);
+            gap: clamp(0.4rem, 0.8vw, 0.6rem);
         }
 
         .achievement {
             display: flex;
-            align-items: flex-start;
-            gap: clamp(0.4rem, 0.8vw, 0.6rem);
-            font-size: var(--small-size);
-            color: var(--text-secondary);
-            line-height: 1.4;
+            align-items: baseline;
+            gap: clamp(0.7rem, 1.2vw, 1rem);
+            font-size: var(--t-small);
+            color: var(--text-muted);
+            line-height: 1.5;
         }
 
-        .achievement .check {
-            color: var(--accent-green);
+        .achievement strong {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .achievement::before {
+            content: '→';
+            color: var(--green);
+            font-weight: 600;
             flex-shrink: 0;
-            font-weight: 700;
-            font-size: var(--body-size);
-        }
-
-        /* Profile picture */
-        .builder-profile {
-            display: flex;
-            align-items: center;
-            gap: clamp(1rem, 2.5vw, 2rem);
-        }
-
-        .profile-pic {
-            width: clamp(80px, 12vw, 140px);
-            height: clamp(80px, 12vw, 140px);
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid var(--border-accent);
-            box-shadow: 0 0 30px rgba(98, 86, 202, 0.2);
-            flex-shrink: 0;
-        }
-
-        .builder-info {
-            display: flex;
-            flex-direction: column;
-            gap: clamp(0.1rem, 0.3vw, 0.2rem);
+            font-family: var(--mono);
         }
 
         /* ===========================================
-           CTA (Slide 13)
+           SLIDE 11 - CTA
            =========================================== */
-        .qr-box {
-            background: #ffffff;
-            border-radius: clamp(12px, 2vw, 20px);
-            padding: clamp(8px, 1.5vw, 16px);
-            display: inline-block;
+        .cta-grid {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: clamp(2rem, 5vw, 4rem);
+            align-items: center;
+            width: 100%;
         }
 
-        .qr-box img {
-            display: block;
-            width: clamp(100px, 15vw, 180px);
-            height: clamp(100px, 15vw, 180px);
+        .cta-left {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.8rem, 1.5vw, 1.2rem);
+        }
+
+        .cta-headline {
+            font-family: var(--sans);
+            font-size: clamp(2.6rem, 11vmin, 6rem);
+            font-weight: 700;
+            line-height: 0.9;
+            letter-spacing: -0.05em;
+            color: var(--text);
+        }
+
+        .cta-headline em {
+            font-family: var(--serif);
+            font-style: italic;
+            font-weight: 400;
+            color: var(--green);
+        }
+
+        .cta-tag {
+            font-family: var(--serif);
+            font-style: italic;
+            font-size: var(--t-h3);
+            color: var(--text-muted);
         }
 
         .cta-links {
             display: flex;
-            gap: clamp(1rem, 3vw, 2.5rem);
-            flex-wrap: wrap;
-            justify-content: center;
+            flex-direction: column;
+            gap: clamp(0.4rem, 0.8vw, 0.6rem);
+            margin-top: clamp(0.6rem, 1.2vw, 1rem);
         }
 
         .cta-link {
-            font-size: var(--body-size);
-            color: var(--text-secondary);
+            font-family: var(--mono);
+            font-size: var(--t-small);
+            color: var(--text-muted);
             text-decoration: none;
-            transition: color 0.3s ease;
+            transition: color 0.25s ease;
+            letter-spacing: 0.02em;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5em;
         }
 
-        .cta-link:hover { color: var(--accent-cyan); }
+        .cta-link::before {
+            content: '→';
+            color: var(--green);
+            opacity: 0;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            transform: translateX(-4px);
+        }
+
+        .cta-link:hover {
+            color: var(--green);
+        }
+
+        .cta-link:hover::before {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .qr-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: clamp(0.4rem, 0.8vw, 0.6rem);
+            padding: clamp(1rem, 2vw, 1.5rem);
+            background: var(--surface);
+            border: 1px solid var(--line-2);
+            border-radius: var(--radius-lg);
+        }
+
+        .qr-card .qr-box {
+            background: var(--text);
+            border-radius: var(--radius);
+            padding: clamp(8px, 1.2vw, 14px);
+        }
+
+        .qr-card .qr-box img {
+            display: block;
+            width: clamp(120px, 17vw, 180px);
+            height: clamp(120px, 17vw, 180px);
+        }
+
+        .qr-card .qr-meta {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--text-faint);
+            letter-spacing: 0.05em;
+            text-align: center;
+        }
 
         /* ===========================================
-           PROGRESS BAR (top of screen)
+           PROGRESS BAR
            =========================================== */
         .progress-bar {
             position: fixed;
             top: 0;
             left: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--gradient-purple), var(--gradient-blue), var(--accent-cyan));
+            height: 2px;
+            background: var(--green);
             z-index: 1000;
-            transition: width 0.3s var(--ease-out-expo);
+            transition: width 0.3s var(--ease);
             width: 0%;
+            box-shadow: 0 0 10px var(--green-glow);
         }
 
         /* ===========================================
-           NAV DOTS (right side)
+           NAV DOTS
            =========================================== */
         .nav-dots {
             position: fixed;
-            right: clamp(12px, 2vw, 24px);
+            right: clamp(14px, 2vw, 24px);
             top: 50%;
             transform: translateY(-50%);
             display: flex;
             flex-direction: column;
-            gap: clamp(6px, 1vh, 10px);
+            gap: clamp(8px, 1vh, 12px);
             z-index: 100;
         }
 
         .nav-dot {
-            width: clamp(6px, 0.8vw, 10px);
-            height: clamp(6px, 0.8vw, 10px);
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
-            background: rgba(255, 255, 255, 0.15);
+            background: var(--line-strong);
             cursor: pointer;
-            transition: all 0.3s var(--ease-out-expo);
+            transition: all 0.3s var(--ease);
             border: none;
             padding: 0;
         }
 
         .nav-dot.active {
-            background: var(--accent-cyan);
-            box-shadow: 0 0 10px rgba(3, 251, 255, 0.4);
-            transform: scale(1.3);
+            background: var(--green);
+            transform: scale(1.4);
+            box-shadow: 0 0 8px var(--green-glow);
         }
 
         .nav-dot:hover:not(.active) {
-            background: rgba(255, 255, 255, 0.35);
+            background: var(--text-muted);
         }
 
         /* ===========================================
-           SLIDE COUNTER (bottom-left)
+           SLIDE COUNTER & META
            =========================================== */
         .slide-counter {
             position: fixed;
-            bottom: clamp(12px, 2vw, 24px);
-            left: clamp(12px, 2vw, 24px);
-            font-size: var(--tiny-size);
-            font-weight: 500;
-            color: var(--text-tertiary);
+            bottom: clamp(14px, 2vw, 24px);
+            left: clamp(14px, 2vw, 24px);
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--text-faint);
             z-index: 100;
-            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.05em;
         }
 
         .slide-counter .current {
-            color: var(--text-primary);
-            font-weight: 700;
+            color: var(--green);
+            font-weight: 600;
         }
 
-        /* ===========================================
-           MARKET SEGMENTS (Slide 7)
-           =========================================== */
-        .segment-card h3 {
-            font-size: var(--h3-size);
-            font-weight: 700;
-            margin-bottom: clamp(0.2rem, 0.4vw, 0.35rem);
-        }
-
-        .segment-card p {
-            font-size: var(--small-size);
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-
-        .growth-banner {
+        .doc-meta {
+            position: fixed;
+            bottom: clamp(14px, 2vw, 24px);
+            right: clamp(14px, 2vw, 24px);
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--text-faint);
+            z-index: 100;
+            letter-spacing: 0.05em;
             display: flex;
             align-items: center;
-            gap: clamp(0.5rem, 1vw, 0.8rem);
-            padding: var(--card-padding);
-            border-radius: var(--card-radius);
-            background: linear-gradient(135deg, rgba(98, 86, 202, 0.12), rgba(79, 117, 255, 0.08));
-            border: 1px solid var(--border-accent);
+            gap: 0.5em;
         }
 
-        .growth-banner .growth-icon {
-            font-size: clamp(1.5rem, 3vw, 2.5rem);
-        }
-
-        .growth-banner p {
-            font-size: var(--small-size);
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-
-        /* ===========================================
-           BUSINESS MODEL (Slide 8)
-           =========================================== */
-        .revenue-item {
-            display: flex;
-            flex-direction: column;
-            gap: clamp(0.15rem, 0.3vw, 0.25rem);
-        }
-
-        .revenue-item h3 {
-            font-size: var(--h3-size);
-            font-weight: 700;
-        }
-
-        .revenue-item p {
-            font-size: var(--small-size);
-            color: var(--text-secondary);
-        }
-
-        .formula-box {
-            text-align: center;
-            padding: var(--card-padding);
-            border-radius: var(--card-radius);
-            background: linear-gradient(135deg, rgba(0, 230, 118, 0.06), rgba(3, 251, 255, 0.04));
-            border: 1px solid rgba(0, 230, 118, 0.15);
-        }
-
-        .formula-box .formula {
-            font-size: var(--small-size);
-            color: var(--text-secondary);
-            margin-bottom: clamp(0.3rem, 0.6vw, 0.5rem);
-        }
-
-        .formula-box .result {
-            font-size: var(--h2-size);
-            font-weight: 800;
-            color: var(--accent-green);
-        }
-
-        /* ===========================================
-           SKR SLIDE (Slide 10)
-           =========================================== */
-        .skr-hero {
-            text-align: center;
-            padding: var(--card-padding);
-            border-radius: var(--card-radius);
-            background: linear-gradient(135deg, rgba(98, 86, 202, 0.1), rgba(3, 251, 255, 0.05));
-            border: 1px solid var(--border-accent);
-        }
-
-        .skr-hero .skr-amount {
-            font-size: var(--h2-size);
-            font-weight: 800;
-        }
-
-        .skr-hero p {
-            font-size: var(--small-size);
-            color: var(--text-secondary);
-            margin-top: clamp(0.2rem, 0.4vw, 0.3rem);
-        }
-
-        .benefit-card .benefit-icon {
-            font-size: clamp(1.2rem, 2vw, 1.6rem);
-            margin-bottom: clamp(0.2rem, 0.4vw, 0.3rem);
-        }
-
-        .benefit-card h3 {
-            font-size: var(--body-size);
-            font-weight: 700;
-            margin-bottom: clamp(0.15rem, 0.3vw, 0.2rem);
-        }
-
-        .benefit-card p {
-            font-size: var(--tiny-size);
-            color: var(--text-secondary);
-            line-height: 1.35;
+        .doc-meta .live-dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green-glow);
+            animation: pulse 2s ease-in-out infinite;
         }
 
         /* ===========================================
            LOGO
            =========================================== */
         .app-logo {
-            width: clamp(48px, 7vw, 80px);
-            height: clamp(48px, 7vw, 80px);
-            border-radius: clamp(12px, 1.8vw, 20px);
-            object-fit: contain;
-        }
-
-        .app-logo-small {
-            width: clamp(36px, 5vw, 56px);
-            height: clamp(36px, 5vw, 56px);
-            border-radius: clamp(8px, 1.2vw, 14px);
+            width: clamp(40px, 6vw, 60px);
+            height: clamp(40px, 6vw, 60px);
+            border-radius: clamp(10px, 1.5vw, 16px);
             object-fit: contain;
         }
 
         /* ===========================================
-           HOOK SLIDE: two-column with phone
+           RESPONSIVE
            =========================================== */
-        .hook-layout {
-            display: grid;
-            grid-template-columns: 1.2fr 0.8fr;
-            gap: clamp(1.5rem, 4vw, 3rem);
-            align-items: center;
-            width: 100%;
-            max-width: 1100px;
-        }
-
-        .hook-text {
-            display: flex;
-            flex-direction: column;
-            gap: var(--content-gap);
-        }
-
-        .hook-phone {
-            display: flex;
-            justify-content: center;
-        }
-
-        .hook-phone .phone-stroke {
-            width: clamp(140px, 20vw, 240px);
-        }
-
-        .slide.visible .hook-phone .phone-stroke {
-            animation: phoneFloat 4s ease-in-out infinite 0.8s;
-        }
-
-        @media (max-width: 768px) {
-            .hook-layout {
+        @media (max-width: 900px) {
+            .hook-grid,
+            .solution-grid,
+            .cta-grid {
                 grid-template-columns: 1fr;
-                text-align: center;
+                gap: clamp(1rem, 3vw, 2rem);
             }
-            .hook-text { align-items: center; }
-            .hook-phone .phone-stroke {
-                width: clamp(100px, 30vw, 160px);
+            .hook-phone-frame, .solution-phones { display: none; }
+
+            .grid-3, .grid-4 { grid-template-columns: repeat(2, 1fr); }
+            .traction-grid { grid-template-columns: repeat(3, 1fr); }
+            .x-row { grid-template-columns: repeat(3, 1fr); }
+            .compare-head, .compare-row {
+                grid-template-columns: 2fr 1fr 1fr 1fr;
+                font-size: 0.85em;
+            }
+            .builder-grid { grid-template-columns: 1fr; text-align: left; }
+        }
+
+        @media (max-width: 600px) {
+            .problem-grid { grid-template-columns: 1fr; }
+            .grid-2 { grid-template-columns: 1fr; }
+            .grid-3 { grid-template-columns: 1fr; }
+            .traction-grid { grid-template-columns: 1fr 1fr 1fr; }
+            .x-row { grid-template-columns: 1fr 1fr 1fr; }
+            .skr-banner { grid-template-columns: 1fr; gap: 1rem; text-align: center; }
+            .compare-head span:nth-child(3),
+            .compare-row span:nth-child(3) { display: none; }
+            .compare-head, .compare-row { grid-template-columns: 2fr 1fr 1fr; }
+            .hook-meta { display: none; }
+        }
+
+        @media (max-height: 900px) {
+            :root {
+                --pad: clamp(1rem, 2.5vw, 2.2rem);
+                --gap: clamp(0.6rem, 1.2vw, 1.1rem);
+                --gap-sm: clamp(0.35rem, 0.7vw, 0.65rem);
+                --t-h2: clamp(1.2rem, 2vw, 1.6rem);
+                --t-h3: clamp(0.95rem, 1.4vw, 1.2rem);
             }
         }
 
-        /* ===========================================
-           CENTER ALIGNED SLIDES
-           =========================================== */
-        .text-center { text-align: center; }
-        .items-center { align-items: center; }
-        .justify-center { justify-content: center; }
-        .mx-auto { margin-left: auto; margin-right: auto; }
-        .inline-flex { display: inline-flex; }
-        .flex-col { flex-direction: column; }
-        .flex-row { display: flex; flex-direction: row; }
-        .gap-sm { gap: clamp(0.3rem, 0.6vw, 0.5rem); }
+        @media (max-height: 800px) {
+            :root {
+                --pad: clamp(0.85rem, 2vw, 1.8rem);
+                --gap: clamp(0.5rem, 1vw, 0.9rem);
+                --gap-sm: clamp(0.3rem, 0.6vw, 0.55rem);
+                --t-title: clamp(1.4rem, 3.6vmin, 2.4rem);
+                --t-display: clamp(1.8rem, 6vmin, 3.6rem);
+                --t-hero: clamp(2.2rem, 7.5vmin, 4.4rem);
+            }
+        }
 
-        /* ===========================================
-           RESPONSIVE: SHORT VIEWPORTS
-           =========================================== */
         @media (max-height: 700px) {
             :root {
-                --slide-padding: clamp(0.75rem, 3vw, 2rem);
-                --content-gap: clamp(0.5rem, 1.5vw, 1rem);
-                --title-size: clamp(1.5rem, 4.5vw, 3rem);
-                --hero-size: clamp(2.2rem, 8vw, 5rem);
-                --h2-size: clamp(1rem, 2.8vw, 1.8rem);
-                --card-padding: clamp(0.5rem, 1.2vw, 1rem);
+                --pad: clamp(0.75rem, 1.6vw, 1.4rem);
+                --gap: clamp(0.4rem, 0.8vw, 0.7rem);
+                --gap-sm: clamp(0.25rem, 0.5vw, 0.45rem);
+                --t-small: clamp(0.72rem, 0.9vw, 0.82rem);
+                --t-body: clamp(0.82rem, 1vw, 0.92rem);
             }
         }
 
         @media (max-height: 600px) {
             :root {
-                --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem);
-                --content-gap: clamp(0.35rem, 1vw, 0.75rem);
-                --title-size: clamp(1.2rem, 4vw, 2.2rem);
-                --hero-size: clamp(1.8rem, 7vw, 3.5rem);
-                --h2-size: clamp(0.9rem, 2.5vw, 1.5rem);
-                --h3-size: clamp(0.75rem, 1.5vw, 1.1rem);
+                --t-title: clamp(1.2rem, 3.2vmin, 1.9rem);
+                --t-hero: clamp(1.8rem, 6.5vmin, 3.4rem);
             }
-
-            .nav-dots, .slide-counter { display: none; }
-        }
-
-        @media (max-height: 500px) {
-            :root {
-                --slide-padding: clamp(0.4rem, 2vw, 1rem);
-                --title-size: clamp(1rem, 3.5vw, 1.8rem);
-                --hero-size: clamp(1.5rem, 6vw, 2.8rem);
-                --body-size: clamp(0.6rem, 1vw, 0.8rem);
-            }
-        }
-
-        /* RESPONSIVE: NARROW VIEWPORTS */
-        @media (max-width: 768px) {
-            .grid-2x2 { grid-template-columns: 1fr 1fr; gap: clamp(0.4rem, 1vw, 0.6rem); }
-            .grid-3 { grid-template-columns: 1fr; gap: clamp(0.4rem, 1vw, 0.6rem); }
-            .grid-2 { grid-template-columns: 1fr; }
-
-            .compare-header span:nth-child(3),
-            .compare-row span:nth-child(3) {
-                display: none;
-            }
-
-            .compare-header, .compare-row {
-                grid-template-columns: 2fr 1fr 1fr;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .grid-2x2 { grid-template-columns: 1fr; }
-            .badge-row { gap: clamp(0.2rem, 0.5vw, 0.3rem); }
-            .demo-phones { gap: clamp(0.4rem, 1vw, 0.8rem); }
+            .nav-dots, .slide-counter, .doc-meta { display: none; }
         }
 
         /* ===========================================
@@ -1210,17 +1504,17 @@
                 transition-duration: 0.2s !important;
             }
             html { scroll-behavior: auto; }
-            .orb { animation: none !important; }
         }
+
         /* ===========================================
-           PRINT / PDF EXPORT
+           PRINT
            =========================================== */
         @media print {
             html, body {
                 height: auto;
                 overflow: visible;
                 scroll-snap-type: none;
-                background: var(--bg-deep);
+                background: var(--bg);
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
@@ -1238,26 +1532,16 @@
                 break-after: avoid;
             }
 
-            /* Make all reveal animations visible */
             .reveal, .reveal-scale {
                 opacity: 1 !important;
                 transform: none !important;
             }
 
-            /* Hide nav dots if any */
-            .slide-nav {
-                display: none !important;
-            }
+            .progress-bar, .nav-dots, .slide-counter, .doc-meta { display: none !important; }
         }
-
     </style>
 </head>
 <body>
-
-    <!-- Background gradient orbs -->
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
 
     <!-- Progress bar -->
     <div class="progress-bar" id="progressBar"></div>
@@ -1267,77 +1551,97 @@
 
     <!-- Slide counter -->
     <div class="slide-counter" id="slideCounter">
-        <span class="current">01</span> / 13
+        <span class="current">01</span> &nbsp;/&nbsp; 11
+    </div>
+
+    <!-- Top-right meta -->
+    <div class="doc-meta">
+        <span class="live-dot"></span>
+        CASHFLOW · 2026 PITCH
     </div>
 
 
     <!-- ═══════════════════════════════════════════
-         SLIDE 1: HOOK
+         01 - HOOK
          ═══════════════════════════════════════════ -->
     <section class="slide" data-slide="1">
-        <div class="slide-inner text-center items-center">
-            <img src="files/branding/App logo - 512px.png" alt="Cashflow" class="app-logo reveal">
+        <div class="hook-meta">
+            <span><span class="dot"></span>CASHFLOW.FUN</span>
+            <span>SOLANA MOBILE · BUILT IN PUBLIC</span>
+        </div>
 
-            <h1 class="reveal" style="font-size: var(--hero-size); font-weight: 800; letter-spacing: -0.03em; line-height: 1;">
-                <span class="gradient-text">CASHFLOW</span>
-            </h1>
+        <div class="slide-inner">
+            <div class="hook-grid">
+                <div class="hook-left">
+                    <img src="files/branding/App logo - 512px.png" alt="Cashflow" class="app-logo reveal">
 
-            <p class="reveal slide-subtitle" style="max-width: 600px;">
-                Wealth Engine: yield, stocks, metals, and more
-            </p>
+                    <h1 class="hook-headline reveal">
+                        Wealth<br>
+                        <em>engine,</em><br>
+                        on Solana.
+                    </h1>
 
-            <p class="reveal" style="font-size: var(--tiny-size); color: var(--text-tertiary); letter-spacing: 0.08em;">
-                Built in public &bull; For Solana Mobile &bull; Secured by Squads Protocol
-            </p>
+                    <p class="hook-tag reveal">
+                        Track, compare, and manage all your<br>
+                        Solana yield from one mobile app.
+                    </p>
 
-            <div class="reveal" style="width: 50px; height: 2px; background: linear-gradient(90deg, var(--gradient-purple), var(--accent-cyan)); margin: clamp(0.2rem, 0.3vw, 0.3rem) 0; border-radius: 2px;"></div>
+                    <div class="hook-divider reveal"></div>
 
-            <p class="reveal track-record-label">
-                From a builder with a track record
-            </p>
+                    <div class="reveal">
+                        <p class="hook-track-label">Built by a founder with a track record</p>
+                        <div class="stamp-row">
+                            <span class="stamp">$5.2M IPO · DevFun</span>
+                            <span class="stamp">Danger Valley Ducks</span>
+                            <span class="stamp">Sonic Mobius Hackathon winner</span>
+                            <span class="stamp">Sanctum &amp; Bonk tracks</span>
+                            <span class="stamp">Superteam Ukraine</span>
+                        </div>
+                    </div>
+                </div>
 
-            <div class="badge-row reveal" style="justify-content: center;">
-                <span class="badge"><span class="badge-icon">&#9670;</span> $5.2M &mdash; DevFun IPO</span>
-                <span class="badge"><span class="badge-icon">&#9670;</span> 30K Danger Valley Community</span>
-                <span class="badge"><span class="badge-icon">&#9670;</span> Won Sonic Mobius Hackathon</span>
-                <span class="badge"><span class="badge-icon">&#9670;</span> Won Sanctum & Bonk Tracks</span>
-                <span class="badge"><span class="badge-icon">&#9670;</span> Superteam Ukraine</span>
-                <span class="badge"><span class="badge-icon">&#9670;</span> Open-source contributor</span>
+                <div class="hook-phone-frame reveal-scale">
+                    <div class="phone">
+                        <img src="files/screenshots/Main.png" alt="Cashflow main screen">
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
 
     <!-- ═══════════════════════════════════════════
-         SLIDE 2: THE PROBLEM
+         02 - PROBLEM
          ═══════════════════════════════════════════ -->
     <section class="slide" data-slide="2">
         <div class="slide-inner">
             <div class="reveal">
-                <p class="slide-label">The Problem</p>
-                <h2 class="slide-title">Managing yield on Solana is <span class="accent">broken.</span></h2>
+                <p class="eyebrow">02 / The Problem</p>
+                <h2 class="title" style="margin-top: 0.6em;">
+                    Managing yield on Solana is <em>broken.</em>
+                </h2>
             </div>
 
-            <div class="grid-2x2 reveal" style="transition-delay: 0.15s;">
-                <div class="glass problem-card">
-                    <div class="icon">&#x1F4A5;</div>
-                    <h3>Fragmented</h3>
-                    <p>Yield across Jupiter, Kamino, Drift and more. No single view.</p>
+            <div class="problem-grid reveal" style="transition-delay: 0.18s;">
+                <div class="problem-card">
+                    <span class="pnum">P.01</span>
+                    <h3>Fragmented across protocols</h3>
+                    <p>Yield lives across Jupiter, Kamino, Drift and others. No single view of where your capital sits or what it earns.</p>
                 </div>
-                <div class="glass problem-card">
-                    <div class="icon">&#x1F4F1;</div>
-                    <h3>No Mobile</h3>
-                    <p>Every protocol is desktop-first. Clunky browser tabs on phone.</p>
+                <div class="problem-card">
+                    <span class="pnum">P.02</span>
+                    <h3>Desktop-first, every time</h3>
+                    <p>Every protocol is built for desktop. On mobile, you get clunky browser tabs and a bad approval flow.</p>
                 </div>
-                <div class="glass problem-card">
-                    <div class="icon">&#x1F512;</div>
-                    <h3>Insecure</h3>
-                    <p>No multi-sig or hardware wallet support on mobile.</p>
+                <div class="problem-card">
+                    <span class="pnum">P.03</span>
+                    <h3>No real security on mobile</h3>
+                    <p>Multi-sig and hardware support effectively don't exist on phones. Hot wallets only - even for whale-size positions.</p>
                 </div>
-                <div class="glass problem-card">
-                    <div class="icon">&#x1F504;</div>
-                    <h3>Painful Switching</h3>
-                    <p>Withdraw &rarr; find new site &rarr; deposit. Every single time.</p>
+                <div class="problem-card">
+                    <span class="pnum">P.04</span>
+                    <h3>Painful position switching</h3>
+                    <p>Withdraw &rarr; find new site &rarr; deposit. Every time a better APY shows up. Most users never bother.</p>
                 </div>
             </div>
         </div>
@@ -1345,44 +1649,57 @@
 
 
     <!-- ═══════════════════════════════════════════
-         SLIDE 3: THE SOLUTION
+         03 - SOLUTION
          ═══════════════════════════════════════════ -->
     <section class="slide" data-slide="3">
         <div class="slide-inner">
-            <div class="solution-layout">
+            <div class="solution-grid">
                 <div class="solution-text">
                     <div class="reveal">
-                        <p class="slide-label">The Solution</p>
-                        <h2 class="slide-title">
-                            Track, compare, and manage <span class="gradient-text">all your Solana yield</span> from one mobile app.
+                        <p class="eyebrow">03 / The Solution</p>
+                        <h2 class="title" style="margin-top: 0.6em;">
+                            One mobile app for <em>every</em> Solana yield.
                         </h2>
                     </div>
 
-                    <p class="reveal slide-subtitle">
-                        Self-custodial. Multi-sig secured. Mobile-first.
+                    <p class="lead reveal">
+                        Self-custodial. <em>Multi-sig secured.</em> Mobile-first.
+                        See every APY, switch positions in a tap, sleep at night.
                     </p>
 
                     <div class="protocol-row reveal">
                         <span class="protocol-pill">
-                            <img src="files/protocol-icons/jupiter.svg" alt="Jupiter">
+                            <img src="files/protocol-icons/jupiter.svg" alt="">
                             Jupiter Lend
                         </span>
                         <span class="protocol-pill">
-                            <img src="files/protocol-icons/kamino.svg" alt="Kamino">
+                            <img src="files/protocol-icons/kamino.svg" alt="">
                             Kamino
                         </span>
                         <span class="protocol-pill">
-                            <img src="files/protocol-icons/drift.svg" alt="Drift">
+                            <img src="files/protocol-icons/drift.svg" alt="">
                             Drift
+                        </span>
+                        <span class="protocol-pill">
+                            <img src="files/protocol-icons/onre.jpg" alt="">
+                            Onre
+                        </span>
+                        <span class="protocol-pill">
+                            <img src="files/protocol-icons/solomon.svg" alt="">
+                            Solomon
+                        </span>
+                        <span class="protocol-pill">
+                            <img src="files/protocol-icons/perena.jpg" alt="">
+                            Perena
                         </span>
                     </div>
                 </div>
 
-                <div class="solution-phones reveal-scale" style="transition-delay: 0.2s;">
-                    <div class="phone-stroke">
+                <div class="solution-phones reveal-scale" style="transition-delay: 0.18s;">
+                    <div class="sol-phone sol-phone-back">
                         <img src="files/screenshots/Earn.png" alt="Earn screen">
                     </div>
-                    <div class="phone-stroke featured">
+                    <div class="sol-phone sol-phone-front">
                         <img src="files/screenshots/Main.png" alt="Main screen">
                     </div>
                 </div>
@@ -1392,65 +1709,65 @@
 
 
     <!-- ═══════════════════════════════════════════
-         SLIDE 4: COMPARISON TABLE
+         04 - COMPARISON
          ═══════════════════════════════════════════ -->
     <section class="slide" data-slide="4">
         <div class="slide-inner">
             <div class="reveal">
-                <p class="slide-label">Why Cashflow</p>
-                <h2 class="slide-title">All green. No compromises.</h2>
+                <p class="eyebrow">04 / Why Cashflow</p>
+                <h2 class="title" style="margin-top: 0.6em;">
+                    All green. <em>No compromises.</em>
+                </h2>
             </div>
 
-            <div class="glass-featured reveal" style="transition-delay: 0.1s;">
-                <div class="compare-table">
-                    <div class="compare-header">
-                        <span></span>
-                        <span>Manual</span>
-                        <span>Custodial</span>
-                        <span style="color: var(--accent-cyan);">Cashflow</span>
-                    </div>
-                    <div class="compare-row">
-                        <span>Non-custodial</span>
-                        <span><span class="dot green"></span></span>
-                        <span><span class="dot red"></span></span>
-                        <span class="cashflow-col"><span class="dot green"></span></span>
-                    </div>
-                    <div class="compare-row">
-                        <span>Maximize yield</span>
-                        <span><span class="dot yellow"></span></span>
-                        <span><span class="dot red"></span></span>
-                        <span class="cashflow-col"><span class="dot green"></span></span>
-                    </div>
-                    <div class="compare-row">
-                        <span>Select stablecoin</span>
-                        <span><span class="dot yellow"></span></span>
-                        <span><span class="dot red"></span></span>
-                        <span class="cashflow-col"><span class="dot green"></span></span>
-                    </div>
-                    <div class="compare-row">
-                        <span>Instant withdraw</span>
-                        <span><span class="dot yellow"></span></span>
-                        <span><span class="dot red"></span></span>
-                        <span class="cashflow-col"><span class="dot green"></span></span>
-                    </div>
-                    <div class="compare-row">
-                        <span>Easy change position</span>
-                        <span><span class="dot red"></span></span>
-                        <span><span class="dot red"></span></span>
-                        <span class="cashflow-col"><span class="dot green"></span></span>
-                    </div>
-                    <div class="compare-row">
-                        <span>Easy to use</span>
-                        <span><span class="dot red"></span></span>
-                        <span><span class="dot green"></span></span>
-                        <span class="cashflow-col"><span class="dot green"></span></span>
-                    </div>
-                    <div class="compare-row">
-                        <span>Security</span>
-                        <span><span class="dot green"></span></span>
-                        <span><span class="dot yellow"></span></span>
-                        <span class="cashflow-col"><span class="dot green"></span></span>
-                    </div>
+            <div class="compare reveal" style="transition-delay: 0.15s;">
+                <div class="compare-head">
+                    <span></span>
+                    <span>Manual</span>
+                    <span>Custodial</span>
+                    <span class="mark-cashflow">Cashflow</span>
+                </div>
+                <div class="compare-row">
+                    <span>Non-custodial</span>
+                    <span><span class="dot good"></span></span>
+                    <span><span class="dot bad"></span></span>
+                    <span><span class="dot good"></span></span>
+                </div>
+                <div class="compare-row">
+                    <span>Maximize yield</span>
+                    <span><span class="dot warn"></span></span>
+                    <span><span class="dot bad"></span></span>
+                    <span><span class="dot good"></span></span>
+                </div>
+                <div class="compare-row">
+                    <span>Select stablecoin</span>
+                    <span><span class="dot warn"></span></span>
+                    <span><span class="dot bad"></span></span>
+                    <span><span class="dot good"></span></span>
+                </div>
+                <div class="compare-row">
+                    <span>Instant withdraw</span>
+                    <span><span class="dot warn"></span></span>
+                    <span><span class="dot bad"></span></span>
+                    <span><span class="dot good"></span></span>
+                </div>
+                <div class="compare-row">
+                    <span>Easy position switching</span>
+                    <span><span class="dot bad"></span></span>
+                    <span><span class="dot bad"></span></span>
+                    <span><span class="dot good"></span></span>
+                </div>
+                <div class="compare-row">
+                    <span>Easy to use</span>
+                    <span><span class="dot bad"></span></span>
+                    <span><span class="dot good"></span></span>
+                    <span><span class="dot good"></span></span>
+                </div>
+                <div class="compare-row">
+                    <span>Security</span>
+                    <span><span class="dot good"></span></span>
+                    <span><span class="dot warn"></span></span>
+                    <span><span class="dot good"></span></span>
                 </div>
             </div>
         </div>
@@ -1458,30 +1775,27 @@
 
 
     <!-- ═══════════════════════════════════════════
-         SLIDE 5: HOW IT WORKS
+         05 - MARKET
          ═══════════════════════════════════════════ -->
     <section class="slide" data-slide="5">
         <div class="slide-inner">
-            <div class="reveal text-center">
-                <p class="slide-label">How It Works</p>
-                <h2 class="slide-title">Three steps. That's it.</h2>
+            <div class="reveal">
+                <p class="eyebrow">05 / The Market</p>
+                <h2 class="title" style="margin-top: 0.6em;">
+                    Two segments. <em>Massive growth.</em>
+                </h2>
             </div>
 
-            <div class="grid-3 reveal" style="transition-delay: 0.15s;">
-                <div class="glass step-card">
-                    <span class="step-number">01</span>
-                    <h3>Create Vault</h3>
-                    <p>Connect your Solana mobile wallet to create a Squad multi-sig vault for maximum security.</p>
+            <div class="grid-2 reveal" style="transition-delay: 0.15s;">
+                <div class="segment-card">
+                    <span class="seg-range">UP TO $50K · DEPOSITS</span>
+                    <h3>Retail yield seekers</h3>
+                    <p class="seg-desc">Want maximum APY without doing research every week. Need a fast way to compare rates and switch positions. Currently juggling four tabs and giving up.</p>
                 </div>
-                <div class="glass step-card">
-                    <span class="step-number">02</span>
-                    <h3>See All Yields</h3>
-                    <p>Compare real-time APYs across Jupiter, Kamino, and Drift &mdash; all stablecoins, one dashboard.</p>
-                </div>
-                <div class="glass step-card">
-                    <span class="step-number">03</span>
-                    <h3>Deposit & Earn</h3>
-                    <p>Deposit into the best yield in a few taps. Track your positions in real time.</p>
+                <div class="segment-card">
+                    <span class="seg-range">$50K+ · DEPOSITS</span>
+                    <h3>Whales &amp; institutions</h3>
+                    <p class="seg-desc">Won't touch a hot wallet at scale. Need multi-sig, ability to split across protocols and stablecoins, and a paper trail. Today, mobile is a no-go.</p>
                 </div>
             </div>
         </div>
@@ -1489,164 +1803,134 @@
 
 
     <!-- ═══════════════════════════════════════════
-         SLIDE 6: DEMO
+         06 - BUSINESS MODEL
          ═══════════════════════════════════════════ -->
     <section class="slide" data-slide="6">
-        <div class="slide-inner" style="justify-content: center; align-items: center; text-align: center;">
+        <div class="slide-inner">
             <div class="reveal">
-                <h2 class="slide-title gradient-text" style="font-size: clamp(3rem, 8vw, 7rem);">Live Demo</h2>
+                <p class="eyebrow">06 / Business Model</p>
+                <h2 class="title" style="margin-top: 0.6em;">
+                    Simple. <em>Aligned with users.</em>
+                </h2>
+            </div>
+
+            <div class="grid-2 reveal" style="transition-delay: 0.15s;">
+                <div class="revenue-item">
+                    <h3>Performance fee</h3>
+                    <p><span class="pct">5%</span> of yield income. We earn only when users earn.</p>
+                </div>
+                <div class="revenue-item">
+                    <h3>Badge fees</h3>
+                    <p>Small minting fees for reward badges &amp; achievement NFTs.</p>
+                </div>
+            </div>
+
+            <div class="formula reveal" style="transition-delay: 0.28s;">
+                <p class="formula-eq">50K users × $10K avg deposit × 8% APY × 5% fee</p>
+                <p class="formula-result">$2M<em>ARR</em></p>
             </div>
         </div>
     </section>
 
 
     <!-- ═══════════════════════════════════════════
-         SLIDE 7: THE MARKET
+         07 - TRACTION
          ═══════════════════════════════════════════ -->
     <section class="slide" data-slide="7">
         <div class="slide-inner">
             <div class="reveal">
-                <p class="slide-label">The Market</p>
-                <h2 class="slide-title">Two segments. Massive growth.</h2>
+                <p class="eyebrow">07 / Traction</p>
+                <h2 class="title" style="margin-top: 0.6em;">
+                    Building in public. <em>Growing organically.</em>
+                </h2>
             </div>
 
-            <div class="grid-2 reveal" style="transition-delay: 0.12s;">
-                <div class="glass segment-card">
-                    <h3>Retail Yield Seekers</h3>
-                    <p style="color: var(--accent-cyan); font-size: var(--tiny-size); margin-bottom: clamp(0.2rem, 0.4vw, 0.3rem);">Up to $50K deposits</p>
-                    <p>Want maximum APY. Need a simple way to compare rates and switch positions fast. Currently juggling multiple websites.</p>
-                </div>
-                <div class="glass segment-card">
-                    <h3>Whales & Institutions</h3>
-                    <p style="color: var(--accent-cyan); font-size: var(--tiny-size); margin-bottom: clamp(0.2rem, 0.4vw, 0.3rem);">$50K+ deposits</p>
-                    <p>Care about security and diversification. Need multi-sig protection and ability to split across protocols and stablecoins.</p>
+            <div class="reveal" style="transition-delay: 0.15s;">
+                <p class="traction-section-label">Daily video updates on X</p>
+                <div class="x-row">
+                    <img src="files/IMG_0995.jpg" alt="X post screenshot">
+                    <img src="files/IMG_0996.PNG" alt="X post screenshot">
+                    <img src="files/IMG_0997.PNG" alt="X post screenshot">
                 </div>
             </div>
 
+            <div class="traction-grid reveal" style="transition-delay: 0.28s;">
+                <div class="metric">
+                    <span class="metric-value">100<span class="plus">+</span></span>
+                    <span class="metric-label">Waitlist signups</span>
+                    <span class="metric-desc">Early users ready for launch</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">2,330</span>
+                    <span class="metric-label">X followers</span>
+                    <span class="metric-desc">@heymike777</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">625</span>
+                    <span class="metric-label">Telegram</span>
+                    <span class="metric-desc">Private channel</span>
+                </div>
+            </div>
         </div>
     </section>
 
 
     <!-- ═══════════════════════════════════════════
-         SLIDE 8: BUSINESS MODEL
+         08 - SKR INTEGRATION
          ═══════════════════════════════════════════ -->
     <section class="slide" data-slide="8">
         <div class="slide-inner">
             <div class="reveal">
-                <p class="slide-label">Business Model</p>
-                <h2 class="slide-title">Simple. Aligned with users.</h2>
+                <p class="eyebrow">08 / SKR Integration</p>
+                <h2 class="title" style="margin-top: 0.6em;">
+                    Built for the <em>Solana Mobile</em> ecosystem.
+                </h2>
             </div>
 
-            <div class="grid-2 reveal" style="transition-delay: 0.12s;">
-                <div class="glass revenue-item">
-                    <h3>Performance Fee</h3>
-                    <p><strong style="color: var(--text-primary);">5%</strong> of user's yield income. We earn only when users earn.</p>
-                </div>
-                <div class="glass revenue-item">
-                    <h3>Badge Fees</h3>
-                    <p>Small minting fees for reward badges & achievement NFTs.</p>
+            <div class="skr-banner reveal" style="transition-delay: 0.15s;">
+                <div class="skr-stake">50K<span class="skr-stake-unit"> SKR</span></div>
+                <div class="skr-text">
+                    <h3>Stake <em>50K SKR</em> &mdash; we cover your gas.</h3>
+                    <p>Every transaction on Cashflow becomes gas-free. Real utility for SKR holders, an exclusive perk for Seeker owners.</p>
                 </div>
             </div>
 
-            <div class="formula-box reveal" style="transition-delay: 0.2s;">
-                <p class="formula">50K users &times; $10K avg deposit &times; 8% avg APY &times; 5% fee</p>
-                <p class="result">$2M ARR</p>
+            <div class="grid-3 reveal" style="transition-delay: 0.25s;">
+                <div class="benefit-card">
+                    <span class="b-num">B.01</span>
+                    <h3>Drives SKR staking</h3>
+                    <p>Creates real demand and utility for SKR holders.</p>
+                </div>
+                <div class="benefit-card">
+                    <span class="b-num">B.02</span>
+                    <h3>Rewards Seeker owners</h3>
+                    <p>Exclusive benefit for the Solana Mobile community.</p>
+                </div>
+                <div class="benefit-card">
+                    <span class="b-num">B.03</span>
+                    <h3>Zero-friction DeFi</h3>
+                    <p>Gas-free yield management on mobile, end to end.</p>
+                </div>
             </div>
         </div>
     </section>
 
 
     <!-- ═══════════════════════════════════════════
-         SLIDE 9: TRACTION
+         09 - ROADMAP
          ═══════════════════════════════════════════ -->
     <section class="slide" data-slide="9">
         <div class="slide-inner">
             <div class="reveal">
-                <p class="slide-label">Traction</p>
-                <h2 class="slide-title">Building in public. Growing organically.</h2>
+                <p class="eyebrow">09 / Roadmap</p>
+                <h2 class="title" style="margin-top: 0.6em;">
+                    Where we're going.
+                </h2>
             </div>
 
-            <!-- Build in Public — X screenshots -->
-            <div class="reveal" style="transition-delay: 0.12s;">
-                <p class="traction-section-title">Daily video updates on X</p>
-                <div class="x-screenshots">
-                    <img src="files/IMG_0995.jpg" alt="X post screenshot" class="x-screenshot">
-                    <img src="files/IMG_0996.PNG" alt="X post screenshot" class="x-screenshot">
-                    <img src="files/IMG_0997.PNG" alt="X post screenshot" class="x-screenshot">
-                </div>
-            </div>
-
-            <!-- Waitlist + Community -->
-            <div class="grid-3 reveal" style="transition-delay: 0.22s;">
-                <div class="glass metric-card">
-                    <p class="metric-value accent">100+</p>
-                    <p class="metric-label">Waitlist Signups</p>
-                    <p class="metric-desc">Early users ready for launch</p>
-                </div>
-                <div class="glass metric-card">
-                    <p class="metric-value accent">2,330</p>
-                    <p class="metric-label">X Followers</p>
-                    <p class="metric-desc">@heymike777</p>
-                </div>
-                <div class="glass metric-card">
-                    <p class="metric-value accent">625</p>
-                    <p class="metric-label">Telegram Subscribers</p>
-                    <p class="metric-desc">Private channel</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-
-    <!-- ═══════════════════════════════════════════
-         SLIDE 10: SKR INTEGRATION
-         ═══════════════════════════════════════════ -->
-    <section class="slide" data-slide="10">
-        <div class="slide-inner">
-            <div class="reveal">
-                <p class="slide-label">SKR Integration</p>
-                <h2 class="slide-title">Built for the Solana Mobile ecosystem.</h2>
-            </div>
-
-            <div class="skr-hero reveal" style="transition-delay: 0.1s;">
-                <p class="skr-amount gradient-text">Have 50K staked SKR? We cover your gas fees.</p>
-                <p>Stake 50K SKR tokens and every transaction on Cashflow is gas-free.</p>
-            </div>
-
-            <div class="grid-3 reveal" style="transition-delay: 0.2s;">
-                <div class="glass benefit-card">
-                    <div class="benefit-icon">&#x26A1;</div>
-                    <h3>Drives SKR Staking</h3>
-                    <p>Creates real utility for SKR token holders</p>
-                </div>
-                <div class="glass benefit-card">
-                    <div class="benefit-icon">&#x1F3C6;</div>
-                    <h3>Rewards Seeker Owners</h3>
-                    <p>Exclusive benefit for Solana Mobile community</p>
-                </div>
-                <div class="glass benefit-card">
-                    <div class="benefit-icon">&#x2728;</div>
-                    <h3>Zero Friction DeFi</h3>
-                    <p>Gas-free yield management on mobile</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-
-    <!-- ═══════════════════════════════════════════
-         SLIDE 11: ROADMAP
-         ═══════════════════════════════════════════ -->
-    <section class="slide" data-slide="11">
-        <div class="slide-inner">
-            <div class="reveal">
-                <p class="slide-label">Roadmap</p>
-                <h2 class="slide-title">Where we're going.</h2>
-            </div>
-
-            <div class="grid-3 reveal" style="transition-delay: 0.12s;">
-                <div class="glass roadmap-col roadmap-active">
-                    <h3>Q1 2026</h3>
+            <div class="grid-3 reveal" style="transition-delay: 0.15s;">
+                <div class="roadmap-col roadmap-shipped">
+                    <h3>Q1 2026 <span class="q-tag">SHIPPED</span></h3>
                     <ul>
                         <li>3 protocols integrated</li>
                         <li>Mainnet tested</li>
@@ -1654,22 +1938,22 @@
                         <li>Submit to dApp Store</li>
                     </ul>
                 </div>
-                <div class="glass roadmap-col">
-                    <h3>Q2 2026</h3>
+                <div class="roadmap-col roadmap-active">
+                    <h3>Q2 2026 <span class="q-tag">SHIPPING</span></h3>
                     <ul>
                         <li>Position switching</li>
-                        <li>More protocols & RWA</li>
+                        <li>More protocols &amp; RWA</li>
                         <li>APY push notifications</li>
                         <li>Reward badges</li>
                     </ul>
                 </div>
-                <div class="glass roadmap-col">
-                    <h3>Q3 2026</h3>
+                <div class="roadmap-col">
+                    <h3>Q3 2026 <span class="q-tag">NEXT</span></h3>
                     <ul>
-                        <li>Metals & Stocks</li>
+                        <li>Metals &amp; stocks</li>
                         <li>Whale-tier features</li>
                         <li>Analytics dashboard</li>
-                        <li>iOS & Android launch</li>
+                        <li>iOS &amp; Android launch</li>
                     </ul>
                 </div>
             </div>
@@ -1678,48 +1962,33 @@
 
 
     <!-- ═══════════════════════════════════════════
-         SLIDE 12: THE BUILDER
+         10 - BUILDER
          ═══════════════════════════════════════════ -->
-    <section class="slide" data-slide="12">
+    <section class="slide" data-slide="10">
         <div class="slide-inner">
             <div class="reveal">
-                <p class="slide-label">The Builder</p>
-                <h2 class="slide-title">Solo founder. Proven track record.</h2>
+                <p class="eyebrow">10 / The Builder</p>
+                <h2 class="title" style="margin-top: 0.6em;">
+                    Solo founder. <em>Proven track record.</em>
+                </h2>
             </div>
 
-            <div class="glass-featured reveal" style="transition-delay: 0.1s; display: flex; flex-direction: column; gap: var(--content-gap);">
-                <div class="builder-profile">
-                    <img src="files/branding/profile.png" alt="Mike Timashov" class="profile-pic">
-                    <div class="builder-info">
-                        <h3 style="font-size: var(--h2-size); font-weight: 700;">Mike Timashov</h3>
-                        <p style="font-size: var(--small-size); color: var(--accent-cyan);">Founder & Developer</p>
-                    </div>
+            <div class="builder-grid reveal" style="transition-delay: 0.15s;">
+                <div class="builder-photo">
+                    <img src="files/branding/profile.png" alt="Mike Timashov">
+                    <span class="photo-stamp">FOUNDER</span>
                 </div>
+                <div class="builder-content">
+                    <h3>Mike Timashov</h3>
+                    <p class="role">FOUNDER · ENGINEER · @HEYMIKE777</p>
 
-                <div class="builder-achievements">
-                    <div class="achievement">
-                        <span class="check">&#10003;</span>
-                        <span><strong>$5.2M</strong> sold-out IPO on DevFun</span>
-                    </div>
-                    <div class="achievement">
-                        <span class="check">&#10003;</span>
-                        <span><strong>30K community</strong> &mdash; Danger Valley Ducks NFT (sold out within 7 mins)</span>
-                    </div>
-                    <div class="achievement">
-                        <span class="check">&#10003;</span>
-                        <span><strong>2nd place</strong> Sonic Mobius Hackathon & Kumekathon</span>
-                    </div>
-                    <div class="achievement">
-                        <span class="check">&#10003;</span>
-                        <span>Won <strong>Sanctum & Build for Bonk</strong> sidetracks at Colosseum hackathons</span>
-                    </div>
-                    <div class="achievement">
-                        <span class="check">&#10003;</span>
-                        <span><strong>Superteam Ukraine</strong> grant recipient</span>
-                    </div>
-                    <div class="achievement">
-                        <span class="check">&#10003;</span>
-                        <span><strong>Open-source</strong> contributor</span>
+                    <div class="achievements">
+                        <div class="achievement"><span><strong>$5.2M</strong> sold-out IPO on DevFun</span></div>
+                        <div class="achievement"><span><strong>30K community</strong> &mdash; Danger Valley Ducks NFT, sold out in 7 minutes</span></div>
+                        <div class="achievement"><span><strong>2nd place</strong> Sonic Mobius Hackathon &amp; Kumekathon</span></div>
+                        <div class="achievement"><span>Won <strong>Sanctum &amp; Build for Bonk</strong> sidetracks at Colosseum</span></div>
+                        <div class="achievement"><span><strong>Superteam Ukraine</strong> grant recipient</span></div>
+                        <div class="achievement"><span>Open-source contributor across the Solana ecosystem</span></div>
                     </div>
                 </div>
             </div>
@@ -1728,34 +1997,36 @@
 
 
     <!-- ═══════════════════════════════════════════
-         SLIDE 13: CALL TO ACTION
+         11 - CTA
          ═══════════════════════════════════════════ -->
-    <section class="slide" data-slide="13">
-        <div class="slide-inner text-center items-center">
-            <img src="files/branding/App logo - 512px.png" alt="Cashflow" class="app-logo-small reveal">
+    <section class="slide" data-slide="11">
+        <div class="slide-inner">
+            <div class="cta-grid">
+                <div class="cta-left">
+                    <p class="eyebrow reveal">11 / Try It</p>
 
-            <h2 class="reveal" style="font-size: var(--hero-size); font-weight: 800; letter-spacing: -0.03em; line-height: 1;">
-                <span class="gradient-text">CASHFLOW</span>
-            </h2>
+                    <h2 class="cta-headline reveal">
+                        Wealth<br>
+                        <em>engine.</em>
+                    </h2>
 
-            <p class="reveal slide-subtitle">Wealth Engine: yield, stocks, metals, and more.</p>
+                    <p class="cta-tag reveal">Yield, stocks, metals, and more &mdash; on Solana.</p>
 
-            <div class="reveal" style="transition-delay: 0.2s;">
-                <div class="qr-box">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://cashflow.fun" alt="QR Code — cashflow.fun">
+                    <div class="cta-links reveal" style="transition-delay: 0.25s;">
+                        <a href="https://cashflow.fun" class="cta-link" target="_blank" rel="noopener">cashflow.fun</a>
+                        <a href="mailto:mike@cashflow.fun" class="cta-link">mike@cashflow.fun</a>
+                        <a href="https://x.com/cashflow_fi" class="cta-link" target="_blank" rel="noopener">x.com/cashflow_fi</a>
+                        <a href="https://x.com/heymike777" class="cta-link" target="_blank" rel="noopener">x.com/heymike777</a>
+                        <a href="https://t.me/mike_cashflow" class="cta-link" target="_blank" rel="noopener">t.me/mike_cashflow</a>
+                    </div>
                 </div>
-                <p style="font-size: var(--small-size); color: var(--text-tertiary); margin-top: clamp(0.3rem, 0.6vw, 0.5rem);">Scan to try the app</p>
-            </div>
 
-            <div class="cta-links reveal" style="transition-delay: 0.3s;">
-                <a href="https://cashflow.fun" class="cta-link" target="_blank" rel="noopener"><strong>cashflow.fun</strong></a>
-                <a href="mailto:mike@cashflow.fun" class="cta-link">mike@cashflow.fun</a>
-                <a href="https://x.com/cashflow_fi" class="cta-link" target="_blank" rel="noopener">@cashflow_fi</a>
-            </div>
-
-            <div class="cta-links reveal" style="transition-delay: 0.4s;">
-                <a href="https://x.com/heymike777" class="cta-link" target="_blank" rel="noopener">X: @heymike777</a>
-                <a href="https://t.me/mike_cashflow" class="cta-link" target="_blank" rel="noopener">TG: @mike_cashflow</a>
+                <div class="qr-card reveal-scale" style="transition-delay: 0.3s;">
+                    <div class="qr-box">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://cashflow.fun" alt="QR cashflow.fun">
+                    </div>
+                    <span class="qr-meta">Scan &rarr; cashflow.fun</span>
+                </div>
             </div>
         </div>
     </section>
@@ -1770,8 +2041,6 @@
                 this.slides = document.querySelectorAll('.slide');
                 this.totalSlides = this.slides.length;
                 this.currentSlide = 0;
-                this.isScrolling = false;
-                this.scrollTimeout = null;
 
                 this.init();
             }
@@ -1783,17 +2052,9 @@
                 this.setupTouchNav();
                 this.updateUI();
 
-                /* Demo video play button */
-                const playBtn = document.getElementById('demo-play-btn');
-                if (playBtn) {
-                    playBtn.addEventListener('click', () => this.toggleDemoVideo());
-                }
-
-                /* Mark first slide visible immediately */
                 this.slides[0].classList.add('visible');
             }
 
-            /* --- Nav Dots --- */
             createNavDots() {
                 const nav = document.getElementById('navDots');
                 for (let i = 0; i < this.totalSlides; i++) {
@@ -1805,7 +2066,6 @@
                 }
             }
 
-            /* --- Intersection Observer for animations --- */
             setupIntersectionObserver() {
                 const observer = new IntersectionObserver((entries) => {
                     entries.forEach(entry => {
@@ -1823,15 +2083,8 @@
                 this.slides.forEach(slide => observer.observe(slide));
             }
 
-            /* --- Keyboard Navigation --- */
             setupKeyboardNav() {
                 document.addEventListener('keydown', (e) => {
-                    // Space toggles video on demo slide (slide 6)
-                    if (e.key === ' ' && this.currentSlide === 5) {
-                        e.preventDefault();
-                        this.toggleDemoVideo();
-                        return;
-                    }
                     switch(e.key) {
                         case 'ArrowDown':
                         case 'ArrowRight':
@@ -1858,21 +2111,6 @@
                 });
             }
 
-            /* --- Demo Video Toggle --- */
-            toggleDemoVideo() {
-                const video = document.getElementById('demo-video');
-                const btn = document.getElementById('demo-play-btn');
-                if (!video) return;
-                if (video.paused) {
-                    video.play();
-                    btn.classList.add('hidden');
-                } else {
-                    video.pause();
-                    btn.classList.remove('hidden');
-                }
-            }
-
-            /* --- Touch / Swipe Navigation --- */
             setupTouchNav() {
                 let touchStartY = 0;
                 let touchStartX = 0;
@@ -1886,7 +2124,6 @@
                     const dy = touchStartY - e.changedTouches[0].clientY;
                     const dx = touchStartX - e.changedTouches[0].clientX;
 
-                    /* Only register vertical swipes */
                     if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50) {
                         if (dy > 0) this.nextSlide();
                         else this.prevSlide();
@@ -1894,7 +2131,6 @@
                 }, { passive: true });
             }
 
-            /* --- Slide Navigation --- */
             nextSlide() {
                 if (this.currentSlide < this.totalSlides - 1) {
                     this.goToSlide(this.currentSlide + 1);
@@ -1911,25 +2147,20 @@
                 this.slides[index].scrollIntoView({ behavior: 'smooth' });
             }
 
-            /* --- Update UI elements --- */
             updateUI() {
-                /* Progress bar */
                 const progress = ((this.currentSlide + 1) / this.totalSlides) * 100;
                 document.getElementById('progressBar').style.width = progress + '%';
 
-                /* Nav dots */
                 const dots = document.querySelectorAll('.nav-dot');
                 dots.forEach((dot, i) => {
                     dot.classList.toggle('active', i === this.currentSlide);
                 });
 
-                /* Slide counter */
                 const num = String(this.currentSlide + 1).padStart(2, '0');
                 document.querySelector('.slide-counter .current').textContent = num;
             }
         }
 
-        /* Initialize on load */
         document.addEventListener('DOMContentLoaded', () => {
             new SlidePresentation();
         });
