@@ -913,8 +913,8 @@
             border: 1px solid var(--line);
             object-fit: cover;
             object-position: top;
-            aspect-ratio: 4/3;
-            max-height: 32vh;
+            aspect-ratio: 3/6;
+            max-height: 58vh;
             background: var(--surface);
         }
 
@@ -1040,90 +1040,179 @@
         /* ===========================================
            SLIDE 9 - ROADMAP
            =========================================== */
-        .roadmap-col {
-            padding: clamp(1.2rem, 2.2vw, 1.7rem);
-            background: var(--surface);
-            border: 1px solid var(--line);
-            border-radius: var(--radius);
+        .roadmap-timeline {
+            --rm-node-top: clamp(28px, 3vw, 38px);
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: clamp(0.7rem, 1.4vw, 1.2rem);
+            position: relative;
+            padding-top: var(--rm-node-top);
+        }
+
+        /* Track line — Q1 center → Q4 center */
+        .roadmap-timeline::before {
+            content: '';
+            position: absolute;
+            top: calc(var(--rm-node-top) + 6px);
+            left: 12.5%;
+            right: 12.5%;
+            height: 1px;
+            background: var(--line-2);
+            z-index: 0;
+        }
+
+        /* Progress overlay — Q1 center → Q2 center */
+        .roadmap-timeline::after {
+            content: '';
+            position: absolute;
+            top: calc(var(--rm-node-top) + 6px);
+            left: 12.5%;
+            width: 25%;
+            height: 1px;
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green-glow);
+            z-index: 0;
+        }
+
+        .rm-col {
             display: flex;
             flex-direction: column;
-            gap: clamp(0.6rem, 1.2vw, 0.9rem);
+            gap: clamp(0.55rem, 1.1vw, 0.85rem);
             position: relative;
         }
 
-        .roadmap-col h3 {
-            font-family: var(--sans);
-            font-size: var(--t-h3);
-            font-weight: 600;
-            color: var(--text);
-            letter-spacing: -0.01em;
+        .rm-node {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--bg);
+            border: 1.5px solid var(--line-strong);
+            align-self: center;
+            z-index: 1;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .rm-shipped .rm-node {
+            background: var(--green);
+            border-color: var(--green);
+        }
+
+        .rm-active .rm-node {
+            background: var(--green);
+            border-color: var(--green);
+            box-shadow: 0 0 0 4px var(--green-12), 0 0 14px var(--green-glow);
+            animation: rmPulse 2.4s ease-in-out infinite;
+        }
+
+        @keyframes rmPulse {
+            0%, 100% {
+                box-shadow: 0 0 0 3px var(--green-12), 0 0 10px var(--green-glow);
+            }
+            50% {
+                box-shadow: 0 0 0 7px var(--green-12), 0 0 18px var(--green-glow);
+            }
+        }
+
+        .rm-now {
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--green);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .rm-quarter {
             display: flex;
             align-items: baseline;
             justify-content: space-between;
+            gap: 0.5em;
+            padding-bottom: clamp(0.4rem, 0.7vw, 0.55rem);
+            border-bottom: 1px solid var(--line);
+            flex-wrap: wrap;
         }
 
-        .roadmap-col h3 .q-tag {
+        .rm-q {
+            font-family: var(--sans);
+            font-size: var(--t-h3);
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            color: var(--text);
+        }
+
+        .rm-status {
             font-family: var(--mono);
             font-size: var(--t-mono);
             color: var(--text-faint);
             letter-spacing: 0.06em;
-            font-weight: 500;
             text-transform: uppercase;
         }
 
-        .roadmap-col ul {
+        .rm-shipped .rm-status,
+        .rm-active .rm-status {
+            color: var(--green);
+        }
+
+        .rm-items {
             list-style: none;
             display: flex;
             flex-direction: column;
-            gap: clamp(0.4rem, 0.8vw, 0.6rem);
+            gap: clamp(0.4rem, 0.7vw, 0.55rem);
         }
 
-        .roadmap-col li {
+        .rm-items li {
+            display: grid;
+            grid-template-columns: clamp(40px, 4.5vw, 56px) 1fr;
+            gap: clamp(0.45rem, 0.7vw, 0.6rem);
+            align-items: baseline;
             font-size: var(--t-small);
             color: var(--text-muted);
-            line-height: 1.45;
-            padding-left: 1.2em;
-            position: relative;
+            line-height: 1.4;
         }
 
-        .roadmap-col li::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0.6em;
-            width: 6px;
-            height: 1px;
-            background: var(--text-faint);
+        .rm-date {
+            font-family: var(--mono);
+            font-size: var(--t-mono);
+            color: var(--text-faint);
+            letter-spacing: 0.05em;
+            white-space: nowrap;
         }
 
-        .roadmap-active {
-            border-color: var(--green-20);
-            background: linear-gradient(135deg, var(--green-12), var(--surface) 50%);
-        }
-
-        .roadmap-active h3 {
+        .rm-shipped .rm-items li,
+        .rm-active .rm-items li {
             color: var(--text);
         }
 
-        .roadmap-active h3 .q-tag {
+        .rm-shipped .rm-date,
+        .rm-active .rm-date:not(.rm-tbd) {
             color: var(--green);
         }
 
-        .roadmap-active li {
-            color: var(--text);
+        .rm-tbd {
+            color: var(--text-faint);
+            text-align: left;
         }
 
-        .roadmap-active li::before {
-            background: var(--green);
-            width: 8px;
+        @media (max-width: 900px) {
+            .roadmap-timeline {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .roadmap-timeline::before,
+            .roadmap-timeline::after {
+                display: none;
+            }
         }
 
-        .roadmap-shipped h3 .q-tag {
-            color: var(--green);
-        }
-
-        .roadmap-shipped h3 .q-tag::before {
-            content: '✓ ';
+        @media (max-width: 540px) {
+            .roadmap-timeline {
+                grid-template-columns: 1fr;
+            }
         }
 
         /* ===========================================
@@ -1856,17 +1945,17 @@
 
             <div class="traction-grid reveal" style="transition-delay: 0.28s;">
                 <div class="metric">
-                    <span class="metric-value">100<span class="plus">+</span></span>
-                    <span class="metric-label">Waitlist signups</span>
-                    <span class="metric-desc">Early users ready for launch</span>
+                    <span class="metric-value">50<span class="plus">+</span></span>
+                    <span class="metric-label">Early users</span>
+                    <span class="metric-desc">Collecting feedback</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-value">2,330</span>
+                    <span class="metric-value">2,400</span>
                     <span class="metric-label">X followers</span>
                     <span class="metric-desc">@heymike777</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-value">625</span>
+                    <span class="metric-value">550</span>
                     <span class="metric-label">Telegram</span>
                     <span class="metric-desc">Private channel</span>
                 </div>
@@ -1928,32 +2017,62 @@
                 </h2>
             </div>
 
-            <div class="grid-3 reveal" style="transition-delay: 0.15s;">
-                <div class="roadmap-col roadmap-shipped">
-                    <h3>Q1 2026 <span class="q-tag">SHIPPED</span></h3>
-                    <ul>
-                        <li>3 protocols integrated</li>
-                        <li>Mainnet tested</li>
-                        <li>Mobile app built</li>
-                        <li>Submit to dApp Store</li>
+            <div class="roadmap-timeline reveal" style="transition-delay: 0.15s;">
+                <div class="rm-col rm-shipped">
+                    <div class="rm-node"></div>
+                    <div class="rm-quarter">
+                        <span class="rm-q">Q1</span>
+                        <span class="rm-status">✓ Shipped</span>
+                    </div>
+                    <ul class="rm-items">
+                        <li><span class="rm-date">Feb 15</span><span>Start</span></li>
+                        <li><span class="rm-date">Feb 20</span><span>Jupiter Lend integrated</span></li>
+                        <li><span class="rm-date">Feb 23</span><span>Kamino integrated</span></li>
+                        <li><span class="rm-date">Feb 27</span><span>Drift integrated</span></li>
+                        <li><span class="rm-date">Mar 8</span><span>MVP ready</span></li>
+                        <li><span class="rm-date">Mar 10</span><span>Submitted to Monolith</span></li>
                     </ul>
                 </div>
-                <div class="roadmap-col roadmap-active">
-                    <h3>Q2 2026 <span class="q-tag">SHIPPING</span></h3>
-                    <ul>
-                        <li>Position switching</li>
-                        <li>More protocols &amp; RWA</li>
-                        <li>APY push notifications</li>
-                        <li>Reward badges</li>
+
+                <div class="rm-col rm-active">
+                    <div class="rm-node"><span class="rm-now">Now</span></div>
+                    <div class="rm-quarter">
+                        <span class="rm-q">Q2</span>
+                        <span class="rm-status">→ Shipping</span>
+                    </div>
+                    <ul class="rm-items">
+                        <li><span class="rm-date">Apr 15</span><span>Live in dApp Store</span></li>
+                        <li><span class="rm-date">Apr 28</span><span>Won Monolith Solana Mobile Hackathon</span></li>
+                        <li><span class="rm-date rm-tbd">·</span><span>Reward badges</span></li>
+                        <li><span class="rm-date rm-tbd">·</span><span>Position switching</span></li>
+                        <li><span class="rm-date rm-tbd">·</span><span>More protocols &amp; RWA</span></li>
+                        <li><span class="rm-date rm-tbd">·</span><span>APY push notifications</span></li>
                     </ul>
                 </div>
-                <div class="roadmap-col">
-                    <h3>Q3 2026 <span class="q-tag">NEXT</span></h3>
-                    <ul>
-                        <li>Metals &amp; stocks</li>
-                        <li>Whale-tier features</li>
-                        <li>Analytics dashboard</li>
-                        <li>iOS &amp; Android launch</li>
+
+                <div class="rm-col">
+                    <div class="rm-node"></div>
+                    <div class="rm-quarter">
+                        <span class="rm-q">Q3</span>
+                        <span class="rm-status">Next</span>
+                    </div>
+                    <ul class="rm-items">
+                        <li><span class="rm-date rm-tbd">·</span><span>Cashflow Protect</span></li>
+                        <li><span class="rm-date rm-tbd">·</span><span>Metals &amp; stocks</span></li>
+                        <li><span class="rm-date rm-tbd">·</span><span>iOS &amp; Android launch</span></li>
+                    </ul>
+                </div>
+
+                <div class="rm-col">
+                    <div class="rm-node"></div>
+                    <div class="rm-quarter">
+                        <span class="rm-q">Q4</span>
+                        <span class="rm-status">Later</span>
+                    </div>
+                    <ul class="rm-items">
+                        <li><span class="rm-date rm-tbd">·</span><span>Cashflow Family Savings</span></li>
+                        <li><span class="rm-date rm-tbd">·</span><span>Analytics dashboard</span></li>
+                        <li><span class="rm-date rm-tbd">·</span><span>Whale-tier features</span></li>
                     </ul>
                 </div>
             </div>
