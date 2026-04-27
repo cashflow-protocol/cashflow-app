@@ -52,8 +52,10 @@ export default function RewardBadgeSheet({ task, visible, onClose, onAttestSeeke
   if (!task) return <BottomSheet visible={visible} onClose={onClose}><View /></BottomSheet>;
 
   const minted = task.status === 'minted';
-  const pending = task.status === 'mint_pending' || minting;
-  const claimable = task.status === 'claimable';
+  const pending = minting;
+  // Treat mint_pending the same as claimable: stale server state from a prior
+  // attempt that didn't land. The backend rebuilds without re-claiming the slot.
+  const claimable = task.status === 'claimable' || task.status === 'mint_pending';
   const needsSeekerAttest = task.verifierType === 'device_seeker' && task.status === 'in_progress';
   const canMint = claimable && passportActivated && !!onMint;
 

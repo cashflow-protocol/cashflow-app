@@ -54,9 +54,8 @@ function progressFraction(task: TaskWithProgress): number {
 function ctaLabel(task: TaskWithProgress, passportActivated: boolean): string {
   switch (task.status) {
     case 'claimable':
-      return passportActivated ? 'Mint' : 'Activate Passport';
     case 'mint_pending':
-      return 'Minting…';
+      return passportActivated ? 'Mint' : 'Activate Passport';
     case 'minted':
       return 'Earned';
     case 'in_progress':
@@ -68,9 +67,11 @@ function ctaLabel(task: TaskWithProgress, passportActivated: boolean): string {
 export default function RewardBadgeCard({ task, onPress, compact, passportActivated = false, onMint, minting = false }: Props) {
   const { colors } = useTheme();
   const fraction = progressFraction(task);
-  const claimable = task.status === 'claimable';
+  // Treat mint_pending the same as claimable: stale server state from a prior
+  // attempt that didn't land. The backend rebuilds without re-claiming the slot.
+  const claimable = task.status === 'claimable' || task.status === 'mint_pending';
   const minted = task.status === 'minted';
-  const pending = task.status === 'mint_pending' || minting;
+  const pending = minting;
   const canMintInline = claimable && passportActivated && !!onMint && !minting;
   const ctaHighlighted = claimable || pending;
 
