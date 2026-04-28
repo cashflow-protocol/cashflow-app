@@ -859,7 +859,7 @@ router.post('/resolve-domains', async (req: Request, res: Response) => {
   }
 });
 
-// POST /solana/v1/resolve-name - Resolve a domain (e.g. mike.sol, mike.skr) to a wallet address
+// POST /solana/v1/resolve-name - Resolve a domain (e.g. heymike.sol, heymike.skr) to a wallet address
 router.post('/resolve-name', async (req: Request, res: Response) => {
   try {
     const { name } = req.body;

@@ -6,7 +6,7 @@ const rpc: Rpc<SolanaRpcApi> = createSolanaRpc(rpcUrl);
 
 export class SolanaDomainManager {
   /**
-   * Resolve a domain name (e.g. `mike.sol`, `mike.skr`) to a Solana wallet address.
+   * Resolve a domain name (e.g. `heymike.sol`, `heymike.skr`) to a Solana wallet address.
    * Returns null when the domain is not registered or cannot be resolved.
    *
    * - `.sol` domains are resolved via @solana-name-service/sns-sdk-kit (SNS-IP 5).
