@@ -172,14 +172,14 @@ async function confirmTransactions() {
 }
 
 /**
- * Approve top 1 users by XP every 12 hours.
+ * Approve top 5 users by XP every 12 hours.
  * Generates invite codes and updates their status.
  */
 async function approveTopWaitlistUsers() {
   try {
     const topUsers = await WaitlistUserModel.find({ status: 'waiting', xp: { $gt: 0 } })
       .sort({ xp: -1, lastXpAt: 1 })
-      .limit(1)
+      .limit(5)
       .lean();
 
     if (topUsers.length === 0) {
