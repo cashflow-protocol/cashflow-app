@@ -242,7 +242,7 @@ router.get('/invite-codes', async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
     const search = (req.query.search as string) || '';
 
-    const filter: any = {};
+    const filter: any = { source: { $ne: 'waitlist_batch' } };
     if (search) {
       filter.code = { $regex: search.toUpperCase(), $options: 'i' };
     }
