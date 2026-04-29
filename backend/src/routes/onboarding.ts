@@ -692,6 +692,24 @@ router.post('/waitlist/connect-telegram/start', async (req, res) => {
  */
 router.post('/waitlist/telegram-webhook', async (req, res) => {
   try {
+    // Log incoming updates — captures chat ids (incl. private groups), text, and membership changes
+    const u = req.body || {};
+    const m = u.message || u.edited_message || u.channel_post;
+    if (m) {
+      console.log(
+        `[telegram] message chat=${m.chat.id} type=${m.chat.type}${m.chat.title ? ` title="${m.chat.title}"` : ''} from=${m.from?.id}${m.from?.username ? ` @${m.from.username}` : ''} text=${JSON.stringify(m.text || '')}`,
+      );
+    } else if (u.my_chat_member) {
+      const c = u.my_chat_member;
+      console.log(
+        `[telegram] my_chat_member chat=${c.chat.id} type=${c.chat.type}${c.chat.title ? ` title="${c.chat.title}"` : ''} status=${c.new_chat_member?.status}`,
+      );
+    } else if (u.callback_query) {
+      console.log(`[telegram] callback_query from=${u.callback_query.from.id} data=${u.callback_query.data}`);
+    } else {
+      console.log(`[telegram] update keys=${Object.keys(u).join(',')}`);
+    }
+
     // Handle inline button callbacks (Approve/Reject screenshots)
     const callbackQuery = req.body?.callback_query;
     if (callbackQuery?.data) {
