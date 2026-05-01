@@ -19,6 +19,7 @@ import {
   MintedBadgeModel,
   CashflowPassportActivationModel,
   BadgeMintAttemptModel,
+  ErrorLogModel,
 } from '../models';
 import { EarnTokenType } from '../types';
 
@@ -280,5 +281,6 @@ export class DBManager {
     await MintedBadgeModel.syncIndexes();
     await CashflowPassportActivationModel.syncIndexes();
     await BadgeMintAttemptModel.syncIndexes();
+    await ErrorLogModel.syncIndexes();
   }
 }

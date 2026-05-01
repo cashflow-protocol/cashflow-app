@@ -374,6 +374,66 @@ export async function rebuildUserCostBasis(
   });
 }
 
+// Errors
+export type ErrorSeverity = 'expected' | 'unexpected' | 'critical';
+
+export interface ErrorLogEntry {
+  _id: string;
+  route: string;
+  fullPath: string;
+  method: string;
+  statusCode: number;
+  severity: ErrorSeverity;
+  errorMessage: string;
+  errorCode?: string;
+  errorName?: string;
+  stack?: string;
+  sentryEventId?: string;
+  userId?: string;
+  publicKey?: string;
+  vaultAddress?: string;
+  requestBody?: Record<string, unknown>;
+  requestQuery?: Record<string, unknown>;
+  requestParams?: Record<string, unknown>;
+  responseBody?: Record<string, unknown>;
+  userAgent?: string;
+  ipAddress?: string;
+  appVersion?: string;
+  buildNumber?: string;
+  platform?: string;
+  createdAt: string;
+}
+
+export interface ErrorLogFilters {
+  userId?: string;
+  vaultAddress?: string;
+  publicKey?: string;
+  severity?: ErrorSeverity;
+  errorName?: string;
+  statusCode?: string;
+  route?: string;
+  since?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export async function getErrorLogs(
+  filters: ErrorLogFilters = {},
+): Promise<{ success: boolean; errors: ErrorLogEntry[]; nextCursor: string | null; error?: string }> {
+  const params = new URLSearchParams();
+  if (filters.userId) params.set('userId', filters.userId);
+  if (filters.vaultAddress) params.set('vaultAddress', filters.vaultAddress);
+  if (filters.publicKey) params.set('publicKey', filters.publicKey);
+  if (filters.severity) params.set('severity', filters.severity);
+  if (filters.errorName) params.set('errorName', filters.errorName);
+  if (filters.statusCode) params.set('statusCode', filters.statusCode);
+  if (filters.route) params.set('route', filters.route);
+  if (filters.since) params.set('since', filters.since);
+  if (filters.cursor) params.set('cursor', filters.cursor);
+  if (filters.limit) params.set('limit', String(filters.limit));
+  return apiFetch(`/errors?${params}`);
+}
+
 export async function createRewardsCollection(input: {
   name: string;
   description?: string;

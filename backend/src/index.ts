@@ -1,4 +1,7 @@
 import 'dotenv/config';
+import { initializeSentry } from './services/sentryManager';
+initializeSentry();
+
 import express, { Application } from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
@@ -23,6 +26,7 @@ import vaultRecoveryRouter from './routes/vault-recovery';
 import rewardsRouter from './routes/rewards';
 import { initializeFirebase } from './services/firebaseManager';
 import { initializeHeliusListener, verifyWebhookAuth, handleWebhookPayload } from './services/heliusListener';
+import { errorCaptureMiddleware, globalErrorHandler } from './middleware/errorCapture';
 
 const app: Application = express();
 app.set('trust proxy', 1);
@@ -41,6 +45,7 @@ const allowedOrigins = [
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(errorCaptureMiddleware);
 
 // v1 routes (deprecated — do not modify, use v2 instead)
 app.use('/config/v1', configRouter);
@@ -99,6 +104,8 @@ app.post('/debug/log', debugLimiter, (req, res) => {
   }
   res.json({ ok: true });
 });
+
+app.use(globalErrorHandler);
 
 // Validate required env vars
 if (!MONGODB_URI){

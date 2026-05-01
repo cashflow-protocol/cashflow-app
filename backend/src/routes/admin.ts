@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, TransactionStatus, RewardTaskModel, RewardVerifierType, UserRewardProgressModel, RewardProgressStatus, MintedBadgeModel, MintedBadgeStatus, getSetting, setSetting, APP_SETTING_KEYS } from '../models';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, TransactionStatus, RewardTaskModel, RewardVerifierType, UserRewardProgressModel, RewardProgressStatus, MintedBadgeModel, MintedBadgeStatus, getSetting, setSetting, APP_SETTING_KEYS, ErrorLogModel, ErrorSeverity } from '../models';
 import { VaultPaymentModel } from '../models/VaultPayment';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { PriceManager } from '../managers';
@@ -1688,6 +1688,91 @@ router.post('/maintenance/rebuild-user-cost-basis', async (req, res) => {
   } catch (error) {
     console.error('Admin rebuildUserCostBasis error:', error);
     res.status(500).json({ success: false, error: (error as Error).message || 'Rebuild failed' });
+  }
+});
+
+// ─── Error logs ───
+
+router.get('/errors', async (req: Request, res: Response) => {
+  try {
+    const {
+      userId,
+      vaultAddress,
+      publicKey,
+      severity,
+      errorName,
+      statusCode,
+      route,
+      since,
+      cursor,
+    } = req.query;
+
+    const limitRaw = Number.parseInt(String(req.query.limit ?? '50'), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 50;
+
+    const filter: Record<string, unknown> = {};
+    if (typeof userId === 'string' && userId) filter.userId = userId;
+    if (typeof vaultAddress === 'string' && vaultAddress) filter.vaultAddress = vaultAddress;
+    if (typeof publicKey === 'string' && publicKey) filter.publicKey = publicKey;
+    if (typeof errorName === 'string' && errorName) filter.errorName = errorName;
+
+    if (typeof severity === 'string' && severity) {
+      const allowed = [ErrorSeverity.EXPECTED, ErrorSeverity.UNEXPECTED, ErrorSeverity.CRITICAL] as string[];
+      if (!allowed.includes(severity)) {
+        res.status(400).json({ success: false, error: `Invalid severity. Allowed: ${allowed.join(', ')}` });
+        return;
+      }
+      filter.severity = severity;
+    }
+
+    if (typeof statusCode === 'string' && statusCode) {
+      const code = Number.parseInt(statusCode, 10);
+      if (!Number.isFinite(code)) {
+        res.status(400).json({ success: false, error: 'statusCode must be a number' });
+        return;
+      }
+      filter.statusCode = code;
+    }
+
+    if (typeof route === 'string' && route) {
+      filter.route = { $regex: route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+    }
+
+    const createdAtFilter: Record<string, Date> = {};
+    if (typeof since === 'string' && since) {
+      const sinceDate = new Date(since);
+      if (Number.isNaN(sinceDate.getTime())) {
+        res.status(400).json({ success: false, error: 'since must be a valid ISO date' });
+        return;
+      }
+      createdAtFilter.$gte = sinceDate;
+    }
+    if (typeof cursor === 'string' && cursor) {
+      const cursorDate = new Date(cursor);
+      if (Number.isNaN(cursorDate.getTime())) {
+        res.status(400).json({ success: false, error: 'cursor must be a valid ISO date' });
+        return;
+      }
+      createdAtFilter.$lt = cursorDate;
+    }
+    if (Object.keys(createdAtFilter).length > 0) {
+      filter.createdAt = createdAtFilter;
+    }
+
+    const errors = await ErrorLogModel
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .limit(limit + 1)
+      .lean();
+
+    const hasMore = errors.length > limit;
+    const page = hasMore ? errors.slice(0, limit) : errors;
+    const nextCursor = hasMore ? page[page.length - 1].createdAt.toISOString() : null;
+
+    res.json({ success: true, errors: page, nextCursor });
+  } catch (error) {
+    console.error('Admin GET /errors failed:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || 'Failed to query errors' });
   }
 });
 
