@@ -16,7 +16,7 @@ import onboardingRouter from './routes/onboarding';
 import adminRouter from './routes/admin';
 import { requireAuth } from './middleware/auth';
 import { signResponseMiddleware } from './middleware/signResponse';
-import { authLimiter, apiLimiter, adminLimiter, onboardingLimiter, debugLimiter } from './middleware/rateLimiter';
+import { authLimiter, apiLimiter, adminLimiter, onboardingLimiter, debugLimiter, errorLogLimiter } from './middleware/rateLimiter';
 import { initializeScheduler } from './services';
 import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
@@ -24,6 +24,7 @@ import notificationsRouter from './routes/notifications';
 import recoveryRouter from './routes/recovery';
 import vaultRecoveryRouter from './routes/vault-recovery';
 import rewardsRouter from './routes/rewards';
+import errorsRouter from './routes/errors';
 import { initializeFirebase } from './services/firebaseManager';
 import { initializeHeliusListener, verifyWebhookAuth, handleWebhookPayload } from './services/heliusListener';
 import { errorCaptureMiddleware, globalErrorHandler } from './middleware/errorCapture';
@@ -62,6 +63,9 @@ app.use('/onboarding/v1', onboardingLimiter, onboardingRouter);
 
 // Vault recovery routes (no auth required — recovering users)
 app.use('/vault-recovery/v1', apiLimiter, vaultRecoveryRouter);
+
+// Mobile error log ingest (no auth required — pre-auth users have errors too)
+app.use('/errors/v1', errorLogLimiter, errorsRouter);
 
 // Admin routes (password-protected)
 app.use('/admin/v1', adminLimiter, adminRouter);

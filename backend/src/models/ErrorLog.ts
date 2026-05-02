@@ -6,6 +6,11 @@ export enum ErrorSeverity {
   CRITICAL = 'critical',
 }
 
+export enum ErrorSource {
+  BACKEND = 'backend',
+  MOBILE = 'mobile',
+}
+
 const THIRTY_DAYS_SECONDS = 60 * 60 * 24 * 30;
 
 @modelOptions({
@@ -21,7 +26,11 @@ const THIRTY_DAYS_SECONDS = 60 * 60 * 24 * 30;
 @index({ severity: 1, createdAt: -1 })
 @index({ errorName: 1, createdAt: -1 })
 @index({ route: 1, statusCode: 1, createdAt: -1 })
+@index({ source: 1, severity: 1, createdAt: -1 })
 export class ErrorLog {
+  @prop({ required: true, enum: ErrorSource, default: ErrorSource.BACKEND })
+  public source!: ErrorSource;
+
   @prop({ required: true })
   public route!: string;
 
@@ -87,6 +96,18 @@ export class ErrorLog {
 
   @prop()
   public platform?: string;
+
+  @prop()
+  public osVersion?: string;
+
+  @prop()
+  public device?: string;
+
+  @prop()
+  public screen?: string;
+
+  @prop()
+  public action?: string;
 
   public createdAt!: Date;
 }

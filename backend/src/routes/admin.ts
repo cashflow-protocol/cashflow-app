@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
-import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, TransactionStatus, RewardTaskModel, RewardVerifierType, UserRewardProgressModel, RewardProgressStatus, MintedBadgeModel, MintedBadgeStatus, getSetting, setSetting, APP_SETTING_KEYS, ErrorLogModel, ErrorSeverity } from '../models';
+import { InviteCodeModel, WaitlistUserModel, WaitlistTaskModel, UserModel, DeviceTokenModel, NotificationType, EarnTokenModel, TransactionModel, TransactionStatus, RewardTaskModel, RewardVerifierType, UserRewardProgressModel, RewardProgressStatus, MintedBadgeModel, MintedBadgeStatus, getSetting, setSetting, APP_SETTING_KEYS, ErrorLogModel, ErrorSeverity, ErrorSource } from '../models';
 import { VaultPaymentModel } from '../models/VaultPayment';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { PriceManager } from '../managers';
@@ -1700,6 +1700,7 @@ router.get('/errors', async (req: Request, res: Response) => {
       vaultAddress,
       publicKey,
       severity,
+      source,
       errorName,
       statusCode,
       route,
@@ -1723,6 +1724,15 @@ router.get('/errors', async (req: Request, res: Response) => {
         return;
       }
       filter.severity = severity;
+    }
+
+    if (typeof source === 'string' && source) {
+      const allowed = [ErrorSource.BACKEND, ErrorSource.MOBILE] as string[];
+      if (!allowed.includes(source)) {
+        res.status(400).json({ success: false, error: `Invalid source. Allowed: ${allowed.join(', ')}` });
+        return;
+      }
+      filter.source = source;
     }
 
     if (typeof statusCode === 'string' && statusCode) {

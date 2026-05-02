@@ -3,6 +3,7 @@ import { Buffer } from 'buffer';
 import { SOLANA_CONFIG } from '../config/solana';
 import { IS_SOLANA_MOBILE } from '../config/constants';
 import { logError } from './analyticsService';
+import mobileErrorTracker from './mobileErrorTracker';
 
 // Use require() instead of dynamic import() to avoid Metro lazy-bundle loading,
 // which fails on physical devices (tries to fetch from localhost:8081).
@@ -106,6 +107,11 @@ class WalletService {
         );
       } catch (err: any) {
         logError('wallet_sign_send', err?.message || 'unknown');
+        mobileErrorTracker.log(err, {
+          severity: 'critical',
+          action: 'mwa_sign_and_send',
+          context: { txCount: transactions.length },
+        });
         console.error('[MWA] signAndSendTransactions FAILED:', err?.message || err);
         throw err;
       }
@@ -146,6 +152,11 @@ class WalletService {
         );
       } catch (err: any) {
         logError('wallet_sign', err?.message || 'unknown');
+        mobileErrorTracker.log(err, {
+          severity: 'critical',
+          action: 'mwa_sign',
+          context: { txCount: transactions.length },
+        });
         console.error('[MWA] signTransactions FAILED:', err?.message || err);
         throw err;
       }
@@ -188,6 +199,11 @@ class WalletService {
         });
       } catch (err: any) {
         logError('wallet_sign_message', err?.message || 'unknown');
+        mobileErrorTracker.log(err, {
+          severity: 'unexpected',
+          action: 'mwa_sign_message',
+          context: { messageCount: messages.length },
+        });
         throw err;
       }
     });

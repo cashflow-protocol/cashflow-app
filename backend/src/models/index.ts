@@ -21,4 +21,4 @@ export { MintedBadge, MintedBadgeModel, MintedBadgeStatus } from './MintedBadge'
 export { CashflowPassportActivation, CashflowPassportActivationModel, CashflowPassportActivationStatus } from './CashflowPassportActivation';
 export { BadgeMintAttempt, BadgeMintAttemptModel, BadgeMintAttemptStatus } from './BadgeMintAttempt';
 export { AppSetting, AppSettingModel, APP_SETTING_KEYS, getSetting, setSetting, invalidateSettingCache } from './AppSetting';
-export { ErrorLog, ErrorLogModel, ErrorSeverity } from './ErrorLog';
+export { ErrorLog, ErrorLogModel, ErrorSeverity, ErrorSource } from './ErrorLog';

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction, Send } from 'express';
 import { ErrorManager } from '../services/errorManager';
+import { ErrorSource } from '../models';
 
 const SKIP_PATH_PREFIXES = ['/health', '/debug/log', '/helius/webhook'];
 
@@ -68,6 +69,7 @@ export function errorCaptureMiddleware(req: AuthedReq, res: Response, next: Next
         const responseBody = Object.keys(responseExtras).length > 0 ? responseExtras : undefined;
 
         ErrorManager.log({
+          source: ErrorSource.BACKEND,
           route: extractRoutePattern(req),
           fullPath: req.originalUrl.split('?')[0],
           method: req.method,
@@ -105,6 +107,7 @@ export function globalErrorHandler(err: unknown, req: AuthedReq, res: Response, 
 
   ErrorManager.log({
     err,
+    source: ErrorSource.BACKEND,
     route: extractRoutePattern(req),
     fullPath: req.originalUrl.split('?')[0],
     method: req.method,

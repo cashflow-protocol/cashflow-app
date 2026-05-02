@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getErrorLogs, type ErrorLogEntry, type ErrorSeverity } from '../api';
+import { getErrorLogs, type ErrorLogEntry, type ErrorSeverity, type ErrorSourceValue } from '../api';
 
 const SEVERITY_OPTIONS: Array<'' | ErrorSeverity> = ['', 'expected', 'unexpected', 'critical'];
+const SOURCE_OPTIONS: Array<'' | ErrorSourceValue> = ['', 'backend', 'mobile'];
 
 const SEVERITY_BADGE_STYLE: Record<ErrorSeverity, React.CSSProperties> = {
   expected: { background: '#e0e7ff', color: '#3730a3' },
@@ -9,8 +10,14 @@ const SEVERITY_BADGE_STYLE: Record<ErrorSeverity, React.CSSProperties> = {
   critical: { background: '#fecaca', color: '#991b1b' },
 };
 
+const SOURCE_BADGE_STYLE: Record<ErrorSourceValue, React.CSSProperties> = {
+  backend: { background: '#e5e7eb', color: '#374151' },
+  mobile: { background: '#dcfce7', color: '#166534' },
+};
+
 interface Filters {
   severity: '' | ErrorSeverity;
+  source: '' | ErrorSourceValue;
   route: string;
   errorName: string;
   statusCode: string;
@@ -22,6 +29,7 @@ interface Filters {
 
 const EMPTY_FILTERS: Filters = {
   severity: '',
+  source: '',
   route: '',
   errorName: '',
   statusCode: '',
@@ -70,6 +78,7 @@ export default function ErrorsPage() {
     try {
       const res = await getErrorLogs({
         severity: filters.severity || undefined,
+        source: filters.source || undefined,
         route: filters.route || undefined,
         errorName: filters.errorName || undefined,
         statusCode: filters.statusCode || undefined,
@@ -105,6 +114,7 @@ export default function ErrorsPage() {
     try {
       const res = await getErrorLogs({
         severity: activeFilters.severity || undefined,
+        source: activeFilters.source || undefined,
         route: activeFilters.route || undefined,
         errorName: activeFilters.errorName || undefined,
         statusCode: activeFilters.statusCode || undefined,
@@ -146,8 +156,18 @@ export default function ErrorsPage() {
           onChange={(e) => setDraftFilters({ ...draftFilters, severity: e.target.value as '' | ErrorSeverity })}
         >
           {SEVERITY_OPTIONS.map((s) => (
-            <option key={s || 'all'} value={s}>
+            <option key={s || 'all-severity'} value={s}>
               {s ? s : 'All severities'}
+            </option>
+          ))}
+        </select>
+        <select
+          value={draftFilters.source}
+          onChange={(e) => setDraftFilters({ ...draftFilters, source: e.target.value as '' | ErrorSourceValue })}
+        >
+          {SOURCE_OPTIONS.map((s) => (
+            <option key={s || 'all-source'} value={s}>
+              {s ? s : 'All sources'}
             </option>
           ))}
         </select>
@@ -201,6 +221,7 @@ export default function ErrorsPage() {
         <table>
           <thead>
             <tr>
+              <th style={{ width: 90 }}>Source</th>
               <th style={{ width: 110 }}>Severity</th>
               <th style={{ width: 80 }}>Status</th>
               <th>Route</th>
@@ -212,11 +233,14 @@ export default function ErrorsPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40 }}>Loading…</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40 }}>Loading…</td></tr>
             ) : errors.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: '#999' }}>No errors found</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: '#999' }}>No errors found</td></tr>
             ) : errors.map((e) => (
               <tr key={e._id}>
+                <td>
+                  <span className="badge" style={SOURCE_BADGE_STYLE[e.source]}>{e.source}</span>
+                </td>
                 <td>
                   <span className="badge" style={SEVERITY_BADGE_STYLE[e.severity]}>{e.severity}</span>
                 </td>
@@ -289,6 +313,9 @@ function ErrorDetailModal({ entry, onClose }: { entry: ErrorLogEntry; onClose: (
         style={{ maxWidth: 820, maxHeight: '85vh', overflowY: 'auto' }}
       >
         <h3 style={{ marginBottom: 4 }}>
+          <span className="badge" style={{ ...SOURCE_BADGE_STYLE[entry.source], marginRight: 6 }}>
+            {entry.source}
+          </span>
           <span className="badge" style={{ ...SEVERITY_BADGE_STYLE[entry.severity], marginRight: 8 }}>
             {entry.severity}
           </span>
@@ -335,6 +362,10 @@ function ErrorDetailModal({ entry, onClose }: { entry: ErrorLogEntry; onClose: (
               ['platform', entry.platform],
               ['appVersion', entry.appVersion],
               ['buildNumber', entry.buildNumber],
+              ['osVersion', entry.osVersion],
+              ['device', entry.device],
+              ['screen', entry.screen],
+              ['action', entry.action],
               ['userAgent', entry.userAgent],
               ['ipAddress', entry.ipAddress],
             ]}

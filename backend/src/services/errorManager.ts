@@ -1,4 +1,4 @@
-import { ErrorLogModel, ErrorSeverity } from '../models';
+import { ErrorLogModel, ErrorSeverity, ErrorSource } from '../models';
 import { captureError } from './sentryManager';
 import { notifyAdmin } from './telegramManager';
 
@@ -70,12 +70,15 @@ function capJsonSize(value: unknown): unknown {
 
 export interface ErrorLogInput {
   err?: unknown;
+  source?: ErrorSource;
   route: string;
   fullPath: string;
   method: string;
   statusCode: number;
   errorMessage: string;
   errorCode?: string;
+  errorName?: string;
+  stack?: string;
   userId?: string;
   publicKey?: string;
   vaultAddress?: string;
@@ -88,6 +91,10 @@ export interface ErrorLogInput {
   appVersion?: string;
   buildNumber?: string;
   platform?: string;
+  osVersion?: string;
+  device?: string;
+  screen?: string;
+  action?: string;
 }
 
 export class ErrorManager {
@@ -138,11 +145,15 @@ export class ErrorManager {
   private static async _logAsync(input: ErrorLogInput): Promise<void> {
     const baseSeverity = this.classify(input.err, input.statusCode);
     const severity = this.escalateToCritical(baseSeverity, input.err, input.route);
+    const source = input.source ?? ErrorSource.BACKEND;
 
-    const errorName = input.err instanceof Error ? input.err.constructor.name : (input.err as { name?: string } | undefined)?.name;
-    const stack = severity !== ErrorSeverity.EXPECTED && input.err instanceof Error && input.err.stack
-      ? input.err.stack.slice(0, MAX_STACK_BYTES)
-      : undefined;
+    const errorName = input.errorName
+      ?? (input.err instanceof Error ? input.err.constructor.name : (input.err as { name?: string } | undefined)?.name);
+    const stack = input.stack
+      ? input.stack.slice(0, MAX_STACK_BYTES)
+      : (severity !== ErrorSeverity.EXPECTED && input.err instanceof Error && input.err.stack
+          ? input.err.stack.slice(0, MAX_STACK_BYTES)
+          : undefined);
 
     let sentryEventId: string | undefined;
     if (severity !== ErrorSeverity.EXPECTED) {
@@ -168,6 +179,7 @@ export class ErrorManager {
 
     try {
       await ErrorLogModel.create({
+        source,
         route: input.route,
         fullPath: input.fullPath,
         method: input.method,
@@ -190,6 +202,10 @@ export class ErrorManager {
         appVersion: input.appVersion,
         buildNumber: input.buildNumber,
         platform: input.platform,
+        osVersion: input.osVersion,
+        device: input.device,
+        screen: input.screen,
+        action: input.action,
       });
     } catch (e) {
       console.error('ErrorLog persist failed:', e);

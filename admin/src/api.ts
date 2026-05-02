@@ -376,9 +376,11 @@ export async function rebuildUserCostBasis(
 
 // Errors
 export type ErrorSeverity = 'expected' | 'unexpected' | 'critical';
+export type ErrorSourceValue = 'backend' | 'mobile';
 
 export interface ErrorLogEntry {
   _id: string;
+  source: ErrorSourceValue;
   route: string;
   fullPath: string;
   method: string;
@@ -401,6 +403,10 @@ export interface ErrorLogEntry {
   appVersion?: string;
   buildNumber?: string;
   platform?: string;
+  osVersion?: string;
+  device?: string;
+  screen?: string;
+  action?: string;
   createdAt: string;
 }
 
@@ -409,6 +415,7 @@ export interface ErrorLogFilters {
   vaultAddress?: string;
   publicKey?: string;
   severity?: ErrorSeverity;
+  source?: ErrorSourceValue;
   errorName?: string;
   statusCode?: string;
   route?: string;
@@ -425,6 +432,7 @@ export async function getErrorLogs(
   if (filters.vaultAddress) params.set('vaultAddress', filters.vaultAddress);
   if (filters.publicKey) params.set('publicKey', filters.publicKey);
   if (filters.severity) params.set('severity', filters.severity);
+  if (filters.source) params.set('source', filters.source);
   if (filters.errorName) params.set('errorName', filters.errorName);
   if (filters.statusCode) params.set('statusCode', filters.statusCode);
   if (filters.route) params.set('route', filters.route);

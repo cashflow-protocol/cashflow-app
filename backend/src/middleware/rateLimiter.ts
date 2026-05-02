@@ -59,3 +59,15 @@ export const debugLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, error: 'Too many requests' },
 });
+
+/**
+ * Limiter for mobile error log ingest. Allows bursts (queue flush on reconnect)
+ * but prevents abuse. 100 events per minute per IP.
+ */
+export const errorLogLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many error reports' },
+});
