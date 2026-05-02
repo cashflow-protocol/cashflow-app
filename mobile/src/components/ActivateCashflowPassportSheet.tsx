@@ -33,7 +33,7 @@ export default function ActivateCashflowPassportSheet({ visible, onClose, feeLam
     setBusy(true);
     try {
       await activate();
-      showToast('Cashflow Passport activated', 'Earned badges will appear automatically', 'success');
+      showToast('Cashflow Passport activated', 'Minted badges will appear in your Passport', 'success');
       onClose();
     } catch (err: any) {
       showToast('Activation failed', err?.message ?? 'Please try again', 'error');

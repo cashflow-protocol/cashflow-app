@@ -95,8 +95,8 @@ const PAGES: PageData[] = [
   {
     key: 'yield',
     icon: <YieldIcon size={100} />,
-    title: 'Wealth Engine',
-    description: 'Earn yield across top DeFi protocols,\nbuy gold, tokenized stocks, and more.\nYour assets work for you, 24/7.',
+    title: 'Manage Personal Finances',
+    description: 'Earn yield across top DeFi protocols,\ninvest into gold, tokenized stocks, and more.\nYour assets work for you, 24/7.',
   },
   {
     key: 'non-custodial',

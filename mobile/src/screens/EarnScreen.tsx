@@ -28,7 +28,7 @@ const YIELD_STABLECOIN_MINTS = new Set([
   'pTA4St7D5WshfLUPBXoaxn5m8e3k2ort2DVt3gUTa17', // sUSDv
   '5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5', // ONyc
 ]);
-const PINNED_FILTERS = [ALL_FILTER, STABLES_FILTER, YIELD_STABLES_FILTER, 'SOL', 'USDC'];
+const PINNED_FILTERS = [ALL_FILTER, STABLES_FILTER, YIELD_STABLES_FILTER, 'SOL', 'USDC', 'USDT', 'USDS', 'USDG'];
 
 export default function EarnScreen() {
   const { colors } = useTheme();
@@ -40,11 +40,12 @@ export default function EarnScreen() {
   React.useEffect(() => { logScreenView('EarnScreen'); }, []);
 
   // Build filter list: All, Stables, USDC, then remaining symbols
-  const filters = useMemo(() => {
-    const allSymbols = [...new Set(tokens.map((t) => t.symbol))];
-    const remaining = allSymbols.filter((s) => !PINNED_FILTERS.includes(s));
-    return [...PINNED_FILTERS, ...remaining];
-  }, [tokens]);
+  const filters = PINNED_FILTERS;
+  // const filters = useMemo(() => {
+  //   const allSymbols = [...new Set(tokens.map((t) => t.symbol))];
+  //   const remaining = allSymbols.filter((s) => !PINNED_FILTERS.includes(s));
+  //   return [...PINNED_FILTERS, ...remaining];
+  // }, [tokens]);
 
   // Total deposited (sum of all position uiAmounts)
   const totalDeposited = useMemo(() => {

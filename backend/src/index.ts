@@ -1,4 +1,7 @@
 import 'dotenv/config';
+import { initializeSentry } from './services/sentryManager';
+initializeSentry();
+
 import express, { Application } from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
@@ -13,7 +16,7 @@ import onboardingRouter from './routes/onboarding';
 import adminRouter from './routes/admin';
 import { requireAuth } from './middleware/auth';
 import { signResponseMiddleware } from './middleware/signResponse';
-import { authLimiter, apiLimiter, adminLimiter, onboardingLimiter, debugLimiter } from './middleware/rateLimiter';
+import { authLimiter, apiLimiter, adminLimiter, onboardingLimiter, debugLimiter, errorLogLimiter } from './middleware/rateLimiter';
 import { initializeScheduler } from './services';
 import { DBManager } from './managers';
 import { initialiseLookupManager } from './managers/LookupManager';
@@ -21,8 +24,10 @@ import notificationsRouter from './routes/notifications';
 import recoveryRouter from './routes/recovery';
 import vaultRecoveryRouter from './routes/vault-recovery';
 import rewardsRouter from './routes/rewards';
+import errorsRouter from './routes/errors';
 import { initializeFirebase } from './services/firebaseManager';
 import { initializeHeliusListener, verifyWebhookAuth, handleWebhookPayload } from './services/heliusListener';
+import { errorCaptureMiddleware, globalErrorHandler } from './middleware/errorCapture';
 
 const app: Application = express();
 app.set('trust proxy', 1);
@@ -41,6 +46,7 @@ const allowedOrigins = [
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(errorCaptureMiddleware);
 
 // v1 routes (deprecated — do not modify, use v2 instead)
 app.use('/config/v1', configRouter);
@@ -57,6 +63,9 @@ app.use('/onboarding/v1', onboardingLimiter, onboardingRouter);
 
 // Vault recovery routes (no auth required — recovering users)
 app.use('/vault-recovery/v1', apiLimiter, vaultRecoveryRouter);
+
+// Mobile error log ingest (no auth required — pre-auth users have errors too)
+app.use('/errors/v1', errorLogLimiter, errorsRouter);
 
 // Admin routes (password-protected)
 app.use('/admin/v1', adminLimiter, adminRouter);
@@ -99,6 +108,8 @@ app.post('/debug/log', debugLimiter, (req, res) => {
   }
   res.json({ ok: true });
 });
+
+app.use(globalErrorHandler);
 
 // Validate required env vars
 if (!MONGODB_URI){

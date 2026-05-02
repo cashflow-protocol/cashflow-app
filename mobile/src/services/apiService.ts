@@ -1,10 +1,33 @@
+import { Platform } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 import { API_CONFIG } from '../config/api';
-import { BUILD_NUMBER } from '../config/version';
+import { APP_VERSION, BUILD_NUMBER } from '../config/version';
 import type { EarnToken, EarnPosition, WalletAsset, Suggestion } from '../types/earn';
 import type { AppNotification } from '../types/notification';
 import type { TaskWithProgress } from '../types/rewards';
 import authService from './authService';
 import { verifyResponseSignature } from './responseVerifier';
+import { SKIP_TRACKER_FLAG } from './mobileErrorTracker';
+
+/**
+ * Tag a thrown error so the global mobile error tracker skips it — backend HTTP
+ * errors are already tracked server-side via the errorCapture middleware.
+ */
+function backendError(message: string): Error {
+  const err = new Error(message);
+  (err as unknown as Record<string, unknown>)[SKIP_TRACKER_FLAG] = true;
+  return err;
+}
+
+function clientHeaders(): Record<string, string> {
+  return {
+    'x-app-version': APP_VERSION,
+    'x-build-number': BUILD_NUMBER,
+    'x-platform': Platform.OS,
+    'x-os-version': DeviceInfo.getSystemVersion() || String(Platform.Version),
+    'x-device': `${DeviceInfo.getBrand() || Platform.OS} ${DeviceInfo.getModel() || ''}`.trim(),
+  };
+}
 
 export interface SerializedInstruction {
   programId: string;
@@ -49,19 +72,19 @@ class ApiService {
     }
     const token = await authService.getToken();
     const res = await fetch(url.toString(), {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: { 'Authorization': `Bearer ${token}`, ...clientHeaders() },
     });
     if (res.status === 401) {
       authService.clearToken();
       const newToken = await authService.getToken();
       const retry = await fetch(url.toString(), {
-        headers: { 'Authorization': `Bearer ${newToken}` },
+        headers: { 'Authorization': `Bearer ${newToken}`, ...clientHeaders() },
       });
-      if (!retry.ok) throw new Error(`API error: ${retry.status}`);
+      if (!retry.ok) throw backendError(`API error: ${retry.status}`);
       return retry.json();
     }
     if (!res.ok) {
-      throw new Error(`API error: ${res.status}`);
+      throw backendError(`API error: ${res.status}`);
     }
     return res.json();
   }
@@ -210,7 +233,7 @@ class ApiService {
   private async post<T>(path: string, body: Record<string, any>): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const token = await authService.getToken();
-    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...clientHeaders() };
     const res = await fetch(url, {
       method: 'POST',
       headers,
@@ -221,18 +244,18 @@ class ApiService {
       const newToken = await authService.getToken();
       const retry = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${newToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${newToken}`, ...clientHeaders() },
         body: JSON.stringify(body),
       });
       if (!retry.ok) {
         const errorBody = await retry.json().catch(() => ({}));
-        throw new Error(errorBody.error || `API error: ${retry.status}`);
+        throw backendError(errorBody.error || `API error: ${retry.status}`);
       }
       return retry.json();
     }
     if (!res.ok) {
       const errorBody = await res.json().catch(() => ({}));
-      throw new Error(errorBody.error || `API error: ${res.status}`);
+      throw backendError(errorBody.error || `API error: ${res.status}`);
     }
     return res.json();
   }
@@ -241,7 +264,7 @@ class ApiService {
   private async signedPost<T>(path: string, body: Record<string, any>): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const token = await authService.getToken();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...clientHeaders() };
 
     let res = await fetch(url, {
       method: 'POST',
@@ -254,14 +277,14 @@ class ApiService {
       const newToken = await authService.getToken();
       res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${newToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${newToken}`, ...clientHeaders() },
         body: JSON.stringify(body),
       });
     }
 
     if (!res.ok) {
       const errorBody = await res.json().catch(() => ({}));
-      throw new Error(errorBody.error || `API error: ${res.status}`);
+      throw backendError(errorBody.error || `API error: ${res.status}`);
     }
 
     const rawText = await res.text();
@@ -269,6 +292,8 @@ class ApiService {
 
     const valid = await verifyResponseSignature(rawText, signature);
     if (!valid) {
+      // Integrity check failures are NOT backend errors — they're a real client-side
+      // problem (potential MITM, cert pinning issue, etc.) we want to track on mobile.
       throw new Error('Response integrity check failed');
     }
 

@@ -27,6 +27,7 @@ import { createCoverFromSquadInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
 import { IS_SOLANA_MOBILE, getVaultCreationFee, getAdminTxFeePayerPublicKey, ADMIN_COVER_TARGET, DEFAULT_SPENDING_LIMIT } from '../config/constants';
 import { logError } from './analyticsService';
+import mobileErrorTracker from './mobileErrorTracker';
 
 const { Permission, Permissions } = multisig.types;
 
@@ -981,19 +982,26 @@ export async function createMultisigViaBackend(
     // Sign all in one MWA prompt, device cosigns TX2, send as Jito bundle
     console.log('[createMultisigViaBackend] signing', result.serializedTxs.length, 'txs with MWA...');
 
+    if (!walletAddress) {
+      throw new Error('walletAddress is required for seeker / android_gms mode');
+    }
+
     const transactions = result.serializedTxs.map(b64 =>
       VersionedTransaction.deserialize(new Uint8Array(Buffer.from(b64, 'base64'))),
     );
 
-    // MWA signs all txs in a single prompt (wallet is signer on all 3)
-    const serialized = transactions.map(tx => new Uint8Array(tx.serialize()));
-    const signedBytes = await walletService.signTransactions(serialized);
-
-    const signedTxs = signedBytes.map(bytes => VersionedTransaction.deserialize(bytes));
+    // MWA signs all 3 in one prompt; copy only the wallet's signature back into
+    // the originals so the backend's createKey / admin-fee-payer signatures are
+    // preserved (some MWA wallets clobber other slots when re-serializing).
+    await signTransactionsWithWallet(
+      transactions,
+      [0, 1, 2],
+      new PublicKey(walletAddress),
+    );
 
     // TX2 (config create + propose + approve) also needs device key signature
     console.log('[createMultisigViaBackend] device cosigning TX2...');
-    await signTransactionNatively(signedTxs[1], [
+    await signTransactionNatively(transactions[1], [
       { pubkey: new PublicKey(devicePubkeyBase58), signFn: signWithDevice },
     ]);
 
@@ -1010,11 +1018,11 @@ export async function createMultisigViaBackend(
     await saveVault(vaultData);
 
     // Send all 3 as a Jito bundle via backend
-    const bundleTxs = signedTxs.map(tx => Buffer.from(tx.serialize()).toString('base64'));
+    const bundleTxs = transactions.map(tx => Buffer.from(tx.serialize()).toString('base64'));
     console.log('[createMultisigViaBackend] sending bundle...');
     try {
       await apiService.sendBundle(bundleTxs);
-      signature = bs58.encode(signedTxs[0].signatures[0]);
+      signature = bs58.encode(transactions[0].signatures[0]);
       console.log('[createMultisigViaBackend] bundle sent, sig:', signature);
 
       // Confirm with backend
@@ -1595,6 +1603,11 @@ export async function executeVaultTransaction(
     return { signature, bundleSignatures };
   } catch (err: any) {
     logError('squads_vault_tx', err.message || 'unknown');
+    mobileErrorTracker.log(err, {
+      severity: 'critical',
+      action: 'squads_vault_tx',
+      context: { debugLineCount: debugLines.length },
+    });
     debugLines.push(`ERROR: ${err.message}`);
     // Await so the logs arrive before we re-throw
     await apiService.debugLog('VaultTx', debugLines).catch(() => {});
@@ -1834,6 +1847,11 @@ export async function reclaimRent(
         status = 'Cancelled';
       } catch (err: any) {
         logError('squads_reclaim_rent', `cancel_failed_${i}: ${err.message || 'unknown'}`);
+        mobileErrorTracker.log(err, {
+          severity: 'unexpected',
+          action: 'squads_reclaim_rent_cancel',
+          context: { proposalIndex: i },
+        });
         onProgress?.(`Failed to cancel proposal ${i}: ${err.message || 'unknown'}`);
         skipped++;
         continue;
@@ -1891,6 +1909,11 @@ export async function reclaimRent(
       closed += batch.length;
     } catch (err: any) {
       logError('squads_reclaim_rent', `batch_failed: ${err.message || 'unknown'}`);
+      mobileErrorTracker.log(err, {
+        severity: 'unexpected',
+        action: 'squads_reclaim_rent_batch',
+        context: { batchSize: batch.length },
+      });
       console.warn(`Failed to build batch:`, err.message || err);
       failed += batch.length;
     }

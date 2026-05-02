@@ -54,6 +54,8 @@ import {
   setUserHasVault,
   setUserOnWaitlist,
 } from './src/services/analyticsService';
+import mobileErrorTracker from './src/services/mobileErrorTracker';
+import ErrorBoundary from './src/components/ErrorBoundary';
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | 'keys-recovery' | 'add-recovery-key' | 'spending-limits' | null;
@@ -76,6 +78,8 @@ function App() {
   const [gmsBlocked, setGmsBlocked] = useState(false);
 
   useEffect(() => {
+    mobileErrorTracker.init().catch(() => { /* never block startup on tracker init */ });
+
     (async () => {
       // Block Android devices without GMS (unless Seeker)
       if (Platform.OS === 'android' && !IS_SOLANA_MOBILE) {
@@ -205,7 +209,9 @@ function App() {
 
   const handleTabPress = useCallback((tab: TabName) => {
     logTabPress(tab);
-    logScreenView(tab === 'home' ? 'HomeScreen' : tab === 'earn' ? 'EarnScreen' : tab === 'assets' ? 'AssetsScreen' : 'MoreScreen');
+    const screenName = tab === 'home' ? 'HomeScreen' : tab === 'earn' ? 'EarnScreen' : tab === 'assets' ? 'AssetsScreen' : 'MoreScreen';
+    logScreenView(screenName);
+    mobileErrorTracker.setCurrentScreen(screenName);
     setActiveTab(tab);
     setSubScreen(null); // Reset sub-screen when switching tabs
   }, []);
@@ -217,9 +223,11 @@ function App() {
       setInviteCode('');
       setActiveTab('home');
       setSubScreen(null);
+      mobileErrorTracker.setCurrentScreen('OnboardingScreen');
       return;
     }
     logScreenView(screen);
+    mobileErrorTracker.setCurrentScreen(screen);
     setSubScreen(screen as SubScreen);
   }, []);
 
@@ -462,9 +470,11 @@ const styles = StyleSheet.create({
 function AppWithProviders() {
   return (
     <SafeAreaProvider>
-      <ToastProvider>
-        <App />
-      </ToastProvider>
+      <ErrorBoundary>
+        <ToastProvider>
+          <App />
+        </ToastProvider>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }
