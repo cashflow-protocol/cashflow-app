@@ -223,7 +223,7 @@ export default function LandingPage() {
         <div className="nav-inner">
           <a href="#" className="nav-logo">
             <span style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 500 }}>cashflow</span>
-            <span style={{ color: '#565656', fontFamily: "'Poppins', sans-serif", fontWeight: 300 }}>| Wealth Engine</span>
+            <span style={{ color: '#565656', fontFamily: "'Poppins', sans-serif", fontWeight: 300 }}>| Personal Finance</span>
           </a>
           <div className="nav-links">
             <a href="#earn">Earn</a>
@@ -284,7 +284,7 @@ export default function LandingPage() {
               </svg>
             </span>
           </h1>
-          <p>The mobile-first Wealth Engine for Solana. Earn yield, swap tokens, save with family, and own your identity onchain — all in one app.</p>
+          <p>Personal Finance App on Solana. Earn yield, swap tokens, save with family, and own your identity onchain — all in one app.</p>
           <div className="hero-buttons">
             <button ref={magneticBtnRef} className="btn btn-l btn-gradient btn-magnetic btn-breathe" onClick={openWaitlist}>Join Waitlist</button>
             <a href="#earn" className="btn btn-l btn-outline">Explore features</a>
