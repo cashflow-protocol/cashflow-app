@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
   TextInput,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
@@ -25,6 +26,13 @@ import { useEarnTokens } from '../hooks/useEarnTokens';
 import { useAssets, invalidateAssets } from '../hooks/useAssets';
 import { useDomainResolution } from '../hooks/useDomainResolution';
 import { IS_SOLANA_MOBILE } from '../config/constants';
+
+// A SystemProgram.transfer that lands the source in a non-rent-exempt state
+// (anything between 1 lamport and the rent-exempt minimum) is rejected silently
+// inside Squads' vaultTransactionExecute CPI: TX3 lands but the inner transfer
+// is a no-op. We leave a small rent-exempt-sized buffer so the inner transfer
+// actually executes.
+const SOL_RENT_RESERVE_LAMPORTS = 1_000_000n; // 0.001 SOL ≈ rent-exempt minimum + margin
 import type { WalletAsset } from '../types/earn';
 import { logScreenView, logCloseVaultView, logCloseVaultPress, logCloseVaultConfirm, logReclaimRentPress, logReclaimRentSuccess, logReclaimRentError } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
@@ -84,8 +92,10 @@ export default function CloseVaultScreen({ onNavigate, onBack }: CloseVaultScree
   const [sweepProgress, setSweepProgress] = useState<string | null>(null);
   const [sweepError, setSweepError] = useState<string | null>(null);
 
-  const { tokens: earnTokens, loading: earnLoading } = useEarnTokens();
-  const { assets, loading: assetsLoading } = useAssets();
+  const { tokens: earnTokens, loading: earnLoading, refresh: refreshEarn } = useEarnTokens();
+  const { assets, loading: assetsLoading, refresh: refreshAssets } = useAssets();
+
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     logScreenView('CloseVaultScreen');
@@ -144,21 +154,38 @@ export default function CloseVaultScreen({ onNavigate, onBack }: CloseVaultScree
     [earnTokens],
   );
 
-  // Native SOL is excluded from the Assets check — the vault keeps it for fee/rent on
-  // subsequent close-vault operations and the user can't drain it from this screen.
+  // All assets with a non-zero balance, sorted with native SOL last so SPL transfers
+  // (which may need vault SOL for ATA rent) run while the vault still has SOL.
   const sweepableAssets = useMemo<WalletAsset[]>(
-    () => assets.filter((a) => !isNativeMint(a.mint) && a.uiAmount > 0),
+    () =>
+      assets
+        .filter((a) => a.uiAmount > 0)
+        .sort((a, b) => Number(isNativeMint(a.mint)) - Number(isNativeMint(b.mint))),
     [assets],
   );
   const assetsUsd = useMemo(
     () => sweepableAssets.reduce((sum, a) => sum + (a.usdValue ?? 0), 0),
     [sweepableAssets],
   );
+  const nonNativeAssetsUsd = useMemo(
+    () => sweepableAssets.filter((a) => !isNativeMint(a.mint)).reduce((sum, a) => sum + (a.usdValue ?? 0), 0),
+    [sweepableAssets],
+  );
+  const nativeSolLamports = useMemo<bigint>(() => {
+    const native = assets.find((a) => isNativeMint(a.mint));
+    return native ? BigInt(native.amount) : 0n;
+  }, [assets]);
 
   const cloudDone = cloudPubkey === null || isSolDone(cloudSol);
   const deviceDone = devicePubkey === null || isSolDone(deviceSol);
   const earnDone = !earnLoading && isUsdDone(earnUsd);
-  const assetsDone = !assetsLoading && isUsdDone(assetsUsd);
+  // Done when no SPL tokens remain and only the rent-exempt SOL reserve (or less)
+  // is left in the vault. We can't safely drain below that without the inner
+  // transfer becoming a silent no-op inside Squads' execute CPI.
+  const assetsDone =
+    !assetsLoading &&
+    isUsdDone(nonNativeAssetsUsd) &&
+    nativeSolLamports <= SOL_RENT_RESERVE_LAMPORTS;
   const ataDone = emptyAtaCount !== null && emptyAtaCount === 0;
 
   const allLoaded =
@@ -218,6 +245,21 @@ export default function CloseVaultScreen({ onNavigate, onBack }: CloseVaultScree
     onNavigate('earn-tab');
   }, [onNavigate]);
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        loadCloudSol(),
+        loadDeviceSol(),
+        loadEmptyAtas(),
+        refreshEarn(),
+        refreshAssets(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadCloudSol, loadDeviceSol, loadEmptyAtas, refreshEarn, refreshAssets]);
+
   const openSweepSheet = useCallback(() => {
     setSweepDestination('');
     setSweepError(null);
@@ -253,10 +295,19 @@ export default function CloseVaultScreen({ onNavigate, onBack }: CloseVaultScree
     try {
       for (const asset of sweepableAssets) {
         i += 1;
+        const native = isNativeMint(asset.mint);
+        let amount = BigInt(asset.amount);
+        if (native) {
+          // Leave the rent-exempt reserve so the inner transfer isn't dropped.
+          amount = amount > SOL_RENT_RESERVE_LAMPORTS ? amount - SOL_RENT_RESERVE_LAMPORTS : 0n;
+        }
+        if (amount === 0n) continue;
+        const apiMint = native ? SOL_MINT : asset.mint;
+
         setSweepProgress(`Sending ${asset.symbol} (${i}/${sweepableAssets.length})...`);
         const res = await apiService.transferInstructions({
-          mint: asset.mint,
-          amount: asset.amount,
+          mint: apiMint,
+          amount: amount.toString(),
           ownerAddress: vault.vaultAddress,
           destinationAddress,
           walletAddress: vault.vaultAddress,
@@ -269,6 +320,10 @@ export default function CloseVaultScreen({ onNavigate, onBack }: CloseVaultScree
           res.transactionId,
           undefined,
           IS_SOLANA_MOBILE,
+          // Skip the MIN_VAULT_SOL precondition: SPL legs may still need vault SOL
+          // for ATA rent, but the native-SOL leg drains the vault to zero. The
+          // backend transferInstructions sizes amounts correctly for both cases.
+          true,
         );
       }
       setSweepProgress(null);
@@ -307,6 +362,14 @@ export default function CloseVaultScreen({ onNavigate, onBack }: CloseVaultScree
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.textSecondary}
+            colors={[colors.textSecondary]}
+          />
+        }
       >
         <View style={styles.content}>
           {cloudPubkey && (
@@ -352,7 +415,13 @@ export default function CloseVaultScreen({ onNavigate, onBack }: CloseVaultScree
             icon={<Wallet size={22} color="#fff" />}
             iconBg="#175DA3"
             title="Assets"
-            subtitle={assetsDone ? 'No assets in vault' : 'Tap to send all tokens to a wallet'}
+            subtitle={
+              assetsDone
+                ? nativeSolLamports > 0n
+                  ? `${formatSol(Number(nativeSolLamports) / 1e9)} kept for rent`
+                  : 'Vault is empty'
+                : 'Tap to send all assets to a wallet'
+            }
             loading={assetsLoading}
             done={assetsDone}
             valueText={formatUsd(assetsUsd)}
@@ -416,7 +485,7 @@ export default function CloseVaultScreen({ onNavigate, onBack }: CloseVaultScree
       <BottomSheet visible={sweepSheetVisible} onClose={closeSweepSheet} avoidKeyboard>
         <Text style={[styles.sheetTitle, { color: colors.textPrimary }]}>Send all assets</Text>
         <Text style={[styles.sheetDesc, { color: colors.textSecondary }]}>
-          Transfers every token from this vault to the address below. Native SOL stays in the vault to cover rent on subsequent close steps.
+          Transfers every token in this vault — and all SOL except a tiny rent-exempt reserve — to the address below.
         </Text>
 
         <View style={[styles.sheetInputRow, { backgroundColor: colors.inputBackground }]}>

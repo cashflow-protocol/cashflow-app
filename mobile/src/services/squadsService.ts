@@ -1270,6 +1270,13 @@ export async function executeVaultTransaction(
    * mode (an MWA wallet must be present); throws otherwise.
    */
   useWalletCover?: boolean,
+  /**
+   * When true, skip the precondition check that requires vault PDA to hold
+   * MIN_VAULT_SOL. Use only for inner instructions that don't create new
+   * accounts (e.g. SystemProgram.transfer of native SOL during the close-
+   * vault sweep), since the vault PDA can safely drain to zero in that case.
+   */
+  skipMinSolCheck?: boolean,
 ): Promise<{ signature: string; bundleSignatures: string[] }> {
   const multisigPda = new PublicKey(multisigAddress);
   const vaultData = await getVault();
@@ -1315,11 +1322,13 @@ export async function executeVaultTransaction(
 
   // Vault needs SOL for rent when inner instructions create accounts (ATAs, farm state)
   const MIN_VAULT_SOL = 0.02;
-  const vaultSolBalance = await connection.getBalance(vaultPda, 'confirmed') / 1e9;
-  if (vaultSolBalance < MIN_VAULT_SOL) {
-    throw new Error(
-      `Not enough SOL in your vault for transaction fees. You need at least ${MIN_VAULT_SOL} SOL (current: ${vaultSolBalance.toFixed(4)} SOL). Please deposit SOL first.`,
-    );
+  if (!skipMinSolCheck) {
+    const vaultSolBalance = await connection.getBalance(vaultPda, 'confirmed') / 1e9;
+    if (vaultSolBalance < MIN_VAULT_SOL) {
+      throw new Error(
+        `Not enough SOL in your vault for transaction fees. You need at least ${MIN_VAULT_SOL} SOL (current: ${vaultSolBalance.toFixed(4)} SOL). Please deposit SOL first.`,
+      );
+    }
   }
 
   // Ensure spending limit exists for non-Seeker mode (lazy migration for existing vaults)
