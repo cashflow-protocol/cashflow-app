@@ -23,6 +23,7 @@ import KeysRecoveryScreen from './src/screens/KeysRecoveryScreen';
 import AddRecoveryKeyScreen from './src/screens/AddRecoveryKeyScreen';
 import ChangePinScreen from './src/screens/ChangePinScreen';
 import SpendingLimitsScreen from './src/screens/SpendingLimitsScreen';
+import CloseVaultScreen from './src/screens/CloseVaultScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import VaultRecoveryScreen from './src/screens/VaultRecoveryScreen';
 import BiometricLockScreen from './src/components/BiometricLockScreen';
@@ -58,7 +59,7 @@ import mobileErrorTracker from './src/services/mobileErrorTracker';
 import ErrorBoundary from './src/components/ErrorBoundary';
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | 'keys-recovery' | 'add-recovery-key' | 'spending-limits' | null;
+type SubScreen = 'squads' | 'add-member' | 'change-pin' | 'notifications' | 'keys-recovery' | 'add-recovery-key' | 'spending-limits' | 'close-vault' | null;
 type OnboardingStep = 'carousel' | 'invite-code' | 'pin-setup' | 'vault-setup' | 'waitlist' | 'vault-recovery' | null;
 
 function App() {
@@ -226,6 +227,15 @@ function App() {
       mobileErrorTracker.setCurrentScreen('OnboardingScreen');
       return;
     }
+    if (screen === 'earn-tab' || screen === 'assets-tab') {
+      const tab: TabName = screen === 'earn-tab' ? 'earn' : 'assets';
+      setActiveTab(tab);
+      setSubScreen(null);
+      const screenName = tab === 'earn' ? 'EarnScreen' : 'AssetsScreen';
+      logScreenView(screenName);
+      mobileErrorTracker.setCurrentScreen(screenName);
+      return;
+    }
     logScreenView(screen);
     mobileErrorTracker.setCurrentScreen(screen);
     setSubScreen(screen as SubScreen);
@@ -262,6 +272,8 @@ function App() {
           return <AddMemberScreen onNavigate={handleNavigate} onBack={handleBack} />;
         case 'spending-limits':
           return <SpendingLimitsScreen onNavigate={handleNavigate} onBack={handleBack} />;
+        case 'close-vault':
+          return <CloseVaultScreen onNavigate={handleNavigate} onBack={handleBack} />;
         case 'change-pin':
           // Handled as full-screen overlay below
           break;

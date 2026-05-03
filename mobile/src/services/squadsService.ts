@@ -23,7 +23,7 @@ import {
   signWithCloud,
   signWithDevice,
 } from './keypairStorage';
-import { createCoverFromSquadInstruction } from '@heymike/send';
+import { createCoverFromSquadInstruction, createCoverInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
 import { IS_SOLANA_MOBILE, getVaultCreationFee, getAdminTxFeePayerPublicKey, ADMIN_COVER_TARGET, DEFAULT_SPENDING_LIMIT } from '../config/constants';
 import { logError } from './analyticsService';
@@ -1263,6 +1263,13 @@ export async function executeVaultTransaction(
   transactionId?: string,
   /** Pre-signed base64 transactions to append to the Jito bundle (e.g. Metaplex Core mint). */
   extraSignedTransactions?: string[],
+  /**
+   * When true, reimburse admin fee payer directly from the MWA wallet via
+   * createCoverInstruction (4-arg, walletAddress → admin) instead of the
+   * spending-limit-based createCoverFromSquadInstruction. Requires Seeker
+   * mode (an MWA wallet must be present); throws otherwise.
+   */
+  useWalletCover?: boolean,
 ): Promise<{ signature: string; bundleSignatures: string[] }> {
   const multisigPda = new PublicKey(multisigAddress);
   const vaultData = await getVault();
@@ -1434,18 +1441,33 @@ export async function executeVaultTransaction(
     );
   }
   tx4Instructions.push(await jitoTipIx(feePayer));
-  // Reimburse admin gas from vault via spending limit
-  const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
-  const coverMember = seekerMode ? walletPubkey! : cloudPubkey!;
-  tx4Instructions.push(
-    kitIxToWeb3(await createCoverFromSquadInstruction(
-      kitAddress(adminFeePayerPubkey.toBase58()),
-      kitAddress(coverMember.toBase58()),
-      kitAddress(multisigPda.toBase58()),
-      kitAddress(spendingLimitPda.toBase58()),
-      ADMIN_COVER_TARGET,
-    )),
-  );
+  if (useWalletCover) {
+    if (!walletPubkey) {
+      throw new Error('Wallet cover requires an MWA wallet (Solana Mobile)');
+    }
+    // Reimburse admin directly from the user's MWA wallet (no vault spending-limit involved)
+    tx4Instructions.push(
+      kitIxToWeb3(await createCoverInstruction(
+        kitAddress(walletPubkey.toBase58()),
+        kitAddress(walletPubkey.toBase58()),
+        kitAddress(adminFeePayerPubkey.toBase58()),
+        ADMIN_COVER_TARGET,
+      ) as any),
+    );
+  } else {
+    // Reimburse admin gas from vault via spending limit
+    const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+    const coverMember = seekerMode ? walletPubkey! : cloudPubkey!;
+    tx4Instructions.push(
+      kitIxToWeb3(await createCoverFromSquadInstruction(
+        kitAddress(adminFeePayerPubkey.toBase58()),
+        kitAddress(coverMember.toBase58()),
+        kitAddress(multisigPda.toBase58()),
+        kitAddress(spendingLimitPda.toBase58()),
+        ADMIN_COVER_TARGET,
+      )),
+    );
+  }
 
   // --- Build all transactions with one blockhash (Jito bundle) ---
   const debugLines: string[] = [];

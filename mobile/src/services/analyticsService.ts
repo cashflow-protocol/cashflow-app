@@ -327,12 +327,16 @@ export function logReclaimRentError(error: string) {
   analytics().logEvent('reclaim_rent_error', { error: error.slice(0, 100) });
 }
 
-export function logRemoveVaultPress() {
-  analytics().logEvent('remove_vault_press');
+export function logCloseVaultView() {
+  analytics().logEvent('close_vault_view');
 }
 
-export function logRemoveVaultConfirm() {
-  analytics().logEvent('remove_vault_confirm');
+export function logCloseVaultPress() {
+  analytics().logEvent('close_vault_press');
+}
+
+export function logCloseVaultConfirm() {
+  analytics().logEvent('close_vault_confirm');
 }
 
 // ── Squads ──
