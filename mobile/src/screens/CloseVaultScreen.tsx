@@ -20,7 +20,7 @@ import BottomSheet from '../components/BottomSheet';
 import { getVault, clearVault, type VaultData } from '../services/vaultStorage';
 import { getCloudPublicKey, getDevicePublicKey, deleteAllKeypairs, clearCachedPin } from '../services/keypairStorage';
 import walletService from '../services/walletService';
-import { reclaimRent, executeVaultTransaction } from '../services/squadsService';
+import { closeEmptyTokenAccounts, executeVaultTransaction } from '../services/squadsService';
 import apiService from '../services/apiService';
 import { useEarnTokens } from '../hooks/useEarnTokens';
 import { useAssets, invalidateAssets } from '../hooks/useAssets';
@@ -202,10 +202,20 @@ export default function CloseVaultScreen({ onNavigate, onBack }: CloseVaultScree
     logReclaimRentPress();
     setReclaimStatus('Starting...');
     try {
-      const result = await reclaimRent(vault.multisigAddress, (msg) => setReclaimStatus(msg));
-      logReclaimRentSuccess(result.closed, result.skipped, result.failed);
+      const result = await closeEmptyTokenAccounts(
+        vault.multisigAddress,
+        vault.vaultAddress,
+        (msg) => setReclaimStatus(msg),
+      );
+      logReclaimRentSuccess(result.closed, 0, result.failed);
       setReclaimStatus(null);
       await loadEmptyAtas();
+      if (result.failed > 0) {
+        Alert.alert(
+          'Some accounts could not be closed',
+          `Closed ${result.closed} of ${result.total}. ${result.failed} failed — try again to retry the rest.`,
+        );
+      }
     } catch (err: any) {
       logReclaimRentError(err.message ?? 'unknown');
       setReclaimStatus(null);

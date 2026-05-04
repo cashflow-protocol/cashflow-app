@@ -1277,6 +1277,14 @@ export async function executeVaultTransaction(
    * vault sweep), since the vault PDA can safely drain to zero in that case.
    */
   skipMinSolCheck?: boolean,
+  /**
+   * When true, omit the vaultTransactionAccountsClose instruction in TX4 so the
+   * proposal/transaction rent does NOT flow back to the multisig's rent
+   * collector (the vault PDA). The PDAs become orphaned and admin loses the
+   * rent it paid up front, but the vault truly stays at its post-execute
+   * balance — required for the close-vault sweep to land cleanly.
+   */
+  skipAccountsClose?: boolean,
 ): Promise<{ signature: string; bundleSignatures: string[] }> {
   const multisigPda = new PublicKey(multisigAddress);
   const vaultData = await getVault();
@@ -1951,6 +1959,61 @@ export async function reclaimRent(
   }
 
   return { closed, skipped, failed, cancelled };
+}
+
+/**
+ * Close every empty SPL ATA owned by the vault, returning rent to the vault.
+ * Wraps groups of close-account instructions in vault transactions and runs
+ * them through executeVaultTransaction. Skips Squads' accounts-close in TX4
+ * so the proposal/transaction PDA rent doesn't loop back into the vault.
+ *
+ * @returns the number of ATAs successfully closed, plus failed and total
+ */
+export async function closeEmptyTokenAccounts(
+  multisigAddress: string,
+  walletAddress: string,
+  onProgress?: (msg: string) => void,
+): Promise<{ closed: number; failed: number; total: number }> {
+  onProgress?.('Looking up empty token accounts...');
+  const { instructions: allInstructions, count } = await apiService.closeEmptyTokenAccountsInstructions(walletAddress);
+  if (count === 0) return { closed: 0, failed: 0, total: 0 };
+
+  // Chunk to keep each vault transaction safely under the size limit.
+  // Close-account is small (~96 bytes per ix incl. accounts), but Squads stores
+  // the whole inner message twice (TX1 + TX3 reads), so stay conservative.
+  const CHUNK_SIZE = 5;
+  let closed = 0;
+  let failed = 0;
+
+  for (let i = 0; i < allInstructions.length; i += CHUNK_SIZE) {
+    const chunk = allInstructions.slice(i, i + CHUNK_SIZE);
+    const batchNum = Math.floor(i / CHUNK_SIZE) + 1;
+    const totalBatches = Math.ceil(allInstructions.length / CHUNK_SIZE);
+    onProgress?.(`Closing ${chunk.length} accounts (batch ${batchNum}/${totalBatches})...`);
+    try {
+      await executeVaultTransaction(
+        multisigAddress,
+        chunk,
+        undefined,
+        undefined,
+        undefined,
+        IS_SOLANA_MOBILE,
+        true, // skipMinSolCheck — vault might be low on SOL
+        true, // skipAccountsClose — keep this batch's proposal rent out of the vault
+      );
+      closed += chunk.length;
+    } catch (err: any) {
+      logError('squads_close_empty_atas', `batch_failed: ${err.message || 'unknown'}`);
+      mobileErrorTracker.log(err, {
+        severity: 'unexpected',
+        action: 'squads_close_empty_atas',
+        context: { batchSize: chunk.length, batchNum, totalBatches },
+      });
+      failed += chunk.length;
+    }
+  }
+
+  return { closed, failed, total: count };
 }
 
 /**

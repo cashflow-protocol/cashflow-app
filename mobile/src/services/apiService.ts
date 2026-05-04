@@ -488,6 +488,17 @@ class ApiService {
     return { transactionId: res.transactionId, instructions: res.instructions };
   }
 
+  async closeEmptyTokenAccountsInstructions(walletAddress: string): Promise<{
+    instructions: SerializedInstruction[];
+    count: number;
+  }> {
+    const res = await this.signedPost<{
+      success: boolean;
+      data: { instructions: SerializedInstruction[]; count: number };
+    }>('/solana/v2/close-empty-token-accounts', { walletAddress });
+    return res.data;
+  }
+
   async swapQuote(params: {
     inputMint: string;
     outputMint: string;

@@ -654,6 +654,75 @@ router.get('/wallet-balance', async (req: Request, res: Response) => {
   }
 });
 
+// POST /solana/v2/close-empty-token-accounts - Build CloseAccount instructions for every
+// empty (zero-balance) ATA on a wallet (Token + Token-2022). Rent flows back to the wallet.
+router.post('/close-empty-token-accounts', async (req: Request, res: Response) => {
+  try {
+    const { walletAddress } = req.body;
+    if (!walletAddress || typeof walletAddress !== 'string') {
+      res.status(400).json({ success: false, error: 'walletAddress is required' });
+      return;
+    }
+
+    const owner = address(walletAddress);
+    const { getCloseAccountInstruction, TOKEN_PROGRAM_ADDRESS } = await import('@solana-program/token');
+    const {
+      getCloseAccountInstruction: getCloseAccountInstruction2022,
+      TOKEN_2022_PROGRAM_ADDRESS,
+    } = await import('@solana-program/token-2022');
+
+    const noopSigner = { address: owner, signTransactions: async (txs: any[]) => txs.map(() => ({})) } as any;
+
+    const [legacyAccounts, t22Accounts] = await Promise.all([
+      rpc.getTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ADDRESS }, { encoding: 'jsonParsed' }).send(),
+      rpc.getTokenAccountsByOwner(owner, { programId: TOKEN_2022_PROGRAM_ADDRESS }, { encoding: 'jsonParsed' }).send(),
+    ]);
+
+    const buildClose = (
+      pubkey: string,
+      isToken2022: boolean,
+    ) => {
+      const ix = isToken2022
+        ? getCloseAccountInstruction2022({ account: address(pubkey), destination: owner, owner: noopSigner })
+        : getCloseAccountInstruction({ account: address(pubkey), destination: owner, owner: noopSigner });
+      return {
+        programId: ix.programAddress as string,
+        accounts: (ix.accounts ?? []).map((acc: any) => ({
+          pubkey: acc.address as string,
+          isSigner: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.READONLY_SIGNER,
+          isWritable: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.WRITABLE,
+        })),
+        data: Buffer.from(ix.data ?? new Uint8Array()).toString('base64'),
+      };
+    };
+
+    const instructions: any[] = [];
+    for (const acc of legacyAccounts.value) {
+      const parsed = acc.account.data as any;
+      const amount = BigInt(parsed.parsed.info.tokenAmount.amount);
+      if (amount === 0n) instructions.push(buildClose(acc.pubkey as string, false));
+    }
+    for (const acc of t22Accounts.value) {
+      const parsed = acc.account.data as any;
+      const amount = BigInt(parsed.parsed.info.tokenAmount.amount);
+      if (amount === 0n) instructions.push(buildClose(acc.pubkey as string, true));
+    }
+
+    res.json({
+      success: true,
+      data: { instructions, count: instructions.length },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('Error building close-account instructions:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to build close-account instructions',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 // GET /solana/v1/empty-token-accounts - Count empty (zero-balance) token accounts on a wallet
 router.get('/empty-token-accounts', async (req: Request, res: Response) => {
   try {
@@ -663,13 +732,15 @@ router.get('/empty-token-accounts', async (req: Request, res: Response) => {
       return;
     }
 
-    const accounts = await rpc.getTokenAccountsByOwner(
-      address(walletAddress),
-      { programId: address('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') },
-      { encoding: 'jsonParsed' },
-    ).send();
-
-    const emptyAccounts = accounts.value.filter((acc) => {
+    const { TOKEN_PROGRAM_ADDRESS } = await import('@solana-program/token');
+    const { TOKEN_2022_PROGRAM_ADDRESS } = await import('@solana-program/token-2022');
+    const owner = address(walletAddress);
+    const [legacy, t22] = await Promise.all([
+      rpc.getTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ADDRESS }, { encoding: 'jsonParsed' }).send(),
+      rpc.getTokenAccountsByOwner(owner, { programId: TOKEN_2022_PROGRAM_ADDRESS }, { encoding: 'jsonParsed' }).send(),
+    ]);
+    const all = [...legacy.value, ...t22.value];
+    const emptyAccounts = all.filter((acc) => {
       const parsed = acc.account.data as any;
       const amount = BigInt(parsed.parsed.info.tokenAmount.amount);
       return amount === 0n;
@@ -677,7 +748,7 @@ router.get('/empty-token-accounts', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      data: { total: accounts.value.length, empty: emptyAccounts.length },
+      data: { total: all.length, empty: emptyAccounts.length },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
