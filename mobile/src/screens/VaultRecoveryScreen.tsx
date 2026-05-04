@@ -45,6 +45,16 @@ function truncateAddress(addr: string): string {
   return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
 }
 
+function formatUsd(value: number): string {
+  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+interface VaultBalance {
+  assetsUsd: number;
+  earnUsd: number;
+  loading: boolean;
+}
+
 export default function VaultRecoveryScreen({ pin, onComplete, onBack }: VaultRecoveryScreenProps) {
   const { colors } = useTheme();
   const { showToast: showToastCtx } = useToast();
@@ -52,6 +62,7 @@ export default function VaultRecoveryScreen({ pin, onComplete, onBack }: VaultRe
   const [step, setStep] = useState<RecoveryStep>('connect');
   const [walletAddress, setWalletAddress] = useState('');
   const [vaults, setVaults] = useState<MultisigResult[]>([]);
+  const [vaultBalances, setVaultBalances] = useState<Record<string, VaultBalance>>({});
   const [selectedVault, setSelectedVault] = useState<MultisigResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [manualModalVisible, setManualModalVisible] = useState(false);
@@ -73,6 +84,34 @@ export default function VaultRecoveryScreen({ pin, onComplete, onBack }: VaultRe
   const showToast = useCallback((msg: string) => {
     showToastCtx('Error', msg);
   }, [showToastCtx]);
+
+  const fetchVaultBalances = useCallback((vaultsToFetch: MultisigResult[]) => {
+    setVaultBalances(prev => {
+      const next = { ...prev };
+      for (const v of vaultsToFetch) {
+        if (!next[v.vaultAddress]) {
+          next[v.vaultAddress] = { assetsUsd: 0, earnUsd: 0, loading: true };
+        }
+      }
+      return next;
+    });
+    for (const v of vaultsToFetch) {
+      apiService.getVaultBalances(v.vaultAddress)
+        .then(({ assetsUsd, earnUsd }) => {
+          setVaultBalances(prev => ({
+            ...prev,
+            [v.vaultAddress]: { assetsUsd, earnUsd, loading: false },
+          }));
+        })
+        .catch(err => {
+          console.warn('[Recovery] Failed to fetch balances for', v.vaultAddress, err);
+          setVaultBalances(prev => ({
+            ...prev,
+            [v.vaultAddress]: { assetsUsd: 0, earnUsd: 0, loading: false },
+          }));
+        });
+    }
+  }, []);
 
   const handleConnect = useCallback(async () => {
 
@@ -105,6 +144,7 @@ export default function VaultRecoveryScreen({ pin, onComplete, onBack }: VaultRe
         setStep('confirm');
       } else {
         setVaults(multisigs);
+        fetchVaultBalances(multisigs);
         setStep('select');
       }
     } catch (err: any) {
@@ -114,7 +154,7 @@ export default function VaultRecoveryScreen({ pin, onComplete, onBack }: VaultRe
     } finally {
       setLoading(false);
     }
-  }, [connectWallet, showToast]);
+  }, [connectWallet, showToast, fetchVaultBalances]);
 
   const handleSelectVault = useCallback((vault: MultisigResult) => {
     setSelectedVault(vault);
@@ -250,36 +290,53 @@ export default function VaultRecoveryScreen({ pin, onComplete, onBack }: VaultRe
         data={vaults}
         keyExtractor={(item) => item.multisigAddress}
         keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.vaultCard, { backgroundColor: 'rgba(255,255,255,0.12)' }]}
-            onPress={() => handleSelectVault(item)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.vaultCardContent}>
-              <View style={{ flex: 1 }}>
-                <View style={styles.vaultCardHeader}>
-                  <Text style={styles.vaultCardTitle}>{truncateAddress(item.vaultAddress)}</Text>
-                  {item.matchesCloudKey && (
-                    <CheckCircle2 size={18} color="#4ade80" />
-                  )}
+        renderItem={({ item }) => {
+          const balance = vaultBalances[item.vaultAddress];
+          return (
+            <TouchableOpacity
+              style={[styles.vaultCard, { backgroundColor: 'rgba(255,255,255,0.12)' }]}
+              onPress={() => handleSelectVault(item)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.vaultCardContent}>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.vaultCardHeader}>
+                    <Text style={styles.vaultCardTitle}>{truncateAddress(item.vaultAddress)}</Text>
+                    {item.matchesCloudKey && (
+                      <CheckCircle2 size={18} color="#4ade80" />
+                    )}
+                  </View>
+                  <Text style={styles.vaultCardSub}>
+                    {item.threshold} of {item.memberCount} multisig
+                  </Text>
+                  <View style={styles.vaultCardBalances}>
+                    <View style={styles.vaultCardBalanceRow}>
+                      <Text style={styles.vaultCardBalanceLabel}>Assets</Text>
+                      <Text style={styles.vaultCardBalanceValue}>
+                        {balance?.loading ? '...' : formatUsd(balance?.assetsUsd ?? 0)}
+                      </Text>
+                    </View>
+                    <View style={styles.vaultCardBalanceRow}>
+                      <Text style={styles.vaultCardBalanceLabel}>Earn</Text>
+                      <Text style={styles.vaultCardBalanceValue}>
+                        {balance?.loading ? '...' : formatUsd(balance?.earnUsd ?? 0)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.vaultCardMembers}>
+                    {item.members.map((m) => (
+                      <Text key={m.address} style={styles.vaultCardMember}>
+                        {truncateAddress(m.address)}
+                        {m.address === walletAddress ? ' (you)' : ''}
+                      </Text>
+                    ))}
+                  </View>
                 </View>
-                <Text style={styles.vaultCardSub}>
-                  {item.threshold} of {item.memberCount} multisig
-                </Text>
-                <View style={styles.vaultCardMembers}>
-                  {item.members.map((m) => (
-                    <Text key={m.address} style={styles.vaultCardMember}>
-                      {truncateAddress(m.address)}
-                      {m.address === walletAddress ? ' (you)' : ''}
-                    </Text>
-                  ))}
-                </View>
+                <ChevronRight size={20} color="rgba(255,255,255,0.5)" />
               </View>
-              <ChevronRight size={20} color="rgba(255,255,255,0.5)" />
-            </View>
-          </TouchableOpacity>
-        )}
+            </TouchableOpacity>
+          );
+        }}
         showsVerticalScrollIndicator={false}
       />
     </View>
@@ -584,8 +641,26 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     marginTop: 4,
   },
+  vaultCardBalances: {
+    marginTop: 12,
+    gap: 4,
+  },
+  vaultCardBalanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  vaultCardBalanceLabel: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  vaultCardBalanceValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
   vaultCardMembers: {
-    marginTop: 8,
+    marginTop: 12,
     gap: 2,
   },
   vaultCardMember: {

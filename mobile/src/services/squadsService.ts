@@ -1285,6 +1285,14 @@ export async function executeVaultTransaction(
    * balance — required for the close-vault sweep to land cleanly.
    */
   skipAccountsClose?: boolean,
+  /**
+   * When true, omit the cover instruction in TX4 entirely (no createCoverFromSquad
+   * and no createCoverInstruction). Use for the close-vault sweep, where the
+   * vault has been drained to its rent-exempt minimum and any cover that pulls
+   * additional SOL would land it in a non-rent-exempt state. Admin pays gas
+   * for this single bundle without reimbursement.
+   */
+  skipCover?: boolean,
 ): Promise<{ signature: string; bundleSignatures: string[] }> {
   const multisigPda = new PublicKey(multisigAddress);
   const vaultData = await getVault();
@@ -1458,32 +1466,34 @@ export async function executeVaultTransaction(
     );
   }
   tx4Instructions.push(await jitoTipIx(feePayer));
-  if (useWalletCover) {
-    if (!walletPubkey) {
-      throw new Error('Wallet cover requires an MWA wallet (Solana Mobile)');
+  if (!skipCover) {
+    if (useWalletCover) {
+      if (!walletPubkey) {
+        throw new Error('Wallet cover requires an MWA wallet (Solana Mobile)');
+      }
+      // Reimburse admin directly from the user's MWA wallet (no vault spending-limit involved)
+      tx4Instructions.push(
+        kitIxToWeb3(await createCoverInstruction(
+          kitAddress(walletPubkey.toBase58()),
+          kitAddress(walletPubkey.toBase58()),
+          kitAddress(adminFeePayerPubkey.toBase58()),
+          ADMIN_COVER_TARGET,
+        ) as any),
+      );
+    } else {
+      // Reimburse admin gas from vault via spending limit
+      const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+      const coverMember = seekerMode ? walletPubkey! : cloudPubkey!;
+      tx4Instructions.push(
+        kitIxToWeb3(await createCoverFromSquadInstruction(
+          kitAddress(adminFeePayerPubkey.toBase58()),
+          kitAddress(coverMember.toBase58()),
+          kitAddress(multisigPda.toBase58()),
+          kitAddress(spendingLimitPda.toBase58()),
+          ADMIN_COVER_TARGET,
+        )),
+      );
     }
-    // Reimburse admin directly from the user's MWA wallet (no vault spending-limit involved)
-    tx4Instructions.push(
-      kitIxToWeb3(await createCoverInstruction(
-        kitAddress(walletPubkey.toBase58()),
-        kitAddress(walletPubkey.toBase58()),
-        kitAddress(adminFeePayerPubkey.toBase58()),
-        ADMIN_COVER_TARGET,
-      ) as any),
-    );
-  } else {
-    // Reimburse admin gas from vault via spending limit
-    const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
-    const coverMember = seekerMode ? walletPubkey! : cloudPubkey!;
-    tx4Instructions.push(
-      kitIxToWeb3(await createCoverFromSquadInstruction(
-        kitAddress(adminFeePayerPubkey.toBase58()),
-        kitAddress(coverMember.toBase58()),
-        kitAddress(multisigPda.toBase58()),
-        kitAddress(spendingLimitPda.toBase58()),
-        ADMIN_COVER_TARGET,
-      )),
-    );
   }
 
   // --- Build all transactions with one blockhash (Jito bundle) ---
@@ -1529,12 +1539,15 @@ export async function executeVaultTransaction(
     const tx2 = new VersionedTransaction(msg2);
     debugLines.push(`TX2 size: ${tx2.serialize().length} bytes`);
 
-    // TX3: execute (needs extra CU for complex CPI chains like Kamino)
+    // TX3: execute. Set to Solana's per-tx max (1.4M) — Kamino USDC kvault
+    // withdraw refreshes every allocated reserve in-line and routinely exceeds
+    // 1.2M CU. There is no headroom above this; if it still doesn't fit, the
+    // inner message has to be split across two vault transactions.
     const msg3 = new TransactionMessage({
       payerKey: feePayer,
       recentBlockhash: blockhash,
       instructions: [
-        ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
         executeIx,
       ],
     }).compileToV0Message(luts);
@@ -1997,9 +2010,10 @@ export async function closeEmptyTokenAccounts(
         undefined,
         undefined,
         undefined,
-        IS_SOLANA_MOBILE,
+        false, // useWalletCover — irrelevant when skipCover=true
         true, // skipMinSolCheck — vault might be low on SOL
         true, // skipAccountsClose — keep this batch's proposal rent out of the vault
+        true, // skipCover — vault may already be at rent-exempt minimum
       );
       closed += chunk.length;
     } catch (err: any) {

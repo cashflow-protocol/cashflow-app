@@ -25,8 +25,6 @@ import apiService from '../services/apiService';
 import { useEarnTokens } from '../hooks/useEarnTokens';
 import { useAssets, invalidateAssets } from '../hooks/useAssets';
 import { useDomainResolution } from '../hooks/useDomainResolution';
-import { IS_SOLANA_MOBILE } from '../config/constants';
-
 // A SystemProgram.transfer that lands the source in a non-rent-exempt state
 // (anything between 1 lamport and the rent-exempt minimum) is rejected silently
 // inside Squads' vaultTransactionExecute CPI: TX3 lands but the inner transfer
@@ -329,10 +327,18 @@ export default function CloseVaultScreen({ onNavigate, onBack }: CloseVaultScree
           undefined,
           res.transactionId,
           undefined,
-          IS_SOLANA_MOBILE,
-          // Skip the MIN_VAULT_SOL precondition: SPL legs may still need vault SOL
-          // for ATA rent, but the native-SOL leg drains the vault to zero. The
-          // backend transferInstructions sizes amounts correctly for both cases.
+          // useWalletCover — irrelevant when skipCover=true below.
+          false,
+          // skipMinSolCheck — vault may already be near zero on the SOL leg.
+          true,
+          // skipAccountsClose — keep this leg's proposal/tx rent out of the vault
+          // (otherwise it loops back as ~0.0065 SOL per close-vault).
+          true,
+          // skipCover — the vault is at its rent-exempt minimum after this leg;
+          // any cover (squad-based or wallet-based) that pulls more SOL would
+          // leave the vault in a non-rent-exempt state and the bundle would fail
+          // with InsufficientFundsForRent. Admin pays gas without reimbursement
+          // for the close-vault bundle (rare, ~0.00005 SOL).
           true,
         );
       }

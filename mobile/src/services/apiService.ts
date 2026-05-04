@@ -760,6 +760,37 @@ class ApiService {
     return res;
   }
 
+  /**
+   * Unauthenticated balance lookup for a vault address — used during recovery
+   * before the user has a JWT. Hits the v1 (no-auth) variants of /assets and
+   * /positions in parallel and returns just the USD totals.
+   */
+  async getVaultBalances(vaultAddress: string): Promise<{ assetsUsd: number; earnUsd: number }> {
+    const [assetsRes, positionsRes] = await Promise.allSettled([
+      fetch(`${this.baseUrl}/solana/v1/assets?walletAddress=${encodeURIComponent(vaultAddress)}`),
+      fetch(`${this.baseUrl}/earn/v1/positions?walletAddress=${encodeURIComponent(vaultAddress)}`),
+    ]);
+
+    let assetsUsd = 0;
+    if (assetsRes.status === 'fulfilled' && assetsRes.value.ok) {
+      const json = await assetsRes.value.json().catch(() => null);
+      const total = json?.data?.totalUsdValue;
+      if (typeof total === 'number' && Number.isFinite(total)) assetsUsd = total;
+    }
+
+    let earnUsd = 0;
+    if (positionsRes.status === 'fulfilled' && positionsRes.value.ok) {
+      const json = await positionsRes.value.json().catch(() => null);
+      const positions = Array.isArray(json?.data) ? json.data : [];
+      for (const p of positions) {
+        const v = p?.balance?.usdValue;
+        if (typeof v === 'number' && Number.isFinite(v)) earnUsd += v;
+      }
+    }
+
+    return { assetsUsd, earnUsd };
+  }
+
   async findVaultByAddress(
     address: string,
   ): Promise<{
