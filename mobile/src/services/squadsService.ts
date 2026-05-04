@@ -1541,13 +1541,16 @@ export async function executeVaultTransaction(
 
     // TX3: execute. Set to Solana's per-tx max (1.4M) — Kamino USDC kvault
     // withdraw refreshes every allocated reserve in-line and routinely exceeds
-    // 1.2M CU. There is no headroom above this; if it still doesn't fit, the
-    // inner message has to be split across two vault transactions.
+    // 1.2M CU. Also request the max heap (256KB) — Squads VaultTransactionExecute
+    // overflows the default 32KB heap when the inner message has many accounts
+    // (e.g. Kamino kvault withdraw with 47+ accounts), which surfaces as
+    // "Access violation in heap section at address 0x3000XXXX".
     const msg3 = new TransactionMessage({
       payerKey: feePayer,
       recentBlockhash: blockhash,
       instructions: [
         ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
+        ComputeBudgetProgram.requestHeapFrame({ bytes: 256 * 1024 }),
         executeIx,
       ],
     }).compileToV0Message(luts);
