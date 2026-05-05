@@ -59,7 +59,6 @@ async function backfill() {
         $set: {
           totalDeposited: totalDeposited.toString(),
           totalWithdrawn: totalWithdrawn.toString(),
-          totalFeesCollected: '0',
         },
         $setOnInsert: { createdAt: new Date() },
         $currentDate: { updatedAt: true },

@@ -140,7 +140,6 @@ export async function rebuildUserCostBasis(
     mint: string;
     totalDeposited: bigint;
     totalWithdrawn: bigint;
-    totalFeesCollected: bigint;
   };
   const totals = new Map<string, Bucket>();
 
@@ -149,7 +148,7 @@ export async function rebuildUserCostBasis(
       status: TransactionStatus.CONFIRMED,
       action: { $in: [TransactionAction.DEPOSIT, TransactionAction.WITHDRAW] },
     },
-    { userVaultAddress: 1, mint: 1, action: 1, amount: 1, feeAmount: 1 },
+    { userVaultAddress: 1, mint: 1, action: 1, amount: 1 },
   )
     .lean()
     .cursor();
@@ -170,7 +169,6 @@ export async function rebuildUserCostBasis(
         mint: tx.mint,
         totalDeposited: 0n,
         totalWithdrawn: 0n,
-        totalFeesCollected: 0n,
       };
       totals.set(key, bucket);
     }
@@ -180,7 +178,6 @@ export async function rebuildUserCostBasis(
       bucket.totalDeposited += amt;
     } else {
       bucket.totalWithdrawn += amt;
-      if (tx.feeAmount) bucket.totalFeesCollected += BigInt(tx.feeAmount);
     }
   }
 
@@ -192,20 +189,18 @@ export async function rebuildUserCostBasis(
     const newDoc = {
       totalDeposited: bucket.totalDeposited.toString(),
       totalWithdrawn: bucket.totalWithdrawn.toString(),
-      totalFeesCollected: bucket.totalFeesCollected.toString(),
     };
 
     const existing = await UserCostBasisModel.findOne(
       { vaultAddress: bucket.vaultAddress, mint: bucket.mint },
-      { totalDeposited: 1, totalWithdrawn: 1, totalFeesCollected: 1 },
+      { totalDeposited: 1, totalWithdrawn: 1 },
     ).lean();
 
     if (!existing) {
       wouldCreate++;
     } else if (
       existing.totalDeposited === newDoc.totalDeposited &&
-      existing.totalWithdrawn === newDoc.totalWithdrawn &&
-      existing.totalFeesCollected === newDoc.totalFeesCollected
+      existing.totalWithdrawn === newDoc.totalWithdrawn
     ) {
       unchanged++;
       continue;

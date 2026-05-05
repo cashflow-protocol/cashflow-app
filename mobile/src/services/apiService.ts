@@ -217,19 +217,6 @@ class ApiService {
     return res.data;
   }
 
-  async getFeePreview(vaultAddress: string, mint: string, amount: string): Promise<{
-    feeAmount: string;
-    profitAmount: string;
-    feeUiAmount: number;
-    profitUiAmount: number;
-  }> {
-    const res = await this.get<{
-      success: boolean;
-      data: { feeAmount: string; profitAmount: string; feeUiAmount: number; profitUiAmount: number };
-    }>('/earn/v2/fee-preview', { vaultAddress, mint, amount });
-    return res.data;
-  }
-
   private async post<T>(path: string, body: Record<string, any>): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const token = await authService.getToken();

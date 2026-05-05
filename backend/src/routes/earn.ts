@@ -6,7 +6,6 @@ import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { TransactionAction, UserCostBasisModel, UserModel, NotifyInterestModel } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
 import { notifyAdmin } from '../services/telegramManager';
-import { calculateFee, buildFeeTransferInstructions, createFeeRecord } from '../services/feeService';
 import type { AuthenticatedRequest } from '../middleware/auth';
 import { isValidSolanaAddress } from '../utils/validation';
 
@@ -268,7 +267,6 @@ router.get('/earnings', async (req: Request, res: Response) => {
       currentPosition: string;
       realizedProfit: string;
       unrealizedProfit: string;
-      feesCollected: string;
       earningsUsd: number;
     }[] = [];
 
@@ -282,9 +280,7 @@ router.get('/earnings', async (req: Request, res: Response) => {
       const cb = costBasisRecords.find((r) => r.mint === mint);
       const totalDeposited = BigInt(cb?.totalDeposited ?? '0');
       const totalWithdrawn = BigInt(cb?.totalWithdrawn ?? '0');
-      const feesCollected = BigInt(cb?.totalFeesCollected ?? '0');
       const currentPosition = currentPositionByMint[mint]?.amount ?? 0n;
-      const currentUsdValue = currentPositionByMint[mint]?.usdValue ?? 0;
 
       // Realized profit: what was already withdrawn in profit
       const realizedProfit = totalWithdrawn > totalDeposited ? totalWithdrawn - totalDeposited : 0n;
@@ -311,7 +307,6 @@ router.get('/earnings', async (req: Request, res: Response) => {
         currentPosition: currentPosition.toString(),
         realizedProfit: realizedProfit.toString(),
         unrealizedProfit: unrealizedProfit.toString(),
-        feesCollected: feesCollected.toString(),
         earningsUsd,
       });
     }
@@ -329,45 +324,6 @@ router.get('/earnings', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch earnings',
-      timestamp: new Date().toISOString(),
-    });
-  }
-});
-
-// GET /earn/v1/fee-preview - Preview the profit fee for a withdrawal
-router.get('/fee-preview', async (req: Request, res: Response) => {
-  try {
-    const { vaultAddress, mint, amount } = req.query;
-    if (!vaultAddress || !mint || !amount || typeof vaultAddress !== 'string' || typeof mint !== 'string' || typeof amount !== 'string') {
-      res.status(400).json({ success: false, error: 'vaultAddress, mint, and amount query params are required' });
-      return;
-    }
-
-    // IDOR protection: verify the vault belongs to the authenticated user
-    if (!(await verifyWalletOwnership(req, vaultAddress))) {
-      res.status(403).json({ success: false, error: 'Forbidden' });
-      return;
-    }
-
-    const { feeAmount, profitAmount } = await calculateFee(vaultAddress, mint, amount);
-    const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
-    const decimals = tokenInfo?.decimals ?? 6;
-
-    res.json({
-      success: true,
-      data: {
-        feeAmount: feeAmount.toString(),
-        profitAmount: profitAmount.toString(),
-        feeUiAmount: Number(feeAmount) / 10 ** decimals,
-        profitUiAmount: Number(profitAmount) / 10 ** decimals,
-      },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('Error calculating fee preview:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to calculate fee preview',
       timestamp: new Date().toISOString(),
     });
   }
@@ -571,15 +527,6 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         if (vaultLut) extraLookupTables.push(vaultLut);
       }
 
-      // Calculate and append profit fee instructions (cost basis is keyed by user vault)
-      const { feeAmount, profitAmount } = await calculateFee(userVault, mint, amount);
-      let feeAmountStr: string | undefined;
-      if (feeAmount > 0n) {
-        const feeInstructions = await buildFeeTransferInstructions(mint, feeAmount.toString(), authority);
-        instructions.push(...feeInstructions);
-        feeAmountStr = feeAmount.toString();
-      }
-
       const record = await dbManager.createTransaction({
         action: TransactionAction.WITHDRAW,
         type,
@@ -588,19 +535,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         userVaultAddress: userVault,
         amount,
         walletAddress,
-        feeAmount: feeAmountStr,
       });
-
-      if (feeAmount > 0n) {
-        await createFeeRecord({
-          vaultAddress: userVault,
-          mint,
-          withdrawTransactionId: String(record._id),
-          withdrawAmount: amount,
-          profitAmount: profitAmount.toString(),
-          feeAmount: feeAmount.toString(),
-        });
-      }
 
       res.json({
         success: true,
@@ -608,7 +543,6 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         instructions,
         lookupTableAddress: LookupManager.lookupTableAddress,
         extraLookupTables,
-        feeAmount: feeAmountStr,
         timestamp: new Date().toISOString(),
       });
       return;

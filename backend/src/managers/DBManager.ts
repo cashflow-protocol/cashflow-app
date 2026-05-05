@@ -130,7 +130,6 @@ export class DBManager {
     destinationAddress?: string;
     outputMint?: string;
     unsignedTransaction?: string;
-    feeAmount?: string;
   }) {
     return TransactionModel.create(data);
   }

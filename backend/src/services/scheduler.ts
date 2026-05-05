@@ -13,7 +13,7 @@ import { tryConfirmActivation, failActivation } from './cashflowPassportService'
 import { tryConfirmBadgeMint } from './badgeMintService';
 import { dispatchSystemNotification } from './notificationService';
 import { sendWaitlistPushNotification, cleanupExpiredRTDBNotifications } from './firebaseManager';
-import { onTransactionConfirmed, markFeeTransactionFailed } from './feeService';
+import { onTransactionConfirmed } from './feeService';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
@@ -146,7 +146,6 @@ async function confirmTransactions() {
         const updatedAt = new Date((tx as any).updatedAt).getTime();
         if (Date.now() - updatedAt > 5 * 60 * 1000) {
           await dbManager.confirmTransaction(String(tx._id), TransactionStatus.FAILED);
-          await markFeeTransactionFailed(String(tx._id));
           console.log(`[Cron] Transaction ${tx.signature} FAILED (timeout)`);
         }
         continue;
@@ -155,7 +154,6 @@ async function confirmTransactions() {
       if (status.err) {
         const transitioned = await dbManager.confirmTransaction(String(tx._id), TransactionStatus.FAILED);
         if (transitioned) {
-          await markFeeTransactionFailed(String(tx._id));
           console.log(`[Cron] Transaction ${tx.signature} FAILED`);
         }
       } else if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') {
