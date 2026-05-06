@@ -134,7 +134,7 @@ class ApiService {
     vaultAddress: string;
     serializedTxs: string[];
   }> {
-    const r = await fetch(`${this.baseUrl}/onboarding/v1/create-vault`, {
+    const r = await fetch(`${this.baseUrl}/onboarding/v2/create-vault`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
