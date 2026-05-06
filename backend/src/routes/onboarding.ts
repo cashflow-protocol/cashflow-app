@@ -1545,18 +1545,9 @@ onboardingV2Router.post('/create-vault', async (req, res) => {
       });
     }
 
-    // ── Load admin keypairs ──
-    // adminKeypair (ADMIN_FEE_PAYER_PRIVATE_KEY) is the standard-mode TX1 fee payer (admin
-    // eats this cost — separate accounting bucket). adminTxFeePayer is the bundle-wide
-    // fee payer for TX2/TX3 across modes, plus TX1 on Seeker (cover ix in TX3 refunds it).
-    if (!process.env.ADMIN_FEE_PAYER_PRIVATE_KEY) {
-      res.status(503).json({ success: false, error: 'Admin wallet not configured' });
-      return;
-    }
-    const { getBase58Encoder } = await import('@solana/kit');
-    const adminKeypair = Keypair.fromSecretKey(
-      new Uint8Array(getBase58Encoder().encode(process.env.ADMIN_FEE_PAYER_PRIVATE_KEY)),
-    );
+    // ── Load admin keypair ──
+    // adminTxFeePayer is the fee payer for Standard mode and the spending-limit
+    // destination for future cover-from-squad payments across all modes.
     const { getAdminTxFeePayerPublicKey, getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
     const adminTxFeePayerKeypair = getAdminTxFeePayerKeypair();
     const adminFeePayerPubkey = getAdminTxFeePayerPublicKey();
@@ -1566,9 +1557,11 @@ onboardingV2Router.post('/create-vault', async (req, res) => {
     let feePayer: InstanceType<typeof PublicKey>;
 
     if (mode === VaultMode.STANDARD) {
-      feePayer = adminKeypair.publicKey;
+      // Standard: admin pays everything (fee + every rentPayer slot). Single admin wallet
+      // for the whole tx — having two distinct admin wallets requires two signer slots
+      // and breaks under Squads' rentPayer signer constraint.
+      feePayer = adminFeePayerPubkey;
 
-      // Check admin balance
       const adminBalance = await conn.getBalance(feePayer);
       if (adminBalance < 10_000_000) { // 0.01 SOL
         console.error('[create-vault] Admin wallet balance too low:', adminBalance);
@@ -1581,13 +1574,14 @@ onboardingV2Router.post('/create-vault', async (req, res) => {
         telegram.notifyAdmin(`⚠️ Admin wallet (for fee creation) balance is low: ${(adminBalance / 1e9).toFixed(4)} SOL. Admin wallet address: ${feePayer}`);
       }
     } else if (mode === VaultMode.SEEKER) {
-      // Seeker: admin pays TX1 gas; the cover ix in TX3 refunds it from the wallet.
-      feePayer = adminFeePayerPubkey;
+      // Seeker: wallet pays everything directly (multisig PDA rent + config tx PDA rent +
+      // proposal PDA rent + spending-limit PDA rent + Jito tip + creation fee). Drops
+      // adminTxFeePayer from the tx entirely — saves ~96 bytes (signer slot + key) and
+      // the cover-ix bytes since admin no longer needs reimbursement.
+      feePayer = new PublicKey(walletAddress);
 
-      // Still validate the user wallet can cover its TX3 outflows
-      // (VAULT_CREATION_FEE + cover delta + buffer). Same constraint as before.
       const minRequired = VAULT_CREATION_FEE + 10_000_000;
-      const userBalance = await conn.getBalance(new PublicKey(walletAddress));
+      const userBalance = await conn.getBalance(feePayer);
       if (userBalance < minRequired) {
         res.status(400).json({
           success: false,
@@ -1798,19 +1792,19 @@ onboardingV2Router.post('/create-vault', async (req, res) => {
       memo: 'cashflow',
     });
 
-    const ComputeBudgetProgram = (await import('@solana/web3.js')).ComputeBudgetProgram;
-
+    // feePayer is wallet on Seeker, adminTxFeePayer on Standard. Use it for every
+    // rentPayer slot (Squads' rentPayer is a signer — single payer = single signer).
+    // The spending-limit `destinations` field stays as adminFeePayerPubkey: that's
+    // action data persisted on-chain so future cover-from-squad payments route to
+    // admin, independent of who signed this creation tx.
     const allIxs: InstanceType<typeof TransactionInstruction>[] = [
-      // Bump CU above the 200k default — combined squads ops can spike.
-      ComputeBudgetProgram.setComputeUnitLimit({ units: 250_000 }),
-
       createMultisigIx,
 
       multisigLib.instructions.configTransactionCreate({
         multisigPda,
         transactionIndex,
         creator: devicePubkey,
-        rentPayer: adminFeePayerPubkey,
+        rentPayer: feePayer,
         actions: [{
           __kind: 'AddSpendingLimit' as const,
           createKey: spendingLimitCreateKey,
@@ -1822,73 +1816,52 @@ onboardingV2Router.post('/create-vault', async (req, res) => {
           destinations: [adminFeePayerPubkey],
         }],
       }),
-      multisigLib.instructions.proposalCreate({ multisigPda, transactionIndex, creator: devicePubkey, rentPayer: adminFeePayerPubkey }),
+      multisigLib.instructions.proposalCreate({ multisigPda, transactionIndex, creator: devicePubkey, rentPayer: feePayer }),
 
       // Two approvals → reaches the 2-of-2 threshold for Seeker and Standard
       multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: devicePubkey }),
       multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: primaryKey }),
 
-      multisigLib.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: primaryKey, rentPayer: adminFeePayerPubkey, spendingLimits: [spendingLimitPda] }),
+      multisigLib.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: primaryKey, rentPayer: feePayer, spendingLimits: [spendingLimitPda] }),
       multisigLib.instructions.configTransactionAccountsClose({ multisigPda, transactionIndex, rentCollector: vaultPda }),
 
-      // Jito tip — admin pays; cover ix below tops admin back to ADMIN_COVER_TARGET on Seeker
+      // Jito tip from the fee payer
       SystemProgram.transfer({
-        fromPubkey: adminFeePayerPubkey,
+        fromPubkey: feePayer,
         toPubkey: new PublicKey(tipAccount),
         lamports: jitoTipLamports,
       }),
     ];
 
-    // Seeker: wallet pays VAULT_CREATION_FEE here (moved from TX1) and tops up admin
-    // via the cover ix. Standard: admin eats all costs, nothing extra.
-    if (mode === VaultMode.SEEKER) {
-      if (VAULT_CREATION_FEE > 0) {
-        const treasuryWallet = process.env.TREASURY_WALLET_ADDRESS;
-        if (!treasuryWallet) {
-          res.status(503).json({ success: false, error: 'Treasury wallet not configured' });
-          return;
-        }
-        allIxs.push(SystemProgram.transfer({
-          fromPubkey: new PublicKey(walletAddress),
-          toPubkey: new PublicKey(treasuryWallet),
-          lamports: VAULT_CREATION_FEE,
-        }));
+    // Seeker: wallet pays VAULT_CREATION_FEE → treasury here (no separate cover ix —
+    // wallet already pays everything directly).
+    if (mode === VaultMode.SEEKER && VAULT_CREATION_FEE > 0) {
+      const treasuryWallet = process.env.TREASURY_WALLET_ADDRESS;
+      if (!treasuryWallet) {
+        res.status(503).json({ success: false, error: 'Treasury wallet not configured' });
+        return;
       }
-
-      const { createCoverInstruction } = await import('@heymike/send');
-      const { address: kitAddress, AccountRole } = await import('@solana/kit');
-      const coverKitIx = createCoverInstruction(
-        kitAddress(walletAddress),
-        kitAddress(walletAddress),
-        kitAddress(adminFeePayerPubkey.toBase58()),
-        ADMIN_COVER_TARGET,
-      );
-      const coverIx = new TransactionInstruction({
-        programId: new PublicKey(coverKitIx.programAddress as string),
-        keys: (coverKitIx.accounts ?? []).map((acc: any) => ({
-          pubkey: new PublicKey(acc.address as string),
-          isSigner: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.READONLY_SIGNER,
-          isWritable: acc.role === AccountRole.WRITABLE_SIGNER || acc.role === AccountRole.WRITABLE,
-        })),
-        data: Buffer.from(coverKitIx.data as Uint8Array),
-      });
-      allIxs.push(coverIx);
+      allIxs.push(SystemProgram.transfer({
+        fromPubkey: new PublicKey(walletAddress),
+        toPubkey: new PublicKey(treasuryWallet),
+        lamports: VAULT_CREATION_FEE,
+      }));
     }
 
     const message = new TransactionMessage({
-      payerKey: feePayer, // adminKeypair on Standard, adminTxFeePayer on Seeker
+      payerKey: feePayer,
       recentBlockhash: blockhash,
       instructions: allIxs,
     }).compileToV0Message(luts);
     const tx = new VersionedTransaction(message);
 
-    // Backend signs createKey + the appropriate admin keypair.
-    // - Standard: admin eats the cost from adminKeypair (separate accounting bucket).
-    // - Seeker: adminTxFeePayer pays; cover ix in this same tx refunds it from the wallet.
+    // Backend signs createKey always. On Standard, also sign with adminTxFeePayer
+    // (which is feePayer + every rentPayer). On Seeker, the wallet is the fee payer +
+    // rent payer — mobile MWA fills the wallet sig slot.
     if (mode === VaultMode.STANDARD) {
-      tx.sign([createKey, adminKeypair]);
-    } else {
       tx.sign([createKey, adminTxFeePayerKeypair]);
+    } else {
+      tx.sign([createKey]);
     }
 
     const serializedSize = tx.serialize().length;
