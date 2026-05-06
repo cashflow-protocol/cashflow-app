@@ -911,11 +911,11 @@ export async function createMultisig(
  * Create a new Squads vault via the backend.
  *
  * Backend builds and partially signs 3 txs (multisigCreate, spending-limit
- * config + propose + approve, execute + close + tip). Mobile fills in the
- * remaining member signatures per mode and submits all 3 as one Jito bundle:
- * - Standard (iOS/web): cloud + device sign natively; admin paid TX1.
- * - Seeker: MWA wallet signs all 3; device cosigns TX2.
- * - Android GMS: MWA wallet + cloud (creator/executor) + device cosign.
+ * config + propose + approve(device), approve(primary) + execute + close + tip
+ * [+ Seeker creation fee + cover]). Mobile adds the remaining member sigs:
+ * - Standard (iOS/web): device signs TX2, cloud signs TX3 (no MWA).
+ * - Seeker: device signs TX2 natively; MWA wallet signs only TX3 (1 prompt, 1 tx).
+ * - Android GMS: legacy 3-of-3 — MWA signs all 3, device + cloud cosign TX2/TX3.
  *
  * Keypairs are generated locally — only public keys are sent to backend.
  */
@@ -965,57 +965,63 @@ export async function createMultisigViaBackend(
 
   const devicePubkey = new PublicKey(devicePubkeyBase58);
 
-  // Per-mode signing recipe. Backend always signs admin (TX1 in standard, TX2+TX3 always)
-  // and createKey (TX1). Mobile fills in the remaining member signatures.
+  // Per-mode signing recipe. Backend signs createKey + admin on TX1, and admin (fee payer)
+  // on TX2 + TX3. Mobile adds the member signatures: device on TX2, primary key on TX3.
   if (mode === 'standard') {
     // 2-of-2 cloud + device. TX1 fully backend-signed.
-    // TX2: cloud (creator + approver) + device (approver).
-    // TX3: cloud (executor). No cover ix.
+    // TX2: device only (creator + approver).
+    // TX3: cloud (approver + executor).
     if (!cloudPubkeyBase58) {
       throw new Error('cloudKey is required for standard mode');
     }
     const cloudPubkey = new PublicKey(cloudPubkeyBase58);
-    console.log('[createMultisigViaBackend] cloud cosigning TX2 + TX3, device cosigning TX2...');
+    console.log('[createMultisigViaBackend] device signing TX2, cloud signing TX3...');
     await signTransactionNatively(transactions[1], [
-      { pubkey: cloudPubkey, signFn: signWithCloud },
       { pubkey: devicePubkey, signFn: signWithDevice },
     ]);
     await signTransactionNatively(transactions[2], [
       { pubkey: cloudPubkey, signFn: signWithCloud },
     ]);
-  } else {
-    // seeker / android_gms — wallet signs all 3 in one MWA prompt
+  } else if (mode === 'seeker') {
+    // 2-of-2 wallet + device. TX1 fully backend-signed (admin pays, cover refunds in TX3).
+    // TX2: device only (creator + approver).
+    // TX3: MWA wallet (approver + executor + cover payer + creation fee transfer).
     if (!walletAddress) {
-      throw new Error('walletAddress is required for seeker / android_gms mode');
+      throw new Error('walletAddress is required for seeker mode');
     }
-    // MWA signs all 3 in one prompt; copy only the wallet's signature back into
-    // the originals so the backend's createKey / admin-fee-payer signatures are
-    // preserved (some MWA wallets clobber other slots when re-serializing).
+    console.log('[createMultisigViaBackend] device signing TX2, MWA signing TX3 only...');
+    await signTransactionNatively(transactions[1], [
+      { pubkey: devicePubkey, signFn: signWithDevice },
+    ]);
+    // MWA signs only TX3 — single tx in the prompt, lower risk of wallets mishandling
+    // multi-tx batches.
+    await signTransactionsWithWallet(
+      transactions,
+      [2],
+      new PublicKey(walletAddress),
+    );
+  } else {
+    // android_gms (3-of-3 cloud + device + wallet) — legacy flow: MWA signs all 3,
+    // device cosigns TX2, cloud cosigns TX2 + TX3.
+    if (!walletAddress) {
+      throw new Error('walletAddress is required for android_gms mode');
+    }
+    if (!cloudPubkeyBase58) {
+      throw new Error('cloudKey is required for android_gms mode');
+    }
+    const cloudPubkey = new PublicKey(cloudPubkeyBase58);
     await signTransactionsWithWallet(
       transactions,
       [0, 1, 2],
       new PublicKey(walletAddress),
     );
-
-    // TX2 needs device key signature (approver)
-    console.log('[createMultisigViaBackend] device cosigning TX2...');
     await signTransactionNatively(transactions[1], [
       { pubkey: devicePubkey, signFn: signWithDevice },
+      { pubkey: cloudPubkey, signFn: signWithCloud },
     ]);
-
-    // android_gms (3-of-3, primaryKey=cloud): cloud signs TX2 (creator + approver) + TX3 (executor)
-    if (mode === 'android_gms') {
-      if (!cloudPubkeyBase58) {
-        throw new Error('cloudKey is required for android_gms mode');
-      }
-      const cloudPubkey = new PublicKey(cloudPubkeyBase58);
-      await signTransactionNatively(transactions[1], [
-        { pubkey: cloudPubkey, signFn: signWithCloud },
-      ]);
-      await signTransactionNatively(transactions[2], [
-        { pubkey: cloudPubkey, signFn: signWithCloud },
-      ]);
-    }
+    await signTransactionNatively(transactions[2], [
+      { pubkey: cloudPubkey, signFn: signWithCloud },
+    ]);
   }
 
   // Persist vault metadata before sending (auth requires vaultAddress) — marked uninitialized

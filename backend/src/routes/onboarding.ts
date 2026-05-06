@@ -1114,7 +1114,10 @@ router.post('/create-vault', async (req, res) => {
       });
     }
 
-    // ── Load admin keypair (needed for all modes: gas payer for standard, spending limit fee payer for MWA) ──
+    // ── Load admin keypairs ──
+    // adminKeypair (ADMIN_FEE_PAYER_PRIVATE_KEY) is the standard-mode TX1 fee payer (admin
+    // eats this cost — separate accounting bucket). adminTxFeePayer is the bundle-wide
+    // fee payer for TX2/TX3 across modes, plus TX1 on Seeker (cover ix in TX3 refunds it).
     if (!process.env.ADMIN_FEE_PAYER_PRIVATE_KEY) {
       res.status(503).json({ success: false, error: 'Admin wallet not configured' });
       return;
@@ -1123,12 +1126,15 @@ router.post('/create-vault', async (req, res) => {
     const adminKeypair = Keypair.fromSecretKey(
       new Uint8Array(getBase58Encoder().encode(process.env.ADMIN_FEE_PAYER_PRIVATE_KEY)),
     );
+    const { getAdminTxFeePayerPublicKey, getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
+    const adminTxFeePayerKeypair = getAdminTxFeePayerKeypair();
+    const adminFeePayerPubkey = getAdminTxFeePayerPublicKey();
 
-    // ── Determine fee payer ──
-    const isAdminPays = mode === VaultMode.STANDARD;
+    // ── Determine TX1 fee payer ──
+    const { VAULT_CREATION_FEE } = await import('../constants/vault');
     let feePayer: InstanceType<typeof PublicKey>;
 
-    if (isAdminPays) {
+    if (mode === VaultMode.STANDARD) {
       feePayer = adminKeypair.publicKey;
 
       // Check admin balance
@@ -1143,11 +1149,25 @@ router.post('/create-vault', async (req, res) => {
         console.error('[create-vault] Admin wallet balance is too low (but still can proceed):', adminBalance);
         telegram.notifyAdmin(`⚠️ Admin wallet (for fee creation) balance is low: ${(adminBalance / 1e9).toFixed(4)} SOL. Admin wallet address: ${feePayer}`);
       }
+    } else if (mode === VaultMode.SEEKER) {
+      // Seeker: admin pays TX1 gas; the cover ix in TX3 refunds it from the wallet.
+      feePayer = adminFeePayerPubkey;
+
+      // Still validate the user wallet can cover its TX3 outflows
+      // (VAULT_CREATION_FEE + cover delta + buffer). Same constraint as before.
+      const minRequired = VAULT_CREATION_FEE + 10_000_000;
+      const userBalance = await conn.getBalance(new PublicKey(walletAddress));
+      if (userBalance < minRequired) {
+        res.status(400).json({
+          success: false,
+          error: `Insufficient balance. You need at least ${(minRequired / 1e9).toFixed(3)} SOL to create a vault. Current balance: ${(userBalance / 1e9).toFixed(4)} SOL`,
+        });
+        return;
+      }
     } else {
+      // android_gms: user wallet pays TX1 (creator + creation fee transfer)
       feePayer = new PublicKey(walletAddress);
 
-      // Check user wallet balance — needs rent (~0.015 SOL) + creation fee (0.05 SOL) + tx fee
-      const { VAULT_CREATION_FEE } = await import('../constants/vault');
       const minRequired = VAULT_CREATION_FEE + 10_000_000; // fee + rent + buffer
       const userBalance = await conn.getBalance(feePayer);
       if (userBalance < minRequired) {
@@ -1189,9 +1209,10 @@ router.post('/create-vault', async (req, res) => {
 
     const txInstructions = [createMultisigIx];
 
-    // Add vault creation fee (0.05 SOL → treasury wallet) for all modes
-    const { VAULT_CREATION_FEE } = await import('../constants/vault');
-    if (VAULT_CREATION_FEE > 0 && !isAdminPays) {
+    // android_gms is the only mode where the user wallet pays the creation fee in TX1.
+    // Seeker moves it to TX3 (wallet → treasury alongside the cover ix); Standard never
+    // charges the user (admin eats the cost).
+    if (VAULT_CREATION_FEE > 0 && mode === VaultMode.ANDROID_GMS) {
       const treasuryWallet = process.env.TREASURY_WALLET_ADDRESS;
       if (!treasuryWallet) {
         res.status(503).json({ success: false, error: 'Treasury wallet not configured' });
@@ -1215,10 +1236,14 @@ router.post('/create-vault', async (req, res) => {
     // Always sign with ephemeral createKey
     tx.sign([createKey]);
 
-    // Standard mode: admin is TX1's fee payer + creator, so sign with admin keypair too.
-    // (Seeker / android_gms: wallet is fee payer, signed by MWA on the mobile side.)
-    if (isAdminPays) {
+    // TX1 admin signing per mode:
+    // - Standard: adminKeypair (separate accounting bucket; admin eats this cost).
+    // - Seeker: adminTxFeePayer (cover ix in TX3 reimburses this same wallet).
+    // - android_gms: wallet is fee payer + creator, signed by MWA on the mobile side.
+    if (mode === VaultMode.STANDARD) {
       tx.sign([adminKeypair]);
+    } else if (mode === VaultMode.SEEKER) {
+      tx.sign([adminTxFeePayerKeypair]);
     }
 
     const multisigAddress = multisigPda.toBase58();
@@ -1242,11 +1267,6 @@ router.post('/create-vault', async (req, res) => {
     const jitoTipLamports = await new JitoManager().getDynamicTipLamports();
     const { Period } = multisigLib.types;
 
-    // Use the all-tx fee payer key for spending limit (must match cover instruction destination)
-    const { getAdminTxFeePayerPublicKey, getAdminTxFeePayerKeypair } = await import('../services/adminFeePayer');
-    const adminFeePayerPubkey = getAdminTxFeePayerPublicKey();
-    const adminTxFeePayerKeypair = getAdminTxFeePayerKeypair();
-
     // Deterministic createKey for spending limit PDA (must match mobile logic)
     const spendingLimitHash = crypto.createHash('sha256')
       .update(GAS_COVER_SPENDING_LIMIT_SEED)
@@ -1257,34 +1277,37 @@ router.post('/create-vault', async (req, res) => {
     // For a newly created multisig, transactionIndex starts at 0, so first config tx = 1
     const transactionIndex = 1n;
 
-    // Primary key (creator for config txs): wallet on Seeker, cloud otherwise
+    // primaryKey is the member that approves + executes in TX3 (last approval brings the
+    // proposal to threshold immediately before configTransactionExecute reads it).
+    // android_gms keeps the legacy flow where wallet+cloud+device all approve in TX2.
     const primaryKey = mode === VaultMode.SEEKER
       ? new PublicKey(walletAddress)
       : new PublicKey(cloudKey);
 
-    // Spending limit members
+    // Spending limit members — controls who can later use the spending limit, independent
+    // of who signs this config tx.
     const spendingLimitMembers = mode === VaultMode.SEEKER
       ? [new PublicKey(walletAddress)]
       : [new PublicKey(cloudKey)];
 
-    // Build approval instructions per mode
+    // TX2 creator/approver: device for Standard + Seeker (only key that signs TX2 besides
+    // admin); cloud for android_gms (legacy 3-of-3 flow has all members approve in TX2).
+    const isSplitApprovalFlow = mode === VaultMode.STANDARD || mode === VaultMode.SEEKER;
+    const tx2Creator = isSplitApprovalFlow ? devicePubkey : new PublicKey(cloudKey);
+
+    // Build TX2 approvals
     const approvalIxs: ReturnType<typeof multisigLib.instructions.proposalApprove>[] = [];
-    if (mode === VaultMode.SEEKER) {
+    if (isSplitApprovalFlow) {
+      // Standard + Seeker: device approves in TX2; primaryKey approves in TX3 (prepended)
       approvalIxs.push(
-        multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: new PublicKey(walletAddress) }),
         multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: devicePubkey }),
-      );
-    } else if (mode === VaultMode.ANDROID_GMS) {
-      approvalIxs.push(
-        multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: new PublicKey(cloudKey) }),
-        multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: devicePubkey }),
-        multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: new PublicKey(walletAddress) }),
       );
     } else {
-      // standard: 2-of-2 cloud + device
+      // android_gms: cloud + device + wallet all approve in TX2 (legacy 3-of-3 flow)
       approvalIxs.push(
         multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: new PublicKey(cloudKey) }),
         multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: devicePubkey }),
+        multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: new PublicKey(walletAddress) }),
       );
     }
 
@@ -1293,7 +1316,7 @@ router.post('/create-vault', async (req, res) => {
       multisigLib.instructions.configTransactionCreate({
         multisigPda,
         transactionIndex,
-        creator: primaryKey,
+        creator: tx2Creator,
         rentPayer: adminFeePayerPubkey,
         actions: [{
           __kind: 'AddSpendingLimit' as const,
@@ -1306,7 +1329,7 @@ router.post('/create-vault', async (req, res) => {
           destinations: [adminFeePayerPubkey],
         }],
       }),
-      multisigLib.instructions.proposalCreate({ multisigPda, transactionIndex, creator: primaryKey, rentPayer: adminFeePayerPubkey }),
+      multisigLib.instructions.proposalCreate({ multisigPda, transactionIndex, creator: tx2Creator, rentPayer: adminFeePayerPubkey }),
       ...approvalIxs,
     ];
 
@@ -1316,20 +1339,46 @@ router.post('/create-vault', async (req, res) => {
       createKey: spendingLimitCreateKey,
     });
 
-    // TX3: execute + close + Jito tip (+ cover for wallet-funded modes)
+    // TX3: [approve(primaryKey)?] + execute + close + [creation fee transfer for Seeker] + Jito tip (+ cover for wallet-funded modes)
     const tipAccount = JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
 
-    const tx3Instructions: InstanceType<typeof TransactionInstruction>[] = [
+    const tx3Instructions: InstanceType<typeof TransactionInstruction>[] = [];
+
+    // Standard + Seeker: prepend approve(primaryKey). Brings approval count from 1 → 2,
+    // hitting threshold immediately before execute reads the proposal state.
+    if (isSplitApprovalFlow) {
+      tx3Instructions.push(
+        multisigLib.instructions.proposalApprove({ multisigPda, transactionIndex, member: primaryKey }),
+      );
+    }
+
+    tx3Instructions.push(
       multisigLib.instructions.configTransactionExecute({ multisigPda, transactionIndex, member: primaryKey, rentPayer: adminFeePayerPubkey, spendingLimits: [spendingLimitPda] }),
       multisigLib.instructions.configTransactionAccountsClose({
         multisigPda, transactionIndex, rentCollector: vaultPda,
       }),
-      SystemProgram.transfer({
-        fromPubkey: adminFeePayerPubkey,
-        toPubkey: new PublicKey(tipAccount),
-        lamports: jitoTipLamports,
-      }),
-    ];
+    );
+
+    // Seeker: VAULT_CREATION_FEE moved from TX1 to TX3 (wallet → treasury).
+    // Wallet signs TX3 anyway via the cover ix, so co-locating the fee transfer is free.
+    if (mode === VaultMode.SEEKER && VAULT_CREATION_FEE > 0) {
+      const treasuryWallet = process.env.TREASURY_WALLET_ADDRESS;
+      if (!treasuryWallet) {
+        res.status(503).json({ success: false, error: 'Treasury wallet not configured' });
+        return;
+      }
+      tx3Instructions.push(SystemProgram.transfer({
+        fromPubkey: new PublicKey(walletAddress),
+        toPubkey: new PublicKey(treasuryWallet),
+        lamports: VAULT_CREATION_FEE,
+      }));
+    }
+
+    tx3Instructions.push(SystemProgram.transfer({
+      fromPubkey: adminFeePayerPubkey,
+      toPubkey: new PublicKey(tipAccount),
+      lamports: jitoTipLamports,
+    }));
 
     // Cover instruction (user wallet → admin fee payer) only for wallet-funded modes.
     // Standard mode: admin already pays everything, no on-chain reimbursement needed.
