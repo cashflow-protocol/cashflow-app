@@ -263,9 +263,15 @@ export default function LandingPage() {
         </svg>
 
         <div className="hero-content reveal" ref={heroContentRef}>
-          <div className="hero-badge">
-            <span className="hero-badge-dot" />
-            Live on Solana &middot; Self-custodial
+          <div className="hero-winner-badge" aria-label="Winner of the Solana Mobile Hackathon">
+            <span className="hero-winner-trophy" aria-hidden="true">🏆</span>
+            <span className="hero-winner-label">Winner</span>
+            <span className="hero-winner-divider" aria-hidden="true" />
+            <img
+              src="/assets/solana-mobile-hackathon.png"
+              alt="Solana Mobile Hackathon"
+              className="hero-winner-logo"
+            />
           </div>
           <h1>
             <span className="hero-line">{renderLetters('Your money,')}</span>
