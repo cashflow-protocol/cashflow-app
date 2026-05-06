@@ -118,8 +118,8 @@ class ApiService {
 
   /**
    * Create a Squads vault via the backend.
-   * - Standard mode: backend signs + sends, returns txSignature.
-   * - Seeker/android_gms: backend returns partially-signed tx for MWA signing.
+   * Returns 3 partially-signed txs (multisigCreate + spending limit create + execute);
+   * mobile completes per-mode signing and submits as one Jito bundle.
    * Bypasses auth — vault creation happens before login.
    */
   async createVault(params: {
@@ -132,9 +132,7 @@ class ApiService {
   }): Promise<{
     multisigAddress: string;
     vaultAddress: string;
-    txSignature?: string;
-    serializedTx?: string;
-    serializedTxs?: string[];
+    serializedTxs: string[];
   }> {
     const r = await fetch(`${this.baseUrl}/onboarding/v1/create-vault`, {
       method: 'POST',

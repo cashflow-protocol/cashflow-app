@@ -910,11 +910,14 @@ export async function createMultisig(
 /**
  * Create a new Squads vault via the backend.
  *
- * - Standard mode (iOS/web): backend signs + sends the tx (admin pays gas).
- * - Seeker / android_gms: backend returns a partially-signed tx; mobile
- *   signs via MWA and sends onchain, then calls confirm-vault.
+ * Backend builds and partially signs 3 txs (multisigCreate, spending-limit
+ * config + propose + approve, execute + close + tip). Mobile fills in the
+ * remaining member signatures per mode and submits all 3 as one Jito bundle:
+ * - Standard (iOS/web): cloud + device sign natively; admin paid TX1.
+ * - Seeker: MWA wallet signs all 3; device cosigns TX2.
+ * - Android GMS: MWA wallet + cloud (creator/executor) + device cosign.
  *
- * Keypairs are generated locally as usual — only public keys are sent to backend.
+ * Keypairs are generated locally — only public keys are sent to backend.
  */
 export async function createMultisigViaBackend(
   paymentId: string,
@@ -950,46 +953,41 @@ export async function createMultisigViaBackend(
     walletAddress,
   });
 
-  let signature: string;
+  if (!result.serializedTxs || result.serializedTxs.length !== 3) {
+    throw new Error('Unexpected response from create-vault: expected 3 serialized txs');
+  }
 
-  if (result.txSignature) {
-    // Standard mode — backend already sent the tx
-    signature = result.txSignature;
-    console.log('[createMultisigViaBackend] backend sent tx:', signature);
+  console.log('[createMultisigViaBackend] signing', result.serializedTxs.length, 'txs...');
 
-    // Set up gas cover spending limit separately for standard mode
-    await sleep(2000);
-    const vaultData: VaultData = {
-      multisigAddress: result.multisigAddress,
-      vaultAddress: result.vaultAddress,
-      label: 'Cashflow',
-      createdAt: new Date().toISOString(),
-      walletAddress: walletAddress || undefined,
-      seekerMode: seekerMode || undefined,
-      isInitialized: true,
-    };
-    await saveVault(vaultData);
+  const transactions = result.serializedTxs.map(b64 =>
+    VersionedTransaction.deserialize(new Uint8Array(Buffer.from(b64, 'base64'))),
+  );
 
-    try {
-      console.log('[createMultisigViaBackend] setting up gas cover spending limit...');
-      await addGasCoverSpendingLimit(result.multisigAddress);
-      console.log('[createMultisigViaBackend] spending limit created');
-    } catch (err: any) {
-      console.warn('[createMultisigViaBackend] failed to create spending limit (will retry on first tx):', err.message);
+  const devicePubkey = new PublicKey(devicePubkeyBase58);
+
+  // Per-mode signing recipe. Backend always signs admin (TX1 in standard, TX2+TX3 always)
+  // and createKey (TX1). Mobile fills in the remaining member signatures.
+  if (mode === 'standard') {
+    // 2-of-2 cloud + device. TX1 fully backend-signed.
+    // TX2: cloud (creator + approver) + device (approver).
+    // TX3: cloud (executor). No cover ix.
+    if (!cloudPubkeyBase58) {
+      throw new Error('cloudKey is required for standard mode');
     }
-  } else if (result.serializedTxs) {
-    // Seeker / android_gms — backend built all 3 txs (vault + spending limit create + execute)
-    // Sign all in one MWA prompt, device cosigns TX2, send as Jito bundle
-    console.log('[createMultisigViaBackend] signing', result.serializedTxs.length, 'txs with MWA...');
-
+    const cloudPubkey = new PublicKey(cloudPubkeyBase58);
+    console.log('[createMultisigViaBackend] cloud cosigning TX2 + TX3, device cosigning TX2...');
+    await signTransactionNatively(transactions[1], [
+      { pubkey: cloudPubkey, signFn: signWithCloud },
+      { pubkey: devicePubkey, signFn: signWithDevice },
+    ]);
+    await signTransactionNatively(transactions[2], [
+      { pubkey: cloudPubkey, signFn: signWithCloud },
+    ]);
+  } else {
+    // seeker / android_gms — wallet signs all 3 in one MWA prompt
     if (!walletAddress) {
       throw new Error('walletAddress is required for seeker / android_gms mode');
     }
-
-    const transactions = result.serializedTxs.map(b64 =>
-      VersionedTransaction.deserialize(new Uint8Array(Buffer.from(b64, 'base64'))),
-    );
-
     // MWA signs all 3 in one prompt; copy only the wallet's signature back into
     // the originals so the backend's createKey / admin-fee-payer signatures are
     // preserved (some MWA wallets clobber other slots when re-serializing).
@@ -999,46 +997,56 @@ export async function createMultisigViaBackend(
       new PublicKey(walletAddress),
     );
 
-    // TX2 (config create + propose + approve) also needs device key signature
+    // TX2 needs device key signature (approver)
     console.log('[createMultisigViaBackend] device cosigning TX2...');
     await signTransactionNatively(transactions[1], [
-      { pubkey: new PublicKey(devicePubkeyBase58), signFn: signWithDevice },
+      { pubkey: devicePubkey, signFn: signWithDevice },
     ]);
 
-    // Persist vault metadata before sending (auth requires vaultAddress) — marked uninitialized
-    const vaultData: VaultData = {
-      multisigAddress: result.multisigAddress,
-      vaultAddress: result.vaultAddress,
-      label: 'Cashflow',
-      createdAt: new Date().toISOString(),
-      walletAddress: walletAddress || undefined,
-      seekerMode: seekerMode || undefined,
-      isInitialized: false,
-    };
-    await saveVault(vaultData);
-
-    // Send all 3 as a Jito bundle via backend
-    const bundleTxs = transactions.map(tx => Buffer.from(tx.serialize()).toString('base64'));
-    console.log('[createMultisigViaBackend] sending bundle...');
-    try {
-      await apiService.sendBundle(bundleTxs);
-      signature = bs58.encode(transactions[0].signatures[0]);
-      console.log('[createMultisigViaBackend] bundle sent, sig:', signature);
-
-      // Confirm with backend
-      await apiService.confirmVault(paymentId, signature);
-      console.log('[createMultisigViaBackend] vault confirmed');
-
-      // Bundle landed — mark vault as initialized
-      await saveVault({ ...vaultData, isInitialized: true });
-    } catch (err) {
-      // Bundle failed or didn't land — clear vault so user doesn't see a phantom squad
-      console.error('[createMultisigViaBackend] bundle/confirm failed, clearing vault:', err);
-      await clearVault();
-      throw err;
+    // android_gms (3-of-3, primaryKey=cloud): cloud signs TX2 (creator + approver) + TX3 (executor)
+    if (mode === 'android_gms') {
+      if (!cloudPubkeyBase58) {
+        throw new Error('cloudKey is required for android_gms mode');
+      }
+      const cloudPubkey = new PublicKey(cloudPubkeyBase58);
+      await signTransactionNatively(transactions[1], [
+        { pubkey: cloudPubkey, signFn: signWithCloud },
+      ]);
+      await signTransactionNatively(transactions[2], [
+        { pubkey: cloudPubkey, signFn: signWithCloud },
+      ]);
     }
-  } else {
-    throw new Error('Unexpected response from create-vault: no txSignature or serializedTxs');
+  }
+
+  // Persist vault metadata before sending (auth requires vaultAddress) — marked uninitialized
+  const vaultData: VaultData = {
+    multisigAddress: result.multisigAddress,
+    vaultAddress: result.vaultAddress,
+    label: 'Cashflow',
+    createdAt: new Date().toISOString(),
+    walletAddress: walletAddress || undefined,
+    seekerMode: seekerMode || undefined,
+    isInitialized: false,
+  };
+  await saveVault(vaultData);
+
+  // Send all 3 as a Jito bundle via backend
+  const bundleTxs = transactions.map(tx => Buffer.from(tx.serialize()).toString('base64'));
+  console.log('[createMultisigViaBackend] sending bundle...');
+  let signature: string;
+  try {
+    await apiService.sendBundle(bundleTxs);
+    signature = bs58.encode(transactions[0].signatures[0]);
+    console.log('[createMultisigViaBackend] bundle sent, sig:', signature);
+
+    await apiService.confirmVault(paymentId, signature);
+    console.log('[createMultisigViaBackend] vault confirmed');
+
+    await saveVault({ ...vaultData, isInitialized: true });
+  } catch (err) {
+    console.error('[createMultisigViaBackend] bundle/confirm failed, clearing vault:', err);
+    await clearVault();
+    throw err;
   }
 
   console.log('[createMultisigViaBackend] done, vault:', result.vaultAddress);
