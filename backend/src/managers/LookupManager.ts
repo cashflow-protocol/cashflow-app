@@ -75,6 +75,7 @@ export class LookupManager {
         address('yyvY1cHtcQHbsPk4UYdHhjtoYQjYCX41RqF8U3dSEND'), // SEND fees
         address('CASH1g7WuVEN873RhmHbaY8KA3rhwQbutHJRUsVU9E9m'), // Cashflow All Tx Fee Payer
         address('CASH1YstLfKmTJrZZkddbBDwBheQ9zh2subDeu4RrnYu'), // Cashflow Squad Create Fee Payer
+        address('CASHzUQYANbpGyVMkn6SCkuXKKP4qbE4mywD699sXapz'), // Cashflow Treasury
 
         TOKEN_PROGRAM_ADDRESS,
         TOKEN_2022_PROGRAM_ADDRESS,
