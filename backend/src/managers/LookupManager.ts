@@ -50,7 +50,7 @@ export class LookupManager {
     //TODO: if needed I can create a custom LookupTable for every user's Squad. and add his vault address, cloudKey, deviceKey, hardware wallets, etc
     private rpc: Rpc<SolanaRpcApi>;
     private owner!: KeyPairSigner;
-    private lookupTableAddress: Address = address('7zhwX89SJs1ctA4e57Y6EpSvMuYXVoig2YiLKWFfnzwM');
+    private lookupTableAddress: Address = address('G1oDo5avsomSGuZivaRgFYY9dup1HLpp61XV1z4BK4TD');
     private accounts: Address[] = [
         //TODO: can add LP tokens, if need to reduce tx even more
 
@@ -123,13 +123,6 @@ export class LookupManager {
             this.accounts.push(address(programConfig.treasury.toBase58()));
         } catch (err) {
             console.warn('[LookupManager] Failed to fetch Squads program config treasury:', err);
-        }
-
-        // Jito tip accounts (we pick one at random per bundle — having all 8 in the LUT
-        // means whichever we pick costs 1 byte instead of 32)
-        const { JITO_TIP_ACCOUNTS } = await import('../constants/vault');
-        for (const tip of JITO_TIP_ACCOUNTS) {
-            this.accounts.push(address(tip));
         }
 
         console.log('[LookupManager] Accounts:', this.accounts);
