@@ -50,7 +50,7 @@ export class LookupManager {
     //TODO: if needed I can create a custom LookupTable for every user's Squad. and add his vault address, cloudKey, deviceKey, hardware wallets, etc
     private rpc: Rpc<SolanaRpcApi>;
     private owner!: KeyPairSigner;
-    private lookupTableAddress: Address = address('7zhwX89SJs1ctA4e57Y6EpSvMuYXVoig2YiLKWFfnzwM');
+    private lookupTableAddress: Address = address('G1oDo5avsomSGuZivaRgFYY9dup1HLpp61XV1z4BK4TD');
     private accounts: Address[] = [
         //TODO: can add LP tokens, if need to reduce tx even more
 
