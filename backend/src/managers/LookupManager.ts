@@ -102,6 +102,36 @@ export class LookupManager {
             this.accounts.push(...treasuryAtas);
         }
 
+        // ── Vault-creation tx accounts (every Squads vault creation hits these) ──
+        // System + ComputeBudget programs
+        this.accounts.push(address('11111111111111111111111111111111')); // System Program
+        this.accounts.push(address('ComputeBudget111111111111111111111111111111'));
+
+        // Squads V4 program + global program config PDA + protocol treasury
+        const multisigLib = await import('@sqds/multisig');
+        const web3 = await import('@solana/web3.js');
+        const SQUADS_PROGRAM_ID = 'SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf';
+        this.accounts.push(address(SQUADS_PROGRAM_ID));
+        const [programConfigPda] = multisigLib.getProgramConfigPda({});
+        this.accounts.push(address(programConfigPda.toBase58()));
+        try {
+            const conn = new web3.Connection(process.env.SOLANA_RPC_URL!, 'confirmed');
+            const programConfig = await multisigLib.accounts.ProgramConfig.fromAccountAddress(
+                conn,
+                programConfigPda,
+            );
+            this.accounts.push(address(programConfig.treasury.toBase58()));
+        } catch (err) {
+            console.warn('[LookupManager] Failed to fetch Squads program config treasury:', err);
+        }
+
+        // Jito tip accounts (we pick one at random per bundle — having all 8 in the LUT
+        // means whichever we pick costs 1 byte instead of 32)
+        const { JITO_TIP_ACCOUNTS } = await import('../constants/vault');
+        for (const tip of JITO_TIP_ACCOUNTS) {
+            this.accounts.push(address(tip));
+        }
+
         console.log('[LookupManager] Accounts:', this.accounts);
     }
 
