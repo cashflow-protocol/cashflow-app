@@ -71,6 +71,7 @@ export class LookupManager {
         address('2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH'), // USDG
         address('USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA'), // USDS
         address('2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo'), // PYUSD
+        //TODO: add USD*, USDT+ etc - all stablecoins in Cashflow - load them from MongoDB vaults
 
         address('yyvY1cHtcQHbsPk4UYdHhjtoYQjYCX41RqF8U3dSEND'), // SEND fees
         address('CASH1g7WuVEN873RhmHbaY8KA3rhwQbutHJRUsVU9E9m'), // Cashflow All Tx Fee Payer
