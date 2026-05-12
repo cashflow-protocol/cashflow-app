@@ -62,6 +62,7 @@ export class SolomonManager {
       vaultTitle: 'Solomon - sUSDv',
       symbol: 'sUSDv',
       rewardsRate,
+      minAppBuild: 20,
       protocolName: 'Solomon',
       protocolIconUrl: SOLOMON_ICON_URL,
       protocolData: data,

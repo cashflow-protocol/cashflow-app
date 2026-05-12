@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { DBManager, JupiterManager, KaminoManager, DriftManager, PriceManager } from '../managers';
+import { DBManager, JupiterManager, KaminoManager, DriftManager, PerenaManager, PriceManager } from '../managers';
 import { LookupManager } from '../managers/LookupManager';
 import { EarnTokenModel } from '../models/EarnToken';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
@@ -8,10 +8,6 @@ import { EarnTokenType, type IBalance } from '../types';
 import { notifyAdmin } from '../services/telegramManager';
 import type { AuthenticatedRequest } from '../middleware/auth';
 import { isValidSolanaAddress } from '../utils/validation';
-
-/** Protocols that require a minimum build number (view-only / coming soon protocols) */
-const VIEW_ONLY_PROTOCOLS = new Set<string>([EarnTokenType.PERENA, EarnTokenType.SOLOMON, EarnTokenType.ONRE]);
-const MIN_BUILD_FOR_VIEW_ONLY = 20;
 
 /**
  * Verify that the given walletAddress belongs to the authenticated user.
@@ -45,11 +41,10 @@ router.get('/tokens', async (req: Request, res: Response) => {
     const typeFilter = type && typeof type === 'string' ? { type } : undefined;
     let tokens = await dbManager.getTokens(typeFilter);
 
-    // Hide view-only protocols from older app builds
+    // Hide vaults that require a newer app build than the client is running.
+    // Vaults with no `minAppBuild` are always visible.
     const build = typeof buildNumber === 'string' ? parseInt(buildNumber, 10) : 0;
-    if (!build || build < MIN_BUILD_FOR_VIEW_ONLY) {
-      tokens = tokens.filter((t: any) => !VIEW_ONLY_PROTOCOLS.has(t.type));
-    }
+    tokens = tokens.filter((t: any) => !t.minAppBuild || build >= t.minAppBuild);
 
     res.json({
       success: true,
@@ -70,6 +65,7 @@ router.get('/tokens', async (req: Request, res: Response) => {
 // Manager instances
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
+const perenaManager = new PerenaManager();
 
 let driftManager: DriftManager | null = null;
 let driftReady: Promise<void> | null = null;
@@ -96,6 +92,7 @@ router.get('/positions', async (req: Request, res: Response) => {
     const positionPromises: [string, Promise<any[]>][] = [
       ['jupiter', jupiterManager.getWalletPositions(walletAddress)],
       ['kamino', kaminoManager.getWalletPositions(walletAddress)],
+      ['perena', perenaManager.getWalletPositions(walletAddress)],
     ];
     if (driftManager) {
       positionPromises.push(
@@ -143,6 +140,24 @@ router.get('/positions', async (req: Request, res: Response) => {
         const uiAmount = Number(p.amount) / 10 ** decimals;
         return {
           type: EarnTokenType.KAMINO,
+          mint: p.mint,
+          vaultAddress: p.vaultAddress,
+          symbol,
+          balance: {
+            amount: p.amount,
+            decimals,
+            uiAmount,
+            usdValue: priceManager.getUsdValue(symbol, uiAmount),
+          } as IBalance,
+        };
+      }),
+      ...(settled.perena ?? []).map((p: any) => {
+        const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
+        const decimals = tokenInfo?.decimals ?? 0;
+        const symbol = tokenInfo?.symbol ?? '';
+        const uiAmount = Number(p.amount) / 10 ** decimals;
+        return {
+          type: EarnTokenType.PERENA,
           mint: p.mint,
           vaultAddress: p.vaultAddress,
           symbol,
@@ -212,6 +227,7 @@ router.get('/earnings', async (req: Request, res: Response) => {
         const positionPromises: [string, Promise<any[]>][] = [
           ['jupiter', jupiterManager.getWalletPositions(walletAddress)],
           ['kamino', kaminoManager.getWalletPositions(walletAddress)],
+          ['perena', perenaManager.getWalletPositions(walletAddress)],
         ];
         if (driftManager) {
           positionPromises.push(
@@ -249,6 +265,10 @@ router.get('/earnings', async (req: Request, res: Response) => {
       }
     }
     for (const p of (positionsRes.kamino ?? [])) {
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
+      addPosition(p.mint, p.amount, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
+    }
+    for (const p of (positionsRes.perena ?? [])) {
       const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
       addPosition(p.mint, p.amount, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
     }
@@ -375,6 +395,9 @@ router.post('/deposit', async (req: Request, res: Response) => {
           instructions = await driftManager.getDepositInstructions(vaultAddress, amount, authority);
           break;
         }
+        case EarnTokenType.PERENA:
+          instructions = await perenaManager.getDepositInstructions(vaultAddress, amount, authority);
+          break;
         default:
           res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
           return;
@@ -437,6 +460,9 @@ router.post('/deposit', async (req: Request, res: Response) => {
         transaction = await driftManager.deposit(vaultAddress, amount, walletAddress);
         break;
       }
+      case EarnTokenType.PERENA:
+        transaction = await perenaManager.deposit(vaultAddress, amount, walletAddress);
+        break;
       default:
         res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
         return;
@@ -514,6 +540,9 @@ router.post('/withdraw', async (req: Request, res: Response) => {
           instructions = await driftManager.getWithdrawInstructions(vaultAddress, amount, authority);
           break;
         }
+        case EarnTokenType.PERENA:
+          instructions = await perenaManager.getWithdrawInstructions(vaultAddress, amount, authority);
+          break;
         default:
           res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
           return;
@@ -569,6 +598,9 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         transaction = await driftManager.withdraw(vaultAddress, amount, walletAddress);
         break;
       }
+      case EarnTokenType.PERENA:
+        transaction = await perenaManager.withdraw(vaultAddress, amount, walletAddress);
+        break;
       default:
         res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
         return;

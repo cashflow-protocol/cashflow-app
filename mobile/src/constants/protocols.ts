@@ -1,7 +1,7 @@
 import { ImageSourcePropType } from 'react-native';
 
 /** Protocols where the app can execute deposit/withdraw transactions. */
-export const SUPPORTED_PROTOCOLS = new Set(['jupiter', 'kamino', 'drift']);
+export const SUPPORTED_PROTOCOLS = new Set(['jupiter', 'kamino', 'drift', 'perena']);
 
 const PROTOCOL_ICONS: Record<string, ImageSourcePropType> = {
   jupiter: require('../assets/protocol-icons/jupiter.png'),

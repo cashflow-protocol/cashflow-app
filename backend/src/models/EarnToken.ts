@@ -50,6 +50,11 @@ export class EarnToken {
   @prop({ default: '0' })
   public minWithdrawAmount?: string;
 
+  /** Minimum app build number required to render this vault. Builds below this
+   *  number get the vault filtered out of /earn/v1/tokens. */
+  @prop()
+  public minAppBuild?: number;
+
   @prop({ type: () => Object })
   public jupiterToken?: Record<string, any>;
 
