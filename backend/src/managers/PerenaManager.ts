@@ -39,6 +39,7 @@ const SEED_POOL_ADDRESS = PRODUCTION_POOLS.tripool || '2w4A1eGyjRutakyFdmVyBiLPf
 const USDC_INDEX_IN_POOL = 0;
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 const SLIPPAGE_BPS = 50; // 0.5%
 
 interface PerenaApyResponse {
@@ -67,6 +68,8 @@ export class PerenaManager {
   /** Cached USD* / USDC price from the Perena API (refreshed on demand) */
   private cachedPrice: number = 1.0;
   private cachedPriceAt: number = 0;
+  /** Cache of mint → owning token program (classic vs Token-2022). Mints never change owner. */
+  private mintProgramCache: Map<string, PublicKey> = new Map();
 
   constructor() {
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
@@ -144,7 +147,9 @@ export class PerenaManager {
   ): Promise<{ vaultAddress: string; mint: string; amount: string }[]> {
     try {
       const owner = new PublicKey(walletAddress);
-      const usdStarAta = this.getAta(new PublicKey(USD_STAR_MINT), owner);
+      const usdStarMint = new PublicKey(USD_STAR_MINT);
+      const usdStarProgram = await this.getMintProgram(usdStarMint);
+      const usdStarAta = this.getAta(usdStarMint, owner, usdStarProgram);
 
       let usdStarRaw: bigint;
       try {
@@ -241,12 +246,19 @@ export class PerenaManager {
       return (await call.instruction()) as TransactionInstruction;
     });
 
-    // Prepend idempotent ATA creates so the deposit doesn't fail if either is missing
-    const usdcAta = this.getAta(new PublicKey(USDC_MINT), owner);
-    const usdStarAta = this.getAta(new PublicKey(USD_STAR_MINT), owner);
+    // Prepend idempotent ATA creates so the deposit doesn't fail if either is missing.
+    // USD* is a Token-2022 mint, USDC is classic — derive each ATA with the correct program.
+    const usdcMint = new PublicKey(USDC_MINT);
+    const usdStarMint = new PublicKey(USD_STAR_MINT);
+    const [usdcProgram, usdStarProgram] = await Promise.all([
+      this.getMintProgram(usdcMint),
+      this.getMintProgram(usdStarMint),
+    ]);
+    const usdcAta = this.getAta(usdcMint, owner, usdcProgram);
+    const usdStarAta = this.getAta(usdStarMint, owner, usdStarProgram);
     return [
-      this.createIdempotentAtaIx(usdcAta, new PublicKey(USDC_MINT), owner),
-      this.createIdempotentAtaIx(usdStarAta, new PublicKey(USD_STAR_MINT), owner),
+      this.createIdempotentAtaIx(usdcAta, usdcMint, owner, usdcProgram),
+      this.createIdempotentAtaIx(usdStarAta, usdStarMint, owner, usdStarProgram),
       ix,
     ];
   }
@@ -280,9 +292,11 @@ export class PerenaManager {
       return (await call.instruction()) as TransactionInstruction;
     });
 
-    const usdcAta = this.getAta(new PublicKey(USDC_MINT), owner);
+    const usdcMint = new PublicKey(USDC_MINT);
+    const usdcProgram = await this.getMintProgram(usdcMint);
+    const usdcAta = this.getAta(usdcMint, owner, usdcProgram);
     return [
-      this.createIdempotentAtaIx(usdcAta, new PublicKey(USDC_MINT), owner),
+      this.createIdempotentAtaIx(usdcAta, usdcMint, owner, usdcProgram),
       ix,
     ];
   }
@@ -336,9 +350,23 @@ export class PerenaManager {
     return this.cachedPrice;
   }
 
-  private getAta(mint: PublicKey, owner: PublicKey): PublicKey {
+  /** Look up which token program owns a mint (classic SPL Token vs Token-2022). Cached. */
+  private async getMintProgram(mint: PublicKey): Promise<PublicKey> {
+    const key = mint.toBase58();
+    const cached = this.mintProgramCache.get(key);
+    if (cached) return cached;
+    const info = await this.connection.getAccountInfo(mint, 'confirmed');
+    if (!info) throw new Error(`Mint account not found: ${key}`);
+    if (!info.owner.equals(TOKEN_PROGRAM_ID) && !info.owner.equals(TOKEN_2022_PROGRAM_ID)) {
+      throw new Error(`Mint ${key} is owned by unexpected program ${info.owner.toBase58()}`);
+    }
+    this.mintProgramCache.set(key, info.owner);
+    return info.owner;
+  }
+
+  private getAta(mint: PublicKey, owner: PublicKey, tokenProgram: PublicKey): PublicKey {
     const [ata] = PublicKey.findProgramAddressSync(
-      [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+      [owner.toBuffer(), tokenProgram.toBuffer(), mint.toBuffer()],
       ASSOCIATED_TOKEN_PROGRAM_ID,
     );
     return ata;
@@ -348,6 +376,7 @@ export class PerenaManager {
     ata: PublicKey,
     mint: PublicKey,
     owner: PublicKey,
+    tokenProgram: PublicKey,
   ): TransactionInstruction {
     return new TransactionInstruction({
       keys: [
@@ -356,7 +385,7 @@ export class PerenaManager {
         { pubkey: owner, isSigner: false, isWritable: false },
         { pubkey: mint, isSigner: false, isWritable: false },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: tokenProgram, isSigner: false, isWritable: false },
       ],
       programId: ASSOCIATED_TOKEN_PROGRAM_ID,
       data: Buffer.from([1]), // CreateIdempotent
