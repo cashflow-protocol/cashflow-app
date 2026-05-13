@@ -77,13 +77,15 @@ export class DBManager {
               ...(token.minDepositAmount && { minDepositAmount: token.minDepositAmount }),
               ...(token.minWithdrawAmount && { minWithdrawAmount: token.minWithdrawAmount }),
               ...(token.minAppBuild !== undefined && { minAppBuild: token.minAppBuild }),
-              ...(token.categories !== undefined && { categories: token.categories }),
               ...(token.protocolData && { [dataField]: token.protocolData }),
               ...(token.protocolName && { protocolName: token.protocolName }),
               ...(token.protocolIconUrl && { protocolIconUrl: token.protocolIconUrl }),
             },
             $setOnInsert: {
               status: 'inactive' as const,
+              // categories is admin-editable — seed default only on insert so admin
+              // edits in the webadmin aren't overwritten by the next cron run.
+              ...(token.categories !== undefined && { categories: token.categories }),
             },
           },
           upsert: true,

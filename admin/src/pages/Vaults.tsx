@@ -15,6 +15,7 @@ interface EarnToken {
   status: 'active' | 'inactive';
   minDepositAmount: string;
   minWithdrawAmount: string;
+  categories?: string[];
   poolSizeUi: number | null;
   poolSizeUsd: number | null;
   decimals: number;
@@ -87,6 +88,7 @@ export default function VaultsPage() {
   const [editToken, setEditToken] = useState<EarnToken | null>(null);
   const [editMinDeposit, setEditMinDeposit] = useState('');
   const [editMinWithdraw, setEditMinWithdraw] = useState('');
+  const [editCategories, setEditCategories] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -133,20 +135,31 @@ export default function VaultsPage() {
     setEditToken(token);
     setEditMinDeposit(token.minDepositAmount);
     setEditMinWithdraw(token.minWithdrawAmount);
+    setEditCategories((token.categories ?? []).join(', '));
   };
 
   const handleSaveConfig = async () => {
     if (!editToken) return;
     setSaving(true);
     try {
+      const categories = editCategories
+        .split(',')
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0);
       await updateEarnTokenConfig(editToken.id, {
         minDepositAmount: editMinDeposit,
         minWithdrawAmount: editMinWithdraw,
+        categories,
       });
       setTokens((prev) =>
         prev.map((t) =>
           t.id === editToken.id
-            ? { ...t, minDepositAmount: editMinDeposit, minWithdrawAmount: editMinWithdraw }
+            ? {
+                ...t,
+                minDepositAmount: editMinDeposit,
+                minWithdrawAmount: editMinWithdraw,
+                categories,
+              }
             : t,
         ),
       );
@@ -393,6 +406,18 @@ export default function VaultsPage() {
                   placeholder="0"
                   style={{ marginTop: 4 }}
                 />
+              </label>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>
+                Categories (comma-separated)
+                <input
+                  value={editCategories}
+                  onChange={(e) => setEditCategories(e.target.value)}
+                  placeholder="e.g. yield-stable, lending"
+                  style={{ marginTop: 4 }}
+                />
+                <span style={{ display: 'block', marginTop: 4, fontSize: 11, fontWeight: 400, color: '#666' }}>
+                  Drives mobile filters (e.g. <code>yield-stable</code> → Yield Stables tab).
+                </span>
               </label>
             </div>
             <div className="modal-actions" style={{ marginTop: 16 }}>

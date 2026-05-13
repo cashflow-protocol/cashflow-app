@@ -1050,10 +1050,17 @@ router.patch('/earn-tokens/:id/status', async (req, res) => {
  */
 router.patch('/earn-tokens/:id/config', async (req, res) => {
   try {
-    const { minDepositAmount, minWithdrawAmount } = req.body;
+    const { minDepositAmount, minWithdrawAmount, categories } = req.body;
     const update: any = {};
     if (minDepositAmount !== undefined) update.minDepositAmount = String(minDepositAmount);
     if (minWithdrawAmount !== undefined) update.minWithdrawAmount = String(minWithdrawAmount);
+    if (categories !== undefined) {
+      if (!Array.isArray(categories) || categories.some((c) => typeof c !== 'string')) {
+        res.status(400).json({ success: false, error: 'categories must be an array of strings' });
+        return;
+      }
+      update.categories = categories.map((c) => c.trim()).filter((c) => c.length > 0);
+    }
 
     if (Object.keys(update).length === 0) {
       res.status(400).json({ success: false, error: 'No fields to update' });
@@ -1075,6 +1082,7 @@ router.patch('/earn-tokens/:id/config', async (req, res) => {
       success: true,
       minDepositAmount: token.minDepositAmount,
       minWithdrawAmount: token.minWithdrawAmount,
+      categories: token.categories,
     });
   } catch (error) {
     console.error('Admin update earn token config error:', error);
