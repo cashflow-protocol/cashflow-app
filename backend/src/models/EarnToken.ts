@@ -55,6 +55,10 @@ export class EarnToken {
   @prop()
   public minAppBuild?: number;
 
+  /** Semantic tags for client-side filtering (e.g. 'yield-stable'). Empty/unset by default. */
+  @prop({ type: () => [String], default: [] })
+  public categories?: string[];
+
   @prop({ type: () => Object })
   public jupiterToken?: Record<string, any>;
 

@@ -168,6 +168,7 @@ export class PerenaManager {
       minDepositAmount: '0',
       minWithdrawAmount: '0',
       minAppBuild: 50,
+      categories: ['yield-stable'],
       protocolName: 'Perena',
       protocolIconUrl: PERENA_ICON_URL,
       protocolData: {
@@ -189,6 +190,7 @@ export class PerenaManager {
       minDepositAmount: '0',
       minWithdrawAmount: '0',
       minAppBuild: 50,
+      categories: ['yield-stable'],
       protocolName: 'Perena',
       protocolIconUrl: PERENA_ICON_URL,
       protocolData: {

@@ -37,6 +37,7 @@ export class OnreManager {
       symbol: 'ONyc',
       rewardsRate,
       minAppBuild: 20,
+      categories: ['yield-stable'],
       protocolName: 'Onre',
       protocolIconUrl: ONRE_ICON_URL,
       protocolData: { apy: apyRaw },

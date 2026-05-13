@@ -63,6 +63,7 @@ export class SolomonManager {
       symbol: 'sUSDv',
       rewardsRate,
       minAppBuild: 20,
+      categories: ['yield-stable'],
       protocolName: 'Solomon',
       protocolIconUrl: SOLOMON_ICON_URL,
       protocolData: data,

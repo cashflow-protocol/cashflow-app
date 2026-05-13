@@ -33,6 +33,7 @@ export interface EarnTokenUpsert {
   minDepositAmount?: string;
   minWithdrawAmount?: string;
   minAppBuild?: number;
+  categories?: string[];
   protocolData?: Record<string, any>;
   protocolName?: string;
   protocolIconUrl?: string;
@@ -76,6 +77,7 @@ export class DBManager {
               ...(token.minDepositAmount && { minDepositAmount: token.minDepositAmount }),
               ...(token.minWithdrawAmount && { minWithdrawAmount: token.minWithdrawAmount }),
               ...(token.minAppBuild !== undefined && { minAppBuild: token.minAppBuild }),
+              ...(token.categories !== undefined && { categories: token.categories }),
               ...(token.protocolData && { [dataField]: token.protocolData }),
               ...(token.protocolName && { protocolName: token.protocolName }),
               ...(token.protocolIconUrl && { protocolIconUrl: token.protocolIconUrl }),
@@ -112,7 +114,7 @@ export class DBManager {
     }
 
     return EarnTokenModel.find(query)
-      .select('type mint vaultAddress vaultTitle symbol rewardsRate status minDepositAmount minWithdrawAmount minAppBuild protocolName protocolIconUrl')
+      .select('type mint vaultAddress vaultTitle symbol rewardsRate status minDepositAmount minWithdrawAmount minAppBuild categories protocolName protocolIconUrl')
       .sort({ rewardsRate: -1 });
   }
 

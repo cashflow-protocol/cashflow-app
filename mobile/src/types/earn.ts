@@ -13,6 +13,7 @@ export interface EarnToken {
   logoUrl: string;
   minDepositAmount?: string;
   minWithdrawAmount?: string;
+  categories?: string[];
   protocolName?: string;
   protocolIconUrl?: string;
 }
