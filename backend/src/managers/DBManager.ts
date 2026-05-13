@@ -46,6 +46,7 @@ const PROTOCOL_DATA_FIELD: Record<EarnTokenType, string> = {
   [EarnTokenType.PERENA]: 'perenaToken',
   [EarnTokenType.SOLOMON]: 'solomonToken',
   [EarnTokenType.ONRE]: 'onreToken',
+  [EarnTokenType.HUMA]: 'humaToken',
 };
 
 export class DBManager {

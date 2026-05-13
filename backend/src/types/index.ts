@@ -5,6 +5,7 @@ export enum EarnTokenType {
   PERENA = 'perena',
   SOLOMON = 'solomon',
   ONRE = 'onre',
+  HUMA = 'huma',
 }
 
 export interface IBalance {

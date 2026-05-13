@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { getEarnTokens, updateEarnTokenStatus, updateEarnTokenConfig } from '../api';
 import MultiSelect from '../components/MultiSelect';
 
-const VAULT_TYPES = ['jupiter', 'kamino', 'drift', 'perena', 'solomon', 'onre'];
+const VAULT_TYPES = ['jupiter', 'kamino', 'drift', 'perena', 'solomon', 'onre', 'huma'];
 
 interface EarnToken {
   id: string;
-  type: 'jupiter' | 'kamino' | 'drift' | 'perena' | 'solomon' | 'onre';
+  type: 'jupiter' | 'kamino' | 'drift' | 'perena' | 'solomon' | 'onre' | 'huma';
   vaultAddress: string;
   vaultTitle: string;
   mint: string;
@@ -31,6 +31,7 @@ const TYPE_LOGO_URLS: Record<string, string> = {
   perena: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/perena.jpg',
   solomon: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/solomon.png',
   onre: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/onre.jpg',
+  huma: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/huma.png',
 };
 
 const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
@@ -40,6 +41,7 @@ const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   perena: { bg: '#f3e5f5', color: '#7b1fa2' },
   solomon: { bg: '#fce4ec', color: '#c62828' },
   onre: { bg: '#e0f2f1', color: '#00695c' },
+  huma: { bg: '#ede7f6', color: '#4527a0' },
 };
 
 function shortenAddress(addr: string) {

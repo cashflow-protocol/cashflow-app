@@ -180,7 +180,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
             </TouchableOpacity>
           )}
 
-          {/* Close Vault */}
+          {/* Close Vault - Hidden for now, will restore soon
           {vault && (
             <TouchableOpacity
               style={[styles.menuCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}
@@ -197,6 +197,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
               <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>{'>'}</Text>
             </TouchableOpacity>
           )}
+          */}
         </View>
 
         <Text style={[styles.versionText, { color: colors.textTertiary }]}>App version: {APP_VERSION} ({BUILD_NUMBER})</Text>

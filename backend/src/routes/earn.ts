@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { DBManager, JupiterManager, KaminoManager, DriftManager, PerenaManager, PriceManager } from '../managers';
+import { DBManager, JupiterManager, KaminoManager, DriftManager, PerenaManager, HumaManager, PriceManager } from '../managers';
 import { LookupManager } from '../managers/LookupManager';
 import { EarnTokenModel } from '../models/EarnToken';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
@@ -66,6 +66,7 @@ router.get('/tokens', async (req: Request, res: Response) => {
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
 const perenaManager = new PerenaManager();
+const humaManager = new HumaManager();
 
 let driftManager: DriftManager | null = null;
 let driftReady: Promise<void> | null = null;
@@ -93,6 +94,7 @@ router.get('/positions', async (req: Request, res: Response) => {
       ['jupiter', jupiterManager.getWalletPositions(walletAddress)],
       ['kamino', kaminoManager.getWalletPositions(walletAddress)],
       ['perena', perenaManager.getWalletPositions(walletAddress)],
+      ['huma', humaManager.getWalletPositions(walletAddress)],
     ];
     if (driftManager) {
       positionPromises.push(
@@ -169,6 +171,24 @@ router.get('/positions', async (req: Request, res: Response) => {
           } as IBalance,
         };
       }),
+      ...(settled.huma ?? []).map((p: any) => {
+        const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
+        const decimals = tokenInfo?.decimals ?? 0;
+        const symbol = tokenInfo?.symbol ?? '';
+        const uiAmount = Number(p.amount) / 10 ** decimals;
+        return {
+          type: EarnTokenType.HUMA,
+          mint: p.mint,
+          vaultAddress: p.vaultAddress,
+          symbol,
+          balance: {
+            amount: p.amount,
+            decimals,
+            uiAmount,
+            usdValue: priceManager.getUsdValue(symbol, uiAmount),
+          } as IBalance,
+        };
+      }),
       ...(settled.drift ?? []).map((p: any) => {
         const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
         const decimals = tokenInfo?.decimals ?? 0;
@@ -228,6 +248,7 @@ router.get('/earnings', async (req: Request, res: Response) => {
           ['jupiter', jupiterManager.getWalletPositions(walletAddress)],
           ['kamino', kaminoManager.getWalletPositions(walletAddress)],
           ['perena', perenaManager.getWalletPositions(walletAddress)],
+          ['huma', humaManager.getWalletPositions(walletAddress)],
         ];
         if (driftManager) {
           positionPromises.push(
@@ -269,6 +290,10 @@ router.get('/earnings', async (req: Request, res: Response) => {
       addPosition(p.mint, p.amount, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
     }
     for (const p of (positionsRes.perena ?? [])) {
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
+      addPosition(p.mint, p.amount, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
+    }
+    for (const p of (positionsRes.huma ?? [])) {
       const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
       addPosition(p.mint, p.amount, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
     }
@@ -376,7 +401,7 @@ router.post('/deposit', async (req: Request, res: Response) => {
     // Return raw instructions for Squads vault flow
     if (returnInstructions) {
       let instructions: any[];
-      let perenaLookupTables: string[] = [];
+      let extraProtocolLookupTables: string[] = [];
       switch (type) {
         case EarnTokenType.JUPITER:
           instructions = await jupiterManager.getDepositInstructions(mint, amount, authority, walletAddress);
@@ -399,7 +424,13 @@ router.post('/deposit', async (req: Request, res: Response) => {
         case EarnTokenType.PERENA: {
           const perenaRes = await perenaManager.getDepositInstructions(vaultAddress, amount, authority);
           instructions = perenaRes.instructions;
-          perenaLookupTables = perenaRes.lookupTables;
+          extraProtocolLookupTables = perenaRes.lookupTables;
+          break;
+        }
+        case EarnTokenType.HUMA: {
+          const humaRes = await humaManager.getDepositInstructions(vaultAddress, amount, authority);
+          instructions = humaRes.instructions;
+          extraProtocolLookupTables = humaRes.lookupTables;
           break;
         }
         default:
@@ -412,15 +443,15 @@ router.post('/deposit', async (req: Request, res: Response) => {
         console.error(`DEPOSIT returnInstructions: EMPTY instructions for type=${type}, mint=${mint}, amount=${amount}`);
       }
 
-      // Collect extra LUTs (e.g. Kamino vault-specific lookup table, Perena bankineco LUTs)
+      // Collect extra LUTs (e.g. Kamino vault-specific lookup table, Perena bankineco LUTs, Huma pool LUT)
       const extraLookupTables: string[] = [];
       if (type === EarnTokenType.KAMINO && vaultAddress) {
         const vaultDoc = await EarnTokenModel.findOne({ type, vaultAddress }).lean();
         const vaultLut = vaultDoc?.kaminoToken?.state?.vaultLookupTable;
         if (vaultLut) extraLookupTables.push(vaultLut);
       }
-      if (perenaLookupTables && perenaLookupTables.length > 0) {
-        extraLookupTables.push(...perenaLookupTables);
+      if (extraProtocolLookupTables && extraProtocolLookupTables.length > 0) {
+        extraLookupTables.push(...extraProtocolLookupTables);
       }
 
       const record = await dbManager.createTransaction({
@@ -469,6 +500,9 @@ router.post('/deposit', async (req: Request, res: Response) => {
       }
       case EarnTokenType.PERENA:
         transaction = await perenaManager.deposit(vaultAddress, amount, walletAddress);
+        break;
+      case EarnTokenType.HUMA:
+        transaction = await humaManager.deposit(vaultAddress, amount, walletAddress);
         break;
       default:
         res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
@@ -528,7 +562,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
     // Return raw instructions for Squads vault flow
     if (returnInstructions) {
       let instructions: any[];
-      let perenaLookupTables: string[] = [];
+      let extraProtocolLookupTables: string[] = [];
       switch (type) {
         case EarnTokenType.JUPITER:
           instructions = await jupiterManager.getWithdrawInstructions(mint, amount, authority, walletAddress);
@@ -551,7 +585,13 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         case EarnTokenType.PERENA: {
           const perenaRes = await perenaManager.getWithdrawInstructions(vaultAddress, amount, authority);
           instructions = perenaRes.instructions;
-          perenaLookupTables = perenaRes.lookupTables;
+          extraProtocolLookupTables = perenaRes.lookupTables;
+          break;
+        }
+        case EarnTokenType.HUMA: {
+          const humaRes = await humaManager.getWithdrawInstructions(vaultAddress, amount, authority);
+          instructions = humaRes.instructions;
+          extraProtocolLookupTables = humaRes.lookupTables;
           break;
         }
         default:
@@ -559,15 +599,15 @@ router.post('/withdraw', async (req: Request, res: Response) => {
           return;
       }
 
-      // Collect extra LUTs (e.g. Kamino vault-specific lookup table, Perena bankineco LUTs)
+      // Collect extra LUTs (e.g. Kamino vault-specific lookup table, Perena bankineco LUTs, Huma pool LUT)
       const extraLookupTables: string[] = [];
       if (type === EarnTokenType.KAMINO && vaultAddress) {
         const vaultDoc = await EarnTokenModel.findOne({ type, vaultAddress }).lean();
         const vaultLut = vaultDoc?.kaminoToken?.state?.vaultLookupTable;
         if (vaultLut) extraLookupTables.push(vaultLut);
       }
-      if (perenaLookupTables.length > 0) {
-        extraLookupTables.push(...perenaLookupTables);
+      if (extraProtocolLookupTables.length > 0) {
+        extraLookupTables.push(...extraProtocolLookupTables);
       }
 
       const record = await dbManager.createTransaction({
@@ -614,6 +654,9 @@ router.post('/withdraw', async (req: Request, res: Response) => {
       }
       case EarnTokenType.PERENA:
         transaction = await perenaManager.withdraw(vaultAddress, amount, walletAddress);
+        break;
+      case EarnTokenType.HUMA:
+        transaction = await humaManager.withdraw(vaultAddress, amount, walletAddress);
         break;
       default:
         res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
