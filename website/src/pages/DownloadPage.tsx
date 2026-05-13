@@ -20,7 +20,7 @@ export default function DownloadPage() {
 
         <div className="download-badges">
           <a
-            href="https://store.solanamobile.com/products/cashflow"
+            href="solanadappstore://details?id=fun.cashflow"
             target="_blank"
             rel="noopener noreferrer"
             className="store-link"
