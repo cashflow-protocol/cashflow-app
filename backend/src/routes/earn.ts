@@ -376,6 +376,7 @@ router.post('/deposit', async (req: Request, res: Response) => {
     // Return raw instructions for Squads vault flow
     if (returnInstructions) {
       let instructions: any[];
+      let perenaLookupTables: string[] = [];
       switch (type) {
         case EarnTokenType.JUPITER:
           instructions = await jupiterManager.getDepositInstructions(mint, amount, authority, walletAddress);
@@ -395,9 +396,12 @@ router.post('/deposit', async (req: Request, res: Response) => {
           instructions = await driftManager.getDepositInstructions(vaultAddress, amount, authority);
           break;
         }
-        case EarnTokenType.PERENA:
-          instructions = await perenaManager.getDepositInstructions(vaultAddress, amount, authority);
+        case EarnTokenType.PERENA: {
+          const perenaRes = await perenaManager.getDepositInstructions(vaultAddress, amount, authority);
+          instructions = perenaRes.instructions;
+          perenaLookupTables = perenaRes.lookupTables;
           break;
+        }
         default:
           res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
           return;
@@ -408,12 +412,15 @@ router.post('/deposit', async (req: Request, res: Response) => {
         console.error(`DEPOSIT returnInstructions: EMPTY instructions for type=${type}, mint=${mint}, amount=${amount}`);
       }
 
-      // Collect extra LUTs (e.g. Kamino vault-specific lookup table)
+      // Collect extra LUTs (e.g. Kamino vault-specific lookup table, Perena bankineco LUTs)
       const extraLookupTables: string[] = [];
       if (type === EarnTokenType.KAMINO && vaultAddress) {
         const vaultDoc = await EarnTokenModel.findOne({ type, vaultAddress }).lean();
         const vaultLut = vaultDoc?.kaminoToken?.state?.vaultLookupTable;
         if (vaultLut) extraLookupTables.push(vaultLut);
+      }
+      if (perenaLookupTables && perenaLookupTables.length > 0) {
+        extraLookupTables.push(...perenaLookupTables);
       }
 
       const record = await dbManager.createTransaction({
@@ -521,6 +528,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
     // Return raw instructions for Squads vault flow
     if (returnInstructions) {
       let instructions: any[];
+      let perenaLookupTables: string[] = [];
       switch (type) {
         case EarnTokenType.JUPITER:
           instructions = await jupiterManager.getWithdrawInstructions(mint, amount, authority, walletAddress);
@@ -540,20 +548,26 @@ router.post('/withdraw', async (req: Request, res: Response) => {
           instructions = await driftManager.getWithdrawInstructions(vaultAddress, amount, authority);
           break;
         }
-        case EarnTokenType.PERENA:
-          instructions = await perenaManager.getWithdrawInstructions(vaultAddress, amount, authority);
+        case EarnTokenType.PERENA: {
+          const perenaRes = await perenaManager.getWithdrawInstructions(vaultAddress, amount, authority);
+          instructions = perenaRes.instructions;
+          perenaLookupTables = perenaRes.lookupTables;
           break;
+        }
         default:
           res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
           return;
       }
 
-      // Collect extra LUTs (e.g. Kamino vault-specific lookup table)
+      // Collect extra LUTs (e.g. Kamino vault-specific lookup table, Perena bankineco LUTs)
       const extraLookupTables: string[] = [];
       if (type === EarnTokenType.KAMINO && vaultAddress) {
         const vaultDoc = await EarnTokenModel.findOne({ type, vaultAddress }).lean();
         const vaultLut = vaultDoc?.kaminoToken?.state?.vaultLookupTable;
         if (vaultLut) extraLookupTables.push(vaultLut);
+      }
+      if (perenaLookupTables.length > 0) {
+        extraLookupTables.push(...perenaLookupTables);
       }
 
       const record = await dbManager.createTransaction({

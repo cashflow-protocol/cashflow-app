@@ -30,7 +30,7 @@ import {
     TOKEN_2022_PROGRAM_ADDRESS,
     findAssociatedTokenPda as findAssociatedTokenPda2022,
 } from '@solana-program/token-2022';
-import { SUPPORTED_TOKEN_MINTS } from '../constants/tokens';
+import { SUPPORTED_TOKEN_MINTS, USDC_MINT } from '../constants/tokens';
 
 export async function initialiseLookupManager() {
     try {
@@ -64,7 +64,7 @@ export class LookupManager {
         address('JCNCMFXo5M5qwUPg2Utu1u6YWp3MbygxqBsBeXXJfrw'), // Drift Vaults
 
         // stablecoins
-        address('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'), // USDC
+        address(USDC_MINT), // USDC
         address('JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD'), // JupUSD
         address('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'), // USDT
         address('HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr'), // EURC

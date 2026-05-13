@@ -22,7 +22,11 @@ import {
 } from '@solana-program/token';
 import { TOKEN_2022_PROGRAM_ADDRESS } from '@solana-program/token-2022';
 import { getTransferSolInstruction } from '@solana-program/system';
-import { SUPPORTED_TOKEN_MINTS } from '../constants';
+import {
+  SUPPORTED_TOKEN_MINTS,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID as TOKEN_2022_PROGRAM_ID_STRING,
+} from '../constants';
 import { EarnTokenType } from '../types';
 import type { SerializedInstruction } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
@@ -750,8 +754,7 @@ export class JupiterManager {
    * if the account already exists — idempotent is safe in all cases.
    */
   private makeAtaIdempotent(ix: SerializedInstruction): SerializedInstruction {
-    const ATA_PROGRAM_ID = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
-    if (ix.programId === ATA_PROGRAM_ID && Buffer.from(ix.data, 'base64').length === 0) {
+    if (ix.programId === ASSOCIATED_TOKEN_PROGRAM_ID && Buffer.from(ix.data, 'base64').length === 0) {
       console.log('[makeAtaIdempotent] Converting non-idempotent ATA create → idempotent');
       return { ...ix, data: Buffer.from([1]).toString('base64') };
     }
@@ -787,7 +790,7 @@ export class JupiterManager {
 
       const ownerPk = new PublicKey(owner);
       const mintPk = new PublicKey(mint);
-      const tokenProgramId = tokenProgram === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+      const tokenProgramId = tokenProgram === TOKEN_2022_PROGRAM_ID_STRING
         ? TOKEN_2022_PROGRAM_ID
         : TOKEN_PROGRAM_ID;
       const ata = getAssociatedTokenAddressSync(mintPk, ownerPk, true, tokenProgramId);

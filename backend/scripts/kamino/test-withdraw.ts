@@ -7,12 +7,13 @@ import {
   getBase64EncodedWireTransaction,
   getSignatureFromTransaction,
 } from '@solana/kit';
+import { USDC_MINT } from '../../src/constants';
 
 import 'dotenv/config';
 
 const API_BASE = 'http://localhost:3000';
 const VAULT_ADDRESS = 'HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E';
-const MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+const MINT = USDC_MINT;
 
 const devKey = process.env.DEV_PRIVATE_KEY;
 if (!devKey) throw new Error('DEV_PRIVATE_KEY not set in .env');

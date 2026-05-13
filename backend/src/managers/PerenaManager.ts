@@ -6,6 +6,7 @@ import {
   SystemProgram,
   TransactionInstruction,
 } from '@solana/web3.js';
+import { BN } from '@coral-xyz/anchor';
 import {
   addLiquidity,
   getPoolKeys,
@@ -14,6 +15,7 @@ import {
   state,
   PRODUCTION_POOLS,
 } from '@perena/numeraire-sdk';
+import { InsuredUsdStarClient } from '@perena/bankineco-sdk';
 import {
   address,
   pipe,
@@ -24,23 +26,34 @@ import {
   appendTransactionMessageInstruction,
   compileTransaction,
   getBase64EncodedWireTransaction,
+  compressTransactionMessageUsingAddressLookupTables,
+  fetchAddressesForLookupTables,
   AccountRole,
 } from '@solana/kit';
 import type { Rpc, SolanaRpcApi } from '@solana/kit';
 import { EarnTokenType } from '../types';
 import type { SerializedInstruction } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
+import {
+  USDC_MINT,
+  ASSOCIATED_TOKEN_PROGRAM_ID as ASSOCIATED_TOKEN_PROGRAM_ID_STRING,
+  TOKEN_PROGRAM_ID as TOKEN_PROGRAM_ID_STRING,
+  TOKEN_2022_PROGRAM_ID as TOKEN_2022_PROGRAM_ID_STRING,
+} from '../constants';
 
 const PERENA_ICON_URL = 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/perena.jpg';
 const USD_STAR_MINT = 'star9agSpjiFe3M49B3RniVU4CMBBEK3Qnaqn3RGiFM';
-const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+/** USD*-P bank mint (the Insured/Protected position token, distinct from USD*). */
+const USD_P_MINT = 'CPFZ7wUFpg5obsGB2GKXQ8rPY5ALuxs87dEjQjsrVxWw';
 // Seed pool (USDC/USDT/PYUSD with weights 45/35/20). USDC is index 0.
 const SEED_POOL_ADDRESS = PRODUCTION_POOLS.tripool || '2w4A1eGyjRutakyFdmVyBiLPf98qKxNTC2LpuwhaCruZ';
 const USDC_INDEX_IN_POOL = 0;
-const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
-const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ID_STRING);
+const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ID_STRING);
+const TOKEN_2022_PROGRAM_ID = new PublicKey(TOKEN_2022_PROGRAM_ID_STRING);
 const SLIPPAGE_BPS = 50; // 0.5%
+/** USD*-P fixed APY per Perena docs. Display = rewardsRate / 100 → "5.00%". */
+const USD_P_REWARDS_RATE = 500;
 
 interface PerenaApyResponse {
   period: string;
@@ -62,14 +75,20 @@ export class PerenaManager {
   private connection: Connection;
   private rpc: Rpc<SolanaRpcApi>;
   private db: DBManager;
-  /** Serializes SDK calls — the SDK reads a global `state.wallet` for ATA derivation
-   *  so concurrent requests with different users would race. */
+  /** Serializes Numeraire SDK calls — that SDK reads a global `state.wallet` for ATA
+   *  derivation so concurrent requests with different users would race.
+   *  Bankineco SDK takes `user` per-call and doesn't need this. */
   private sdkLock: Promise<unknown> = Promise.resolve();
   /** Cached USD* / USDC price from the Perena API (refreshed on demand) */
   private cachedPrice: number = 1.0;
   private cachedPriceAt: number = 0;
+  /** Cached USD*-P / USDC price (refreshed on demand) */
+  private cachedProtectedPrice: number = 1.0;
+  private cachedProtectedPriceAt: number = 0;
   /** Cache of mint → owning token program (classic vs Token-2022). Mints never change owner. */
   private mintProgramCache: Map<string, PublicKey> = new Map();
+  /** Lazy-initialized USD*-P client (heavyweight — pulls Kamino/MarginFi/Jupiter SDKs). */
+  private _insuredClient: InsuredUsdStarClient | null = null;
 
   constructor() {
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
@@ -81,7 +100,7 @@ export class PerenaManager {
       timeout: 30_000,
     });
 
-    // SDK init: pass a placeholder keypair (we override state.wallet per call).
+    // Numeraire SDK init: pass a placeholder keypair (we override state.wallet per call).
     // applyD=false makes the SDK take raw token amounts instead of UI amounts.
     init({
       payer: Keypair.generate(),
@@ -90,10 +109,33 @@ export class PerenaManager {
     });
   }
 
+  /** Lazy accessor for the bankineco InsuredUsdStarClient (USD*-P). */
+  private get insuredClient(): InsuredUsdStarClient {
+    if (!this._insuredClient) {
+      const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+      // The SDK's .new() omits `wallet` from its TS signature but accepts it at runtime.
+      // Pass a plain placeholder so the SDK's fs fallback (~/.config/solana/id.json) is bypassed.
+      // We pass the real user pubkey per-call via mintFromYieldingTx/burnForYieldingTx.
+      const placeholderKeypair = Keypair.generate();
+      const placeholderWallet = {
+        publicKey: placeholderKeypair.publicKey,
+        payer: placeholderKeypair,
+        signTransaction: async (tx: any) => tx,
+        signAllTransactions: async (txs: any) => txs,
+      };
+      this._insuredClient = InsuredUsdStarClient.new({
+        env: 'prod',
+        rpcUrl,
+        wallet: placeholderWallet,
+      } as any);
+    }
+    return this._insuredClient;
+  }
+
   /**
-   * Fetch current APY and mint info from Perena, then upsert into the database.
-   * Schema: mint=USDC (deposit asset), vaultAddress=SEED_POOL (Numeraire pool address).
-   * USD* is the LP / position token, tracked in protocolData.
+   * Fetch APY/price for both Perena products and upsert them as two EarnToken records.
+   * - USD* AMM:  mint=USDC, vaultAddress=SEED_POOL
+   * - USD*-P:    mint=USDC, vaultAddress=USD_P_MINT
    */
   async getEarnTokens(): Promise<void> {
     const [apyRes, mintInfoRes] = await Promise.all([
@@ -103,24 +145,31 @@ export class PerenaManager {
 
     const { apy } = apyRes.data;
     const mintInfo = mintInfoRes.data;
-
-    // Cache the price so withdrawals can convert USDC → LP amount without a fresh fetch
     if (mintInfo.price > 0) {
       this.cachedPrice = mintInfo.price;
       this.cachedPriceAt = Date.now();
     }
+    const usdStarRewardsRate = Math.round(apy * 100);
 
-    // rewardsRate convention: mobile displays (rewardsRate / 100).toFixed(2) + '%'
-    // Perena returns apy as a percentage (e.g. 5.0 for 5%), so rewardsRate = apy * 100
-    const rewardsRate = Math.round(apy * 100);
+    // Refresh the protected price too (don't fail the whole cron if it errors)
+    let protectedPrice = this.cachedProtectedPrice;
+    try {
+      protectedPrice = await this.insuredClient.latestBankMintUiPrice();
+      if (protectedPrice > 0) {
+        this.cachedProtectedPrice = protectedPrice;
+        this.cachedProtectedPriceAt = Date.now();
+      }
+    } catch (e) {
+      console.warn('[Perena] latestBankMintUiPrice failed:', (e as Error).message);
+    }
 
-    const token: EarnTokenUpsert = {
+    const usdStarToken: EarnTokenUpsert = {
       type: EarnTokenType.PERENA,
       mint: USDC_MINT,
       vaultAddress: SEED_POOL_ADDRESS,
       vaultTitle: 'Perena - USD*',
       symbol: 'USDC',
-      rewardsRate,
+      rewardsRate: usdStarRewardsRate,
       minDepositAmount: '0',
       minWithdrawAmount: '0',
       minAppBuild: 50,
@@ -132,96 +181,149 @@ export class PerenaManager {
         lpMint: USD_STAR_MINT,
         poolAddress: SEED_POOL_ADDRESS,
         depositMint: USDC_MINT,
+        product: 'usd-star',
       },
     };
 
-    await this.db.upsertEarnTokens([token]);
+    const protectedToken: EarnTokenUpsert = {
+      type: EarnTokenType.PERENA,
+      mint: USDC_MINT,
+      vaultAddress: USD_P_MINT,
+      vaultTitle: 'Perena - USD* Protected',
+      symbol: 'USDC',
+      rewardsRate: USD_P_REWARDS_RATE,
+      minDepositAmount: '0',
+      minWithdrawAmount: '0',
+      minAppBuild: 50,
+      protocolName: 'Perena',
+      protocolIconUrl: PERENA_ICON_URL,
+      protocolData: {
+        bankMint: USD_P_MINT,
+        price: protectedPrice,
+        product: 'usd-star-protected',
+      },
+    };
+
+    await this.db.upsertEarnTokens([usdStarToken, protectedToken]);
   }
 
   /**
-   * Fetch user's Perena position: their USD* balance, returned as the USDC-equivalent
-   * value so the route's per-mint aggregation works uniformly across protocols.
+   * Fetch user's positions in both Perena products. Returns one entry per vault the
+   * user has a non-zero balance in. Both products use USDC as the position's
+   * accounting mint (the deposit asset) so per-mint aggregation works uniformly.
    */
   async getWalletPositions(
     walletAddress: string,
   ): Promise<{ vaultAddress: string; mint: string; amount: string }[]> {
+    const owner = new PublicKey(walletAddress);
+    const positions: { vaultAddress: string; mint: string; amount: string }[] = [];
+
+    // USD* (AMM): user holds USD* in their ATA, value = balance × USD*/USDC price
     try {
-      const owner = new PublicKey(walletAddress);
       const usdStarMint = new PublicKey(USD_STAR_MINT);
       const usdStarProgram = await this.getMintProgram(usdStarMint);
       const usdStarAta = this.getAta(usdStarMint, owner, usdStarProgram);
-
-      let usdStarRaw: bigint;
-      try {
-        const bal = await this.connection.getTokenAccountBalance(usdStarAta, 'confirmed');
-        usdStarRaw = BigInt(bal.value.amount);
-      } catch {
-        // ATA doesn't exist or is empty — no position
-        return [];
+      const raw = await this.tryGetTokenBalance(usdStarAta);
+      if (raw > 0n) {
+        const price = await this.getUsdStarPrice();
+        const usdcEquiv = (raw * BigInt(Math.round(price * 1e9))) / BigInt(1e9);
+        positions.push({ vaultAddress: SEED_POOL_ADDRESS, mint: USDC_MINT, amount: usdcEquiv.toString() });
       }
-      if (usdStarRaw === 0n) return [];
-
-      const price = await this.getUsdStarPrice();
-      // USDC equivalent = USD* balance * USD*/USDC price. Both 6 decimals so no scaling needed.
-      const usdcEquivRaw = (usdStarRaw * BigInt(Math.round(price * 1e9))) / BigInt(1e9);
-
-      return [
-        {
-          vaultAddress: SEED_POOL_ADDRESS,
-          mint: USDC_MINT,
-          amount: usdcEquivRaw.toString(),
-        },
-      ];
     } catch (error) {
-      console.error('Error fetching Perena wallet positions:', error);
-      return [];
+      console.error('Error fetching Perena USD* position:', (error as Error).message);
     }
+
+    // USD*-P: user holds the bank mint (CPFZ...) directly
+    try {
+      const usdPMint = new PublicKey(USD_P_MINT);
+      const usdPProgram = await this.getMintProgram(usdPMint);
+      const usdPAta = this.getAta(usdPMint, owner, usdPProgram);
+      const raw = await this.tryGetTokenBalance(usdPAta);
+      if (raw > 0n) {
+        const price = await this.getProtectedPrice();
+        const usdcEquiv = (raw * BigInt(Math.round(price * 1e9))) / BigInt(1e9);
+        positions.push({ vaultAddress: USD_P_MINT, mint: USDC_MINT, amount: usdcEquiv.toString() });
+      }
+    } catch (error) {
+      console.error('Error fetching Perena USD*-P position:', (error as Error).message);
+    }
+
+    return positions;
   }
 
-  /**
-   * Get raw deposit instructions for Perena (used by Squads vault flow).
-   * @param _vaultAddress Ignored — Perena has a single pool. Kept for signature parity.
-   * @param amount Raw USDC amount (6 decimals)
-   * @param ownerAddress User's wallet/vault address (the depositor)
-   */
+  /** Squads vault flow — return raw deposit instructions + extra LUTs (if any). */
   async getDepositInstructions(
-    _vaultAddress: string,
+    vaultAddress: string,
     amount: string,
     ownerAddress: string,
-  ): Promise<SerializedInstruction[]> {
-    const ixs = await this.buildDepositInstructions(amount, ownerAddress);
-    return ixs.map((ix) => this.web3IxToSerialized(ix));
+  ): Promise<{ instructions: SerializedInstruction[]; lookupTables: string[] }> {
+    const { ixs, lookupTables } = await this.buildDepositArtifacts(vaultAddress, amount, ownerAddress);
+    return {
+      instructions: ixs.map((ix) => this.web3IxToSerialized(ix)),
+      lookupTables: lookupTables.map((p) => p.toBase58()),
+    };
   }
 
-  /**
-   * Get raw withdraw instructions for Perena (used by Squads vault flow).
-   * @param amount Raw USDC amount the user wants to receive
-   * @param ownerAddress User's wallet/vault address (the redeemer)
-   */
+  /** Squads vault flow — return raw withdraw instructions + extra LUTs (if any). */
   async getWithdrawInstructions(
-    _vaultAddress: string,
+    vaultAddress: string,
     amount: string,
     ownerAddress: string,
-  ): Promise<SerializedInstruction[]> {
-    const ixs = await this.buildWithdrawInstructions(amount, ownerAddress);
-    return ixs.map((ix) => this.web3IxToSerialized(ix));
+  ): Promise<{ instructions: SerializedInstruction[]; lookupTables: string[] }> {
+    const { ixs, lookupTables } = await this.buildWithdrawArtifacts(vaultAddress, amount, ownerAddress);
+    return {
+      instructions: ixs.map((ix) => this.web3IxToSerialized(ix)),
+      lookupTables: lookupTables.map((p) => p.toBase58()),
+    };
   }
 
-  /** Get an unsigned base64 deposit transaction (legacy flow). */
-  async deposit(_vaultAddress: string, amount: string, walletAddress: string): Promise<string> {
-    const ixs = await this.buildDepositInstructions(amount, walletAddress);
-    return this.buildTransaction(ixs, walletAddress);
+  /** Legacy flow — return base64-encoded unsigned deposit transaction. */
+  async deposit(vaultAddress: string, amount: string, walletAddress: string): Promise<string> {
+    const { ixs, lookupTables } = await this.buildDepositArtifacts(vaultAddress, amount, walletAddress);
+    return this.buildTransaction(ixs, walletAddress, lookupTables);
   }
 
-  /** Get an unsigned base64 withdraw transaction (legacy flow). */
-  async withdraw(_vaultAddress: string, amount: string, walletAddress: string): Promise<string> {
-    const ixs = await this.buildWithdrawInstructions(amount, walletAddress);
-    return this.buildTransaction(ixs, walletAddress);
+  /** Legacy flow — return base64-encoded unsigned withdraw transaction. */
+  async withdraw(vaultAddress: string, amount: string, walletAddress: string): Promise<string> {
+    const { ixs, lookupTables } = await this.buildWithdrawArtifacts(vaultAddress, amount, walletAddress);
+    return this.buildTransaction(ixs, walletAddress, lookupTables);
   }
 
-  // ---------------- private helpers ----------------
+  // ---------------- dispatch ----------------
 
-  private async buildDepositInstructions(
+  private async buildDepositArtifacts(
+    vaultAddress: string,
+    amount: string,
+    ownerAddress: string,
+  ): Promise<{ ixs: TransactionInstruction[]; lookupTables: PublicKey[] }> {
+    if (vaultAddress === SEED_POOL_ADDRESS) {
+      const ixs = await this.buildAmmDepositInstructions(amount, ownerAddress);
+      return { ixs, lookupTables: [] };
+    }
+    if (vaultAddress === USD_P_MINT) {
+      return this.buildProtectedDepositArtifacts(amount, ownerAddress);
+    }
+    throw new Error(`Unknown Perena vault: ${vaultAddress}`);
+  }
+
+  private async buildWithdrawArtifacts(
+    vaultAddress: string,
+    amount: string,
+    ownerAddress: string,
+  ): Promise<{ ixs: TransactionInstruction[]; lookupTables: PublicKey[] }> {
+    if (vaultAddress === SEED_POOL_ADDRESS) {
+      const ixs = await this.buildAmmWithdrawInstructions(amount, ownerAddress);
+      return { ixs, lookupTables: [] };
+    }
+    if (vaultAddress === USD_P_MINT) {
+      return this.buildProtectedWithdrawArtifacts(amount, ownerAddress);
+    }
+    throw new Error(`Unknown Perena vault: ${vaultAddress}`);
+  }
+
+  // ---------------- USD* (Numeraire AMM) ----------------
+
+  private async buildAmmDepositInstructions(
     amount: string,
     ownerAddress: string,
   ): Promise<TransactionInstruction[]> {
@@ -231,7 +333,6 @@ export class PerenaManager {
       throw new Error(`Invalid deposit amount: ${amount}`);
     }
 
-    // Slippage-protect: minimum USD* expected ≈ usdcAmount / price * (1 - slippage)
     const price = await this.getUsdStarPrice();
     const expectedLp = usdcAmount / Math.max(price, 1e-9);
     const minLpTokenMintAmount = Math.floor(expectedLp * (10000 - SLIPPAGE_BPS) / 10000);
@@ -239,15 +340,13 @@ export class PerenaManager {
     const ix = await this.withSdkLock(owner, async () => {
       const { call } = await addLiquidity({
         pool: new PublicKey(SEED_POOL_ADDRESS),
-        maxAmountsIn: [usdcAmount, 0, 0], // USDC only; USDT and PYUSD skipped
+        maxAmountsIn: [usdcAmount, 0, 0],
         minLpTokenMintAmount,
         takeSwaps: true,
       });
       return (await call.instruction()) as TransactionInstruction;
     });
 
-    // Prepend idempotent ATA creates so the deposit doesn't fail if either is missing.
-    // USD* is a Token-2022 mint, USDC is classic — derive each ATA with the correct program.
     const usdcMint = new PublicKey(USDC_MINT);
     const usdStarMint = new PublicKey(USD_STAR_MINT);
     const [usdcProgram, usdStarProgram] = await Promise.all([
@@ -263,7 +362,7 @@ export class PerenaManager {
     ];
   }
 
-  private async buildWithdrawInstructions(
+  private async buildAmmWithdrawInstructions(
     amount: string,
     ownerAddress: string,
   ): Promise<TransactionInstruction[]> {
@@ -273,12 +372,8 @@ export class PerenaManager {
       throw new Error(`Invalid withdraw amount: ${amount}`);
     }
 
-    // Convert target USDC out → required USD* (LP) input. Round up so user gets
-    // at least the requested amount; the pool returns slightly more if price > 1.
     const price = await this.getUsdStarPrice();
     const lpTokenRedeemAmount = Math.ceil(usdcAmount / Math.max(price, 1e-9));
-
-    // Slippage floor: minimum USDC out
     const minUsdcOut = Math.floor(usdcAmount * (10000 - SLIPPAGE_BPS) / 10000);
     const minAmountsOut = [minUsdcOut, 0, 0];
 
@@ -301,10 +396,54 @@ export class PerenaManager {
     ];
   }
 
+  // ---------------- USD*-P (Insured / Bankineco) ----------------
+
+  private async buildProtectedDepositArtifacts(
+    amount: string,
+    ownerAddress: string,
+  ): Promise<{ ixs: TransactionInstruction[]; lookupTables: PublicKey[] }> {
+    const owner = new PublicKey(ownerAddress);
+    const usdcMint = new PublicKey(USDC_MINT);
+
+    const { transaction, lookupTables } = await this.insuredClient.mintFromYieldingTx({
+      yieldingAmount: new BN(amount),
+      fromYieldingMint: usdcMint,
+      user: owner,
+    });
+
+    return { ixs: transaction.instructions, lookupTables };
+  }
+
+  private async buildProtectedWithdrawArtifacts(
+    amount: string,
+    ownerAddress: string,
+  ): Promise<{ ixs: TransactionInstruction[]; lookupTables: PublicKey[] }> {
+    const owner = new PublicKey(ownerAddress);
+    const usdcMint = new PublicKey(USDC_MINT);
+    // The SDK takes the bank-mint (USD*-P) amount to burn. The mobile sends a raw
+    // USDC target — convert via the cached protected price.
+    const usdcOut = Number(amount);
+    if (!Number.isFinite(usdcOut) || usdcOut <= 0) {
+      throw new Error(`Invalid withdraw amount: ${amount}`);
+    }
+    const price = await this.getProtectedPrice();
+    const bankMintAmount = new BN(Math.ceil(usdcOut / Math.max(price, 1e-9)).toString());
+
+    const { transaction, lookupTables } = await this.insuredClient.burnForYieldingTx({
+      bankMintAmount,
+      toYieldingMint: usdcMint,
+      user: owner,
+    });
+
+    return { ixs: transaction.instructions, lookupTables };
+  }
+
+  // ---------------- helpers ----------------
+
   /**
-   * The SDK reads `state.wallet.publicKey` (a module-level singleton) when deriving
-   * per-user ATAs inside getLiqAccounts. Override it for the duration of the call,
-   * and serialize all calls so concurrent requests don't see each other's user.
+   * The Numeraire SDK reads `state.wallet.publicKey` (a module-level singleton) when
+   * deriving per-user ATAs inside getLiqAccounts. Override it for the duration of the
+   * call, and serialize all calls so concurrent requests don't see each other's user.
    */
   private async withSdkLock<T>(owner: PublicKey, fn: () => Promise<T>): Promise<T> {
     const prev = this.sdkLock;
@@ -331,8 +470,16 @@ export class PerenaManager {
     }
   }
 
+  private async tryGetTokenBalance(ata: PublicKey): Promise<bigint> {
+    try {
+      const bal = await this.connection.getTokenAccountBalance(ata, 'confirmed');
+      return BigInt(bal.value.amount);
+    } catch {
+      return 0n;
+    }
+  }
+
   private async getUsdStarPrice(): Promise<number> {
-    // Use the cron-refreshed cache when it's < 5 minutes old; otherwise fetch fresh.
     const ageMs = Date.now() - this.cachedPriceAt;
     if (this.cachedPriceAt > 0 && ageMs < 5 * 60 * 1000) {
       return this.cachedPrice;
@@ -345,9 +492,27 @@ export class PerenaManager {
         return this.cachedPrice;
       }
     } catch (e) {
-      console.warn('[Perena] Failed to refresh price, using cached:', (e as Error).message);
+      console.warn('[Perena] Failed to refresh USD* price, using cached:', (e as Error).message);
     }
     return this.cachedPrice;
+  }
+
+  private async getProtectedPrice(): Promise<number> {
+    const ageMs = Date.now() - this.cachedProtectedPriceAt;
+    if (this.cachedProtectedPriceAt > 0 && ageMs < 5 * 60 * 1000) {
+      return this.cachedProtectedPrice;
+    }
+    try {
+      const price = await this.insuredClient.latestBankMintUiPrice();
+      if (price > 0) {
+        this.cachedProtectedPrice = price;
+        this.cachedProtectedPriceAt = Date.now();
+        return this.cachedProtectedPrice;
+      }
+    } catch (e) {
+      console.warn('[Perena] Failed to refresh USD*-P price, using cached:', (e as Error).message);
+    }
+    return this.cachedProtectedPrice;
   }
 
   /** Look up which token program owns a mint (classic SPL Token vs Token-2022). Cached. */
@@ -404,8 +569,15 @@ export class PerenaManager {
     };
   }
 
-  /** Build a base64-encoded unsigned versioned transaction from web3.js instructions */
-  private async buildTransaction(ixs: TransactionInstruction[], feePayer: string): Promise<string> {
+  /**
+   * Build a base64-encoded unsigned VersionedTransaction from web3.js instructions,
+   * optionally compressing the message with the provided lookup-table pubkeys.
+   */
+  private async buildTransaction(
+    ixs: TransactionInstruction[],
+    feePayer: string,
+    lookupTables: PublicKey[] = [],
+  ): Promise<string> {
     const instructions = ixs.map((ix) => ({
       programAddress: address(ix.programId.toBase58()),
       accounts: ix.keys.map((key) => ({
@@ -419,13 +591,29 @@ export class PerenaManager {
 
     const { value: latestBlockhash } = await this.rpc.getLatestBlockhash().send();
 
-    const transactionMessage = pipe(
+    const baseMessage = pipe(
       createTransactionMessage({ version: 0 }),
       (tx) => setTransactionMessageFeePayer(address(feePayer), tx),
       (tx) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, tx),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (tx) => instructions.reduce((msg: any, ix) => appendTransactionMessageInstruction(ix, msg), tx),
     );
+
+    let transactionMessage = baseMessage;
+    if (lookupTables.length > 0) {
+      try {
+        const lutAddrs = lookupTables.map((lut) => address(lut.toBase58()));
+        const addressesByLut = await fetchAddressesForLookupTables(lutAddrs, this.rpc);
+        if (Object.keys(addressesByLut).length > 0) {
+          transactionMessage = compressTransactionMessageUsingAddressLookupTables(
+            baseMessage,
+            addressesByLut,
+          ) as typeof baseMessage;
+        }
+      } catch (err) {
+        console.warn('[Perena] Failed to compress with LUTs, sending uncompressed:', (err as Error).message);
+      }
+    }
 
     const compiled = compileTransaction(transactionMessage);
     return getBase64EncodedWireTransaction(compiled);
