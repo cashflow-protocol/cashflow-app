@@ -217,15 +217,20 @@ export class LookupManager {
             return;
         }
 
-        const extendIx = getExtendLookupTableInstruction({
-            address: this.lookupTableAddress,
-            authority: this.owner,
-            payer: this.owner,
-            addresses: newAddresses,
-        });
+        // Solana tx limit is 1232 bytes; ~20 addresses per extend tx keeps us safely under it.
+        const CHUNK_SIZE = 20;
+        for (let i = 0; i < newAddresses.length; i += CHUNK_SIZE) {
+            const chunk = newAddresses.slice(i, i + CHUNK_SIZE);
+            const extendIx = getExtendLookupTableInstruction({
+                address: this.lookupTableAddress,
+                authority: this.owner,
+                payer: this.owner,
+                addresses: chunk,
+            });
 
-        const signature = await this.buildAndSendTx([extendIx]);
-        console.log('[LookupManager] Lookup table extended:', signature);
+            const signature = await this.buildAndSendTx([extendIx]);
+            console.log(`[LookupManager] Lookup table extended (+${chunk.length}):`, signature);
+        }
     }
 
     async deactivateLookupTable(lookupTable: Address) {
