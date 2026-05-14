@@ -117,15 +117,15 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    suggestions.push({
-      id: 'link-twitter',
-      type: 'link',
-      title: 'Build in public',
-      description: 'We build Cashflow in public with every day video updates. Follow @cashflow_fi on X.',
-      color: '#000000',
-      buttonTitle: 'Follow',
-      url: 'https://x.com/cashflow_fi',
-    });
+    // suggestions.push({
+    //   id: 'link-twitter',
+    //   type: 'link',
+    //   title: 'Build in public',
+    //   description: 'We build Cashflow in public with every day video updates. Follow @cashflow_fi on X.',
+    //   color: '#000000',
+    //   buttonTitle: 'Follow',
+    //   url: 'https://x.com/cashflow_fi',
+    // });
 
 
     // --- Transfer position suggestions ---
