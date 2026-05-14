@@ -149,9 +149,12 @@ export class HumaManager {
   }
 
   /**
-   * Read user's Classic balance (via SDK) and any Prime LP balance (direct ATA read).
-   * Returned amounts are normalized to USDC (6 decimals) so the per-mint aggregation
-   * in routes/earn.ts works uniformly.
+   * Read user's Classic position by inspecting their PST ATA directly. The SDK's
+   * `getBalances` couples this with a call to Huma's points API to split locked vs
+   * unlocked — which throws (or returns 0) if the API is unreachable, hiding real
+   * positions. For the position-display use case we only need the total PST balance,
+   * converted to USDC via the share price. (Prime issues a separate LP token, not PST,
+   * so it stays listing-only here.)
    */
   async getWalletPositions(
     walletAddress: string,
@@ -159,41 +162,18 @@ export class HumaManager {
     const owner = new PublicKey(walletAddress);
     const positions: { vaultAddress: string; mint: string; amount: string }[] = [];
 
-    // Classic — use SDK
-    try {
-      const balances = await this.client.getBalances(owner, DepositMode.CLASSIC);
-      const totalPst = balances.unlockedBalance.add(balances.lockedBalance).add(balances.pendingRedemptions);
-      if (totalPst.gt(new BN(0))) {
-        const price = await this.getClassicPrice();
-        const pstRaw = BigInt(totalPst.toString());
-        const usdcEquiv = (pstRaw * BigInt(Math.round(price * 1e9))) / BigInt(1e9);
-        positions.push({ vaultAddress: CLASSIC_VAULT_ADDRESS, mint: USDC_MINT, amount: usdcEquiv.toString() });
-      }
-    } catch (error) {
-      console.error('[Huma] Failed to read Classic balance:', (error as Error).message);
-    }
-
-    // Prime — listing-only; we read PST ATA directly to show any position
-    // a user holds outside the Classic flow. (Prime LP token tracking would need
-    // direct program reads against the prime vault — out of scope for v1.)
     try {
       const pstMint = new PublicKey(PST_MINT);
       const program = await this.getMintProgram(pstMint);
       const ata = this.getAta(pstMint, owner, program);
-      const raw = await this.tryGetTokenBalance(ata);
-      // Subtract what Classic already accounted for to avoid double-counting
-      const classicBalances = await this.client.getBalances(owner, DepositMode.CLASSIC).catch(() => null);
-      const classicPst = classicBalances
-        ? BigInt(classicBalances.unlockedBalance.add(classicBalances.lockedBalance).toString())
-        : 0n;
-      const primePst = raw > classicPst ? raw - classicPst : 0n;
-      if (primePst > 0n) {
+      const pstRaw = await this.tryGetTokenBalance(ata);
+      if (pstRaw > 0n) {
         const price = await this.getClassicPrice();
-        const usdcEquiv = (primePst * BigInt(Math.round(price * 1e9))) / BigInt(1e9);
-        positions.push({ vaultAddress: PRIME_VAULT_ADDRESS, mint: USDC_MINT, amount: usdcEquiv.toString() });
+        const usdcEquiv = (pstRaw * BigInt(Math.round(price * 1e9))) / BigInt(1e9);
+        positions.push({ vaultAddress: CLASSIC_VAULT_ADDRESS, mint: USDC_MINT, amount: usdcEquiv.toString() });
       }
     } catch (error) {
-      console.error('[Huma] Failed to read Prime PST balance:', (error as Error).message);
+      console.error('[Huma] Failed to read Classic PST balance:', (error as Error).message);
     }
 
     return positions;
