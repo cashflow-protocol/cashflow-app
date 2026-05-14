@@ -106,7 +106,7 @@ export class HumaManager {
       vaultTitle: 'Huma - Classic',
       symbol: 'USDC',
       rewardsRate: classicRewardsRate,
-      minDepositAmount: '10000000',
+      minDepositAmount: '1000000',
       minWithdrawAmount: '0',
       minAppBuild: 50,
       categories: ['yield-stable'],
