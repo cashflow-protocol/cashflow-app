@@ -31,6 +31,38 @@ const IDENTITY = {
   icon: 'favicon.ico',
 };
 
+/**
+ * Heuristic: errors the MWA layer or wallet apps throw when the cached
+ * auth_token is stale or the biometric prompt timed out. These are recoverable
+ * by clearing the token and running a fresh authorize().
+ */
+function isLikelySessionError(message: string): boolean {
+  const m = (message || '').toLowerCase();
+  return (
+    m.includes('fingerprint') ||
+    m.includes('biometric') ||
+    m.includes('canceled by user') ||
+    m.includes('cancelled by user') ||
+    m.includes('auth_token') ||
+    m.includes('not authorized') ||
+    m.includes('reauthorize') ||
+    m.includes('session') ||
+    m.includes('expired')
+  );
+}
+
+function wrapMwaError(err: any): Error {
+  const message = err?.message || String(err);
+  if (isLikelySessionError(message)) {
+    const wrapped = new Error(
+      'Wallet session expired or the biometric prompt timed out. Please try again.',
+    );
+    (wrapped as any).cause = err;
+    return wrapped;
+  }
+  return err instanceof Error ? err : new Error(message);
+}
+
 class WalletService {
   private rpc: ReturnType<typeof createSolanaRpc>;
   private authToken: string | null = null;
@@ -73,6 +105,87 @@ class WalletService {
     }
   }
 
+  /**
+   * Open a transact() session, authorize (or reauthorize with the cached
+   * token), then run `operation`. If the first attempt used a cached
+   * auth_token and fails with a likely session/biometric error, clear the
+   * token and retry once with a fresh authorize() — this covers cases where
+   * the wallet's internal session expired or the biometric prompt timed out
+   * while the user was waiting.
+   */
+  private async runWithAuth<T>(
+    meta: {
+      logKey: string;
+      trackerAction: string;
+      severity: 'critical' | 'unexpected';
+      context?: Record<string, unknown>;
+    },
+    operation: (wallet: any) => Promise<T>,
+  ): Promise<T> {
+    const hadCachedToken = this.authToken !== null;
+
+    const attempt = async (forceFresh: boolean): Promise<T> => {
+      return getTransact()(async (wallet: any) => {
+        if (!forceFresh && this.authToken) {
+          console.log(`[MWA] ${meta.trackerAction}: reauthorizing with existing token...`);
+          const auth = await wallet.reauthorize({
+            auth_token: this.authToken,
+            identity: IDENTITY,
+          });
+          this.authToken = auth.auth_token;
+        } else {
+          console.log(`[MWA] ${meta.trackerAction}: full authorize...`);
+          const auth = await wallet.authorize({
+            cluster: SOLANA_CONFIG.cluster,
+            identity: IDENTITY,
+          });
+          this.authToken = auth.auth_token;
+        }
+        return operation(wallet);
+      });
+    };
+
+    try {
+      return await attempt(false);
+    } catch (err: any) {
+      const message = err?.message || '';
+
+      if (hadCachedToken && isLikelySessionError(message)) {
+        console.log(
+          `[MWA] ${meta.trackerAction}: cached session likely stale, retrying with fresh authorize... (was: ${message})`,
+        );
+        this.authToken = null;
+        try {
+          return await attempt(true);
+        } catch (retryErr: any) {
+          this.recordSigningFailure(meta, retryErr);
+          throw wrapMwaError(retryErr);
+        }
+      }
+
+      this.recordSigningFailure(meta, err);
+      throw wrapMwaError(err);
+    }
+  }
+
+  private recordSigningFailure(
+    meta: {
+      logKey: string;
+      trackerAction: string;
+      severity: 'critical' | 'unexpected';
+      context?: Record<string, unknown>;
+    },
+    err: any,
+  ): void {
+    logError(meta.logKey, err?.message || 'unknown');
+    mobileErrorTracker.log(err, {
+      severity: meta.severity,
+      action: meta.trackerAction,
+      context: meta.context,
+    });
+    console.error(`[MWA] ${meta.trackerAction} FAILED:`, err?.message || err);
+  }
+
   async signAndSendTransactions(transactions: Uint8Array[]): Promise<Uint8Array[]> {
     // MWA expects base64-encoded transaction strings, not raw Uint8Array
     const base64Payloads = transactions.map(tx =>
@@ -80,23 +193,15 @@ class WalletService {
     );
 
     console.log('[MWA] starting transact for signing...');
-    return getTransact()(async (wallet: any) => {
-      // Reauthorize silently if we have a token, otherwise full authorize
-      if (this.authToken) {
-        console.log('[MWA] reauthorizing with existing token...');
-        const auth = await wallet.reauthorize({ auth_token: this.authToken, identity: IDENTITY });
-        this.authToken = auth.auth_token;
-      } else {
-        console.log('[MWA] no token, doing full authorize...');
-        const auth = await wallet.authorize({
-          cluster: SOLANA_CONFIG.cluster,
-          identity: IDENTITY,
-        });
-        this.authToken = auth.auth_token;
-      }
-      console.log('[MWA] authorized, signing', transactions.length, 'tx(s)...');
-
-      try {
+    return this.runWithAuth(
+      {
+        logKey: 'wallet_sign_send',
+        trackerAction: 'mwa_sign_and_send',
+        severity: 'critical',
+        context: { txCount: transactions.length },
+      },
+      async (wallet: any) => {
+        console.log('[MWA] authorized, signing', transactions.length, 'tx(s)...');
         const result = await wallet.signAndSendTransactions({
           payloads: base64Payloads,
         });
@@ -105,17 +210,8 @@ class WalletService {
         return result.signatures.map((sig: string) =>
           new Uint8Array(Buffer.from(sig, 'base64')),
         );
-      } catch (err: any) {
-        logError('wallet_sign_send', err?.message || 'unknown');
-        mobileErrorTracker.log(err, {
-          severity: 'critical',
-          action: 'mwa_sign_and_send',
-          context: { txCount: transactions.length },
-        });
-        console.error('[MWA] signAndSendTransactions FAILED:', err?.message || err);
-        throw err;
-      }
-    });
+      },
+    );
   }
 
   async signTransactions(transactions: Uint8Array[]): Promise<Uint8Array[]> {
@@ -124,22 +220,15 @@ class WalletService {
     );
 
     console.log('[MWA] starting transact for sign-only...');
-    return getTransact()(async (wallet: any) => {
-      if (this.authToken) {
-        console.log('[MWA] reauthorizing with existing token...');
-        const auth = await wallet.reauthorize({ auth_token: this.authToken, identity: IDENTITY });
-        this.authToken = auth.auth_token;
-      } else {
-        console.log('[MWA] no token, doing full authorize...');
-        const auth = await wallet.authorize({
-          cluster: SOLANA_CONFIG.cluster,
-          identity: IDENTITY,
-        });
-        this.authToken = auth.auth_token;
-      }
-      console.log('[MWA] authorized, signing (no send)', transactions.length, 'tx(s)...');
-
-      try {
+    return this.runWithAuth(
+      {
+        logKey: 'wallet_sign',
+        trackerAction: 'mwa_sign',
+        severity: 'critical',
+        context: { txCount: transactions.length },
+      },
+      async (wallet: any) => {
+        console.log('[MWA] authorized, signing (no send)', transactions.length, 'tx(s)...');
         const result = await wallet.signTransactions({
           payloads: base64Payloads,
         });
@@ -150,17 +239,8 @@ class WalletService {
         return result.signed_payloads.map((payload: string) =>
           new Uint8Array(Buffer.from(payload, 'base64')),
         );
-      } catch (err: any) {
-        logError('wallet_sign', err?.message || 'unknown');
-        mobileErrorTracker.log(err, {
-          severity: 'critical',
-          action: 'mwa_sign',
-          context: { txCount: transactions.length },
-        });
-        console.error('[MWA] signTransactions FAILED:', err?.message || err);
-        throw err;
-      }
-    });
+      },
+    );
   }
 
   /**
@@ -170,19 +250,14 @@ class WalletService {
   async signMessages(messages: Uint8Array[], signerAddress: string): Promise<Uint8Array[]> {
     const base64Payloads = messages.map((m) => Buffer.from(m).toString('base64'));
 
-    return getTransact()(async (wallet: any) => {
-      if (this.authToken) {
-        const auth = await wallet.reauthorize({ auth_token: this.authToken, identity: IDENTITY });
-        this.authToken = auth.auth_token;
-      } else {
-        const auth = await wallet.authorize({
-          cluster: SOLANA_CONFIG.cluster,
-          identity: IDENTITY,
-        });
-        this.authToken = auth.auth_token;
-      }
-
-      try {
+    return this.runWithAuth(
+      {
+        logKey: 'wallet_sign_message',
+        trackerAction: 'mwa_sign_message',
+        severity: 'unexpected',
+        context: { messageCount: messages.length },
+      },
+      async (wallet: any) => {
         const result = await wallet.signMessages({
           addresses: [signerAddress],
           payloads: base64Payloads,
@@ -197,16 +272,8 @@ class WalletService {
           const bytes = new Uint8Array(Buffer.from(payload, 'base64'));
           return bytes.slice(0, 64);
         });
-      } catch (err: any) {
-        logError('wallet_sign_message', err?.message || 'unknown');
-        mobileErrorTracker.log(err, {
-          severity: 'unexpected',
-          action: 'mwa_sign_message',
-          context: { messageCount: messages.length },
-        });
-        throw err;
-      }
-    });
+      },
+    );
   }
 
   async disconnect(): Promise<void> {
