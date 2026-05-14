@@ -608,7 +608,7 @@ router.put('/waitlist-tasks/:id', async (req, res) => {
     if (category !== undefined) update.category = category;
     if (metadata !== undefined) update.metadata = metadata;
 
-    const task = await WaitlistTaskModel.findByIdAndUpdate(req.params.id, update, { new: true });
+    const task = await WaitlistTaskModel.findByIdAndUpdate(req.params.id, update, { returnDocument: 'after' });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
@@ -1029,7 +1029,7 @@ router.patch('/earn-tokens/:id/status', async (req, res) => {
     const token = await EarnTokenModel.findByIdAndUpdate(
       req.params.id,
       { status },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!token) {
@@ -1078,7 +1078,7 @@ router.patch('/earn-tokens/:id/config', async (req, res) => {
     const token = await EarnTokenModel.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!token) {
@@ -1183,7 +1183,7 @@ router.patch('/rewards/tasks/:slug', async (req, res) => {
     if (update.availableUntil) update.availableUntil = new Date(update.availableUntil);
     if (update.mintFeeLamports != null) update.mintFeeLamports = String(update.mintFeeLamports);
 
-    const task = await RewardTaskModel.findOneAndUpdate({ slug }, { $set: update }, { new: true });
+    const task = await RewardTaskModel.findOneAndUpdate({ slug }, { $set: update }, { returnDocument: 'after' });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;

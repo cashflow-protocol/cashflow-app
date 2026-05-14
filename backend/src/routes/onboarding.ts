@@ -78,7 +78,7 @@ router.post('/redeem-invite', async (req, res) => {
     const invite = await InviteCodeModel.findOneAndUpdate(
       { code: code.toUpperCase(), $expr: { $lt: ['$useCount', '$maxUses'] } },
       { $inc: { useCount: 1 }, $push: { usedBy: { publicKey, usedAt: new Date() } } },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!invite) {
@@ -422,7 +422,7 @@ async function awardTaskXp(publicKey: string, taskQuery: Record<string, any>, ex
       $inc: { xp: xpReward },
       $set: { lastXpAt: new Date(), ...extraFields },
     },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!result) {
@@ -1372,7 +1372,7 @@ router.post('/confirm-vault', async (req, res) => {
     const result = await VaultPaymentModel.findOneAndUpdate(
       { paymentId, status: VaultPaymentStatus.PENDING },
       { $set: { status: VaultPaymentStatus.USED, txSignature } },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!result) {

@@ -70,7 +70,7 @@ export async function tryAddBadgeAttribute(
       ],
     },
     { $inc: { mintedCount: 1 } },
-    { new: true },
+    { returnDocument: 'after' },
   );
   if (!claimedTask) {
     const existing = await RewardTaskModel.findOne({ slug: taskSlug }).lean();
@@ -89,7 +89,7 @@ export async function tryAddBadgeAttribute(
       },
       $setOnInsert: { vaultAddress: userVaultAddress, taskSlug },
     },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: 'after' },
   );
 
   try {

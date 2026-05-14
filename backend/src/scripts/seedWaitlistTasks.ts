@@ -96,7 +96,7 @@ async function seed() {
     const result = await WaitlistTaskModel.findOneAndUpdate(
       { category: task.category, 'metadata.provider': task.metadata.provider },
       { $set: task },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
     providerToId.set(task.metadata.provider, result._id.toString());
     console.log(`  Upserted: ${task.title} (${result._id})`);
@@ -109,7 +109,7 @@ async function seed() {
     const result = await WaitlistTaskModel.findOneAndUpdate(
       { title: task.title, category: task.category },
       { $set: { ...task, requiresTask } },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
     console.log(`  Upserted: ${task.title} (${result._id})`);
   }

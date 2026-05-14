@@ -34,7 +34,7 @@ async function casIncrementCostBasis(
     const doc = await UserCostBasisModel.findOneAndUpdate(
       { vaultAddress, mint },
       { $setOnInsert: { totalDeposited: '0', totalWithdrawn: '0' } },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     ).lean();
 
     const filter: Record<string, unknown> = { vaultAddress, mint };

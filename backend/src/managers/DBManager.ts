@@ -216,7 +216,7 @@ export class DBManager {
     return TransactionModel.findOneAndUpdate(
       { _id: transactionId, status: { $in: [TransactionStatus.CREATED, TransactionStatus.SUBMITTED] } },
       { status },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 

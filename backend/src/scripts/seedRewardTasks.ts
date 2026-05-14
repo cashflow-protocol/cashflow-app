@@ -97,7 +97,7 @@ async function seed() {
         },
         $setOnInsert: { slug: task.slug, mintedCount: 0 },
       },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
     console.log(`  Upserted: ${task.slug} (${result._id})`);
   }

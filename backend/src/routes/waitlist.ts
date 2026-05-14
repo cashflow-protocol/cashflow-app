@@ -206,7 +206,7 @@ router.post('/verify', async (req: Request, res: Response) => {
     const updated = await Model.findOneAndUpdate(
       { email: normalizedEmail },
       { $set: { email: normalizedEmail, verified: true } },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
 
     // Telegram ping for brand-new family signups only
