@@ -800,9 +800,16 @@ router.get('/assets', async (req: Request, res: Response) => {
     const items: any[] = dasData.result?.items ?? [];
     const nativeBalance = dasData.result?.nativeBalance;
 
-    // Get all vault addresses from earn tokens to filter out LP/receipt tokens
+    // Filter out LP/receipt tokens. For most protocols vaultAddress == receipt mint
+    // (Perena USD*, Solomon sUSDv, Onre ONyc) so the distinct query catches them.
+    // Some protocols (e.g. Huma) use a config PDA as vaultAddress and issue a
+    // separate receipt mint — list those here so they're hidden from the assets view.
+    const HIDDEN_RECEIPT_MINTS = [
+      '59obFNBzyTBGowrkif5uK7ojS58vsuWz3ZCvg6tfZAGw', // Huma PST (Classic)
+      'HUPfpnsaJtJGpJxAPNX1vXah7BgYiQYt1c2JMgMumvPs', // Huma mPST (Maxi)
+    ];
     const vaultAddresses = await EarnTokenModel.distinct('vaultAddress');
-    const vaultAddressSet = new Set<string>(vaultAddresses);
+    const hiddenMintSet = new Set<string>([...vaultAddresses, ...HIDDEN_RECEIPT_MINTS]);
 
     const assets: {
       mint: string;
@@ -837,7 +844,7 @@ router.get('/assets', async (req: Request, res: Response) => {
     const unknownMints: string[] = [];
     for (const item of items) {
       if (item.interface !== 'FungibleToken' && item.interface !== 'FungibleAsset') continue;
-      if (vaultAddressSet.has(item.id)) continue;
+      if (hiddenMintSet.has(item.id)) continue;
       if (!item.token_info?.balance || item.token_info.balance === 0) continue;
       if ((item.token_info.decimals ?? 0) === 0) continue;
       if (!SUPPORTED_TOKENS_BY_MINT[item.id]) {
@@ -853,8 +860,8 @@ router.get('/assets', async (req: Request, res: Response) => {
     for (const item of items) {
       if (item.interface !== 'FungibleToken' && item.interface !== 'FungibleAsset') continue;
 
-      // Skip LP/receipt tokens from Jupiter Lend, Kamino, Drift
-      if (vaultAddressSet.has(item.id)) continue;
+      // Skip LP/receipt tokens (Jupiter Lend, Kamino, Drift, Perena, Solomon, Onre, Huma).
+      if (hiddenMintSet.has(item.id)) continue;
 
       const tokenInfo = item.token_info;
       if (!tokenInfo || !tokenInfo.balance || tokenInfo.balance === 0) continue;
