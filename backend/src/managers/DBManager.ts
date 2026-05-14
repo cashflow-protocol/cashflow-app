@@ -72,7 +72,6 @@ export class DBManager {
               type: token.type,
               mint: token.mint,
               vaultAddress: token.vaultAddress,
-              vaultTitle: token.vaultTitle,
               symbol: token.symbol,
               rewardsRate: token.rewardsRate,
               ...(token.minDepositAmount && { minDepositAmount: token.minDepositAmount }),
@@ -84,8 +83,9 @@ export class DBManager {
             },
             $setOnInsert: {
               status: 'inactive' as const,
-              // categories is admin-editable — seed default only on insert so admin
-              // edits in the webadmin aren't overwritten by the next cron run.
+              // vaultTitle and categories are admin-editable — seed defaults only on
+              // insert so edits in the webadmin aren't overwritten by the next cron run.
+              vaultTitle: token.vaultTitle,
               ...(token.categories !== undefined && { categories: token.categories }),
             },
           },

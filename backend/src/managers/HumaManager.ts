@@ -84,8 +84,9 @@ export class HumaManager {
     } catch (e) {
       console.warn('[Huma] getModeApyInfo(CLASSIC) failed, using fallback:', (e as Error).message);
     }
-    // SDK returns APY as a decimal (e.g. 0.1050 = 10.50%). rewardsRate convention is bp×10 (10.50% → 1050).
-    const classicRewardsRate = classicTotalApy > 0 ? Math.round(classicTotalApy * 10000) : 1050;
+    // SDK returns APY in basis points (e.g. 1050 = 10.50%). Our rewardsRate convention is
+    // also bp×10 — display = rewardsRate / 100 → "10.50%" — so map 1:1.
+    const classicRewardsRate = classicTotalApy > 0 ? Math.round(classicTotalApy) : 1050;
 
     try {
       const priceBn = await this.client.getModeTokenPrice(DepositMode.CLASSIC);
@@ -102,7 +103,7 @@ export class HumaManager {
       type: EarnTokenType.HUMA,
       mint: USDC_MINT,
       vaultAddress: CLASSIC_VAULT_ADDRESS,
-      vaultTitle: 'Huma - Classic (No Lockup)',
+      vaultTitle: 'Huma - Classic',
       symbol: 'USDC',
       rewardsRate: classicRewardsRate,
       minDepositAmount: '10000000',
@@ -125,7 +126,7 @@ export class HumaManager {
       type: EarnTokenType.HUMA,
       mint: USDC_MINT,
       vaultAddress: PRIME_VAULT_ADDRESS,
-      vaultTitle: 'Huma - Prime (No Lockup)',
+      vaultTitle: 'Huma - Prime',
       symbol: 'USDC',
       rewardsRate: PRIME_FALLBACK_REWARDS_RATE,
       minDepositAmount: '10000000',

@@ -218,7 +218,7 @@ export async function updateEarnTokenStatus(id: string, status: 'active' | 'inac
   });
 }
 
-export async function updateEarnTokenConfig(id: string, config: { minDepositAmount?: string; minWithdrawAmount?: string; categories?: string[] }) {
+export async function updateEarnTokenConfig(id: string, config: { vaultTitle?: string; minDepositAmount?: string; minWithdrawAmount?: string; categories?: string[] }) {
   return apiFetch(`/earn-tokens/${id}/config`, {
     method: 'PATCH',
     body: JSON.stringify(config),

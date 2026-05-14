@@ -88,6 +88,7 @@ export default function VaultsPage() {
 
   // Config edit modal
   const [editToken, setEditToken] = useState<EarnToken | null>(null);
+  const [editVaultTitle, setEditVaultTitle] = useState('');
   const [editMinDeposit, setEditMinDeposit] = useState('');
   const [editMinWithdraw, setEditMinWithdraw] = useState('');
   const [editCategories, setEditCategories] = useState('');
@@ -135,6 +136,7 @@ export default function VaultsPage() {
 
   const openConfigModal = (token: EarnToken) => {
     setEditToken(token);
+    setEditVaultTitle(token.vaultTitle);
     setEditMinDeposit(token.minDepositAmount);
     setEditMinWithdraw(token.minWithdrawAmount);
     setEditCategories((token.categories ?? []).join(', '));
@@ -142,6 +144,11 @@ export default function VaultsPage() {
 
   const handleSaveConfig = async () => {
     if (!editToken) return;
+    const vaultTitle = editVaultTitle.trim();
+    if (vaultTitle.length === 0) {
+      alert('Vault title cannot be empty');
+      return;
+    }
     setSaving(true);
     try {
       const categories = editCategories
@@ -149,6 +156,7 @@ export default function VaultsPage() {
         .map((c) => c.trim())
         .filter((c) => c.length > 0);
       await updateEarnTokenConfig(editToken.id, {
+        vaultTitle,
         minDepositAmount: editMinDeposit,
         minWithdrawAmount: editMinWithdraw,
         categories,
@@ -158,6 +166,7 @@ export default function VaultsPage() {
           t.id === editToken.id
             ? {
                 ...t,
+                vaultTitle,
                 minDepositAmount: editMinDeposit,
                 minWithdrawAmount: editMinWithdraw,
                 categories,
@@ -391,6 +400,15 @@ export default function VaultsPage() {
               <strong>{editToken.symbol}</strong> &mdash; {editToken.vaultTitle}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>
+                Vault Title
+                <input
+                  value={editVaultTitle}
+                  onChange={(e) => setEditVaultTitle(e.target.value)}
+                  placeholder="e.g. Huma - Classic (No Lockup)"
+                  style={{ marginTop: 4 }}
+                />
+              </label>
               <label style={{ fontSize: 13, fontWeight: 600 }}>
                 Min Deposit Amount (raw)
                 <input

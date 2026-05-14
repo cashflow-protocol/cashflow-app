@@ -1046,12 +1046,20 @@ router.patch('/earn-tokens/:id/status', async (req, res) => {
 
 /**
  * PATCH /earn-tokens/:id/config
- * Update earn token config (minDepositAmount, minWithdrawAmount).
+ * Update earn token config (vaultTitle, minDepositAmount, minWithdrawAmount, categories).
  */
 router.patch('/earn-tokens/:id/config', async (req, res) => {
   try {
-    const { minDepositAmount, minWithdrawAmount, categories } = req.body;
+    const { vaultTitle, minDepositAmount, minWithdrawAmount, categories } = req.body;
     const update: any = {};
+    if (vaultTitle !== undefined) {
+      const trimmed = String(vaultTitle).trim();
+      if (trimmed.length === 0) {
+        res.status(400).json({ success: false, error: 'vaultTitle cannot be empty' });
+        return;
+      }
+      update.vaultTitle = trimmed;
+    }
     if (minDepositAmount !== undefined) update.minDepositAmount = String(minDepositAmount);
     if (minWithdrawAmount !== undefined) update.minWithdrawAmount = String(minWithdrawAmount);
     if (categories !== undefined) {
@@ -1080,6 +1088,7 @@ router.patch('/earn-tokens/:id/config', async (req, res) => {
 
     res.json({
       success: true,
+      vaultTitle: token.vaultTitle,
       minDepositAmount: token.minDepositAmount,
       minWithdrawAmount: token.minWithdrawAmount,
       categories: token.categories,
