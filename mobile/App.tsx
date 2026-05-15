@@ -322,14 +322,18 @@ function App() {
           <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
           <BiometricLockScreen
             onUnlock={() => setLocked(false)}
-            onPinUnlock={async (pin) => {
+            onPinUnlock={async (pin, method) => {
               await cachePin(pin);
               initializePushNotifications().catch((err) => {
                 console.error('Push notification init failed:', err);
               });
-              // Fire-and-forget AFTER unlock — avoids BiometricPrompt conflict
-              // with the preceding retrievePinWithBiometric prompt.
-              storePinForBiometric(pin).catch(() => {});
+              if (method === 'pin') {
+                // Only re-store on manual PIN entry. After biometric unlock the
+                // PIN was just retrieved from biometric storage, so re-storing
+                // is redundant and would trigger a second BiometricPrompt
+                // (Android V3 per-use key; iOS SecItemDelete on .userPresence).
+                storePinForBiometric(pin).catch(() => {});
+              }
             }}
           />
         </SafeAreaProvider>
