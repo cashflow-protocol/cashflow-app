@@ -386,6 +386,9 @@ export class JupiterManager {
         // Validator-linked RFQ/MEV DEXes: observed to write-lock vote accounts
         'HumidiFi',
         'AlphaQ',
+        // Incompatible with Squads vault PDA execution (InvalidAccountData)
+        'BisonFi',
+        'ZeroFi',
       ].join(','),
     };
     if (PLATFORM_FEE_WALLET) {
