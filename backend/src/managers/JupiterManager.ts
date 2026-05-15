@@ -365,8 +365,9 @@ export class JupiterManager {
 
     // Limit route complexity for Squads vault transactions — the inner message
     // and execute TX must both fit within Solana's 1232-byte transaction limit.
-    // Exclude stake-pool DEXes: their instructions write-lock validator vote
-    // accounts, which Jito bundles reject with "bundles cannot lock any vote accounts".
+    // Allowlist battle-tested AMMs that execute cleanly under Squads vault CPI.
+    // Adding a new DEX requires verifying it works in a vault transaction
+    // (no vote-account writes, no ix introspection, no stale-oracle quoting).
     const params: Record<string, any> = {
       inputMint,
       outputMint,
@@ -374,23 +375,21 @@ export class JupiterManager {
       slippageBps,
       maxAccounts: 20,
       restrictIntermediateTokens: true,
-      excludeDexes: [
-        // Stake-pool DEXes: writable vote accounts via stake programs
-        'Stakedex',
-        'SPL Stake Pool',
-        'Sanctum',
-        'Sanctum Infinity',
-        'Marinade',
-        'Solayer',
-        'FluxBeam Stake',
-        // Validator-linked RFQ/MEV DEXes: observed to write-lock vote accounts
-        'HumidiFi',
-        'AlphaQ',
-        // Incompatible with Squads vault PDA execution (InvalidAccountData)
-        'BisonFi',
-        'ZeroFi',
-        // Quote/execution price mismatch in CPI context (SlippageToleranceExceeded)
-        'WhaleStreet',
+      dexes: [
+        // Concentrated-liquidity AMMs
+        'Raydium CLMM',
+        'Whirlpool',
+        'Meteora DLMM',
+        // Constant-product AMMs
+        'Raydium',
+        'Raydium CP',
+        'Meteora',
+        'Lifinity V2',
+        // Stable swaps (incl. Token-2022 USDG via Perena)
+        'Saber',
+        'Perena',
+        // Orderbook
+        'Phoenix',
       ].join(','),
     };
     if (PLATFORM_FEE_WALLET) {
