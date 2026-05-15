@@ -118,8 +118,8 @@ class ApiService {
 
   /**
    * Create a Squads vault via the backend.
-   * - Standard mode: backend signs + sends, returns txSignature.
-   * - Seeker/android_gms: backend returns partially-signed tx for MWA signing.
+   * Returns 3 partially-signed txs (multisigCreate + spending limit create + execute);
+   * mobile completes per-mode signing and submits as one Jito bundle.
    * Bypasses auth — vault creation happens before login.
    */
   async createVault(params: {
@@ -132,11 +132,9 @@ class ApiService {
   }): Promise<{
     multisigAddress: string;
     vaultAddress: string;
-    txSignature?: string;
-    serializedTx?: string;
-    serializedTxs?: string[];
+    serializedTxs: string[];
   }> {
-    const r = await fetch(`${this.baseUrl}/onboarding/v1/create-vault`, {
+    const r = await fetch(`${this.baseUrl}/onboarding/v2/create-vault`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -214,19 +212,6 @@ class ApiService {
       success: boolean;
       data: { lifetimeEarnedUsd: number; perMint: { mint: string; symbol: string; earningsUsd: number }[] };
     }>('/earn/v2/earnings', { walletAddress });
-    return res.data;
-  }
-
-  async getFeePreview(vaultAddress: string, mint: string, amount: string): Promise<{
-    feeAmount: string;
-    profitAmount: string;
-    feeUiAmount: number;
-    profitUiAmount: number;
-  }> {
-    const res = await this.get<{
-      success: boolean;
-      data: { feeAmount: string; profitAmount: string; feeUiAmount: number; profitUiAmount: number };
-    }>('/earn/v2/fee-preview', { vaultAddress, mint, amount });
     return res.data;
   }
 
@@ -488,6 +473,17 @@ class ApiService {
     return { transactionId: res.transactionId, instructions: res.instructions };
   }
 
+  async closeEmptyTokenAccountsInstructions(walletAddress: string): Promise<{
+    instructions: SerializedInstruction[];
+    count: number;
+  }> {
+    const res = await this.signedPost<{
+      success: boolean;
+      data: { instructions: SerializedInstruction[]; count: number };
+    }>('/solana/v2/close-empty-token-accounts', { walletAddress });
+    return res.data;
+  }
+
   async swapQuote(params: {
     inputMint: string;
     outputMint: string;
@@ -747,6 +743,37 @@ class ApiService {
     }
     const res = await r.json();
     return res;
+  }
+
+  /**
+   * Unauthenticated balance lookup for a vault address — used during recovery
+   * before the user has a JWT. Hits the v1 (no-auth) variants of /assets and
+   * /positions in parallel and returns just the USD totals.
+   */
+  async getVaultBalances(vaultAddress: string): Promise<{ assetsUsd: number; earnUsd: number }> {
+    const [assetsRes, positionsRes] = await Promise.allSettled([
+      fetch(`${this.baseUrl}/solana/v1/assets?walletAddress=${encodeURIComponent(vaultAddress)}`),
+      fetch(`${this.baseUrl}/earn/v1/positions?walletAddress=${encodeURIComponent(vaultAddress)}`),
+    ]);
+
+    let assetsUsd = 0;
+    if (assetsRes.status === 'fulfilled' && assetsRes.value.ok) {
+      const json = await assetsRes.value.json().catch(() => null);
+      const total = json?.data?.totalUsdValue;
+      if (typeof total === 'number' && Number.isFinite(total)) assetsUsd = total;
+    }
+
+    let earnUsd = 0;
+    if (positionsRes.status === 'fulfilled' && positionsRes.value.ok) {
+      const json = await positionsRes.value.json().catch(() => null);
+      const positions = Array.isArray(json?.data) ? json.data : [];
+      for (const p of positions) {
+        const v = p?.balance?.usdValue;
+        if (typeof v === 'number' && Number.isFinite(v)) earnUsd += v;
+      }
+    }
+
+    return { assetsUsd, earnUsd };
   }
 
   async findVaultByAddress(

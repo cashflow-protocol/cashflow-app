@@ -72,10 +72,6 @@ export class Transaction {
 
   @prop()
   public unsignedTransaction?: string;
-
-  /** Fee amount charged on this withdrawal (bigint as string) */
-  @prop()
-  public feeAmount?: string;
 }
 
 export const TransactionModel = getModelForClass(Transaction);

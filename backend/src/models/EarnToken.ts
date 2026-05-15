@@ -8,7 +8,7 @@ import { EarnTokenType } from '../types';
     collection: 'earn_tokens',
     toJSON: {
       transform: (_doc, ret) => {
-        const { _id, __v, jupiterToken, kaminoToken, driftToken, perenaToken, solomonToken, onreToken, createdAt, updatedAt, ...fields } = ret;
+        const { _id, __v, jupiterToken, kaminoToken, driftToken, perenaToken, solomonToken, onreToken, humaToken, createdAt, updatedAt, ...fields } = ret;
         const { logoUrl, ...tokenInfo } = SUPPORTED_TOKENS_BY_MINT[fields.mint] ?? {};
         return { ...fields, ...tokenInfo };
       },
@@ -50,6 +50,15 @@ export class EarnToken {
   @prop({ default: '0' })
   public minWithdrawAmount?: string;
 
+  /** Minimum app build number required to render this vault. Builds below this
+   *  number get the vault filtered out of /earn/v1/tokens. */
+  @prop()
+  public minAppBuild?: number;
+
+  /** Semantic tags for client-side filtering (e.g. 'yield-stable'). Empty/unset by default. */
+  @prop({ type: () => [String], default: [] })
+  public categories?: string[];
+
   @prop({ type: () => Object })
   public jupiterToken?: Record<string, any>;
 
@@ -67,6 +76,9 @@ export class EarnToken {
 
   @prop({ type: () => Object })
   public onreToken?: Record<string, any>;
+
+  @prop({ type: () => Object })
+  public humaToken?: Record<string, any>;
 
   @prop()
   public protocolName?: string;

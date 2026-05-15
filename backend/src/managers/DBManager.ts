@@ -32,6 +32,8 @@ export interface EarnTokenUpsert {
   rewardsRate: number;
   minDepositAmount?: string;
   minWithdrawAmount?: string;
+  minAppBuild?: number;
+  categories?: string[];
   protocolData?: Record<string, any>;
   protocolName?: string;
   protocolIconUrl?: string;
@@ -44,6 +46,7 @@ const PROTOCOL_DATA_FIELD: Record<EarnTokenType, string> = {
   [EarnTokenType.PERENA]: 'perenaToken',
   [EarnTokenType.SOLOMON]: 'solomonToken',
   [EarnTokenType.ONRE]: 'onreToken',
+  [EarnTokenType.HUMA]: 'humaToken',
 };
 
 export class DBManager {
@@ -69,17 +72,21 @@ export class DBManager {
               type: token.type,
               mint: token.mint,
               vaultAddress: token.vaultAddress,
-              vaultTitle: token.vaultTitle,
               symbol: token.symbol,
               rewardsRate: token.rewardsRate,
               ...(token.minDepositAmount && { minDepositAmount: token.minDepositAmount }),
               ...(token.minWithdrawAmount && { minWithdrawAmount: token.minWithdrawAmount }),
+              ...(token.minAppBuild !== undefined && { minAppBuild: token.minAppBuild }),
               ...(token.protocolData && { [dataField]: token.protocolData }),
               ...(token.protocolName && { protocolName: token.protocolName }),
               ...(token.protocolIconUrl && { protocolIconUrl: token.protocolIconUrl }),
             },
             $setOnInsert: {
               status: 'inactive' as const,
+              // vaultTitle and categories are admin-editable — seed defaults only on
+              // insert so edits in the webadmin aren't overwritten by the next cron run.
+              vaultTitle: token.vaultTitle,
+              ...(token.categories !== undefined && { categories: token.categories }),
             },
           },
           upsert: true,
@@ -110,7 +117,7 @@ export class DBManager {
     }
 
     return EarnTokenModel.find(query)
-      .select('type mint vaultAddress vaultTitle symbol rewardsRate status minDepositAmount minWithdrawAmount protocolName protocolIconUrl')
+      .select('type mint vaultAddress vaultTitle symbol rewardsRate status minDepositAmount minWithdrawAmount minAppBuild categories protocolName protocolIconUrl')
       .sort({ rewardsRate: -1 });
   }
 
@@ -130,7 +137,6 @@ export class DBManager {
     destinationAddress?: string;
     outputMint?: string;
     unsignedTransaction?: string;
-    feeAmount?: string;
   }) {
     return TransactionModel.create(data);
   }
@@ -210,7 +216,7 @@ export class DBManager {
     return TransactionModel.findOneAndUpdate(
       { _id: transactionId, status: { $in: [TransactionStatus.CREATED, TransactionStatus.SUBMITTED] } },
       { status },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 

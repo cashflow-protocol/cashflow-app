@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import cron from 'node-cron';
 import { createSolanaRpc } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
-import { JupiterManager, KaminoManager, DriftManager, PerenaManager, SolomonManager, OnreManager, DBManager, PriceManager, TokenManager } from '../managers';
+import { JupiterManager, KaminoManager, DriftManager, PerenaManager, SolomonManager, OnreManager, HumaManager, DBManager, PriceManager, TokenManager } from '../managers';
 import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from '../models';
 import { NotificationType } from '../models';
 import { CashflowPassportActivationModel, CashflowPassportActivationStatus } from '../models/CashflowPassportActivation';
@@ -13,13 +13,14 @@ import { tryConfirmActivation, failActivation } from './cashflowPassportService'
 import { tryConfirmBadgeMint } from './badgeMintService';
 import { dispatchSystemNotification } from './notificationService';
 import { sendWaitlistPushNotification, cleanupExpiredRTDBNotifications } from './firebaseManager';
-import { onTransactionConfirmed, markFeeTransactionFailed } from './feeService';
+import { onTransactionConfirmed } from './feeService';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
 const perenaManager = new PerenaManager();
 const solomonManager = new SolomonManager();
 const onreManager = new OnreManager();
+const humaManager = new HumaManager();
 const dbManager = new DBManager();
 const priceManager = new PriceManager();
 const tokenManager = new TokenManager();
@@ -115,6 +116,19 @@ async function updateOnreEarnTokens() {
 }
 
 /**
+ * Fetch and update Huma Earn tokens
+ */
+async function updateHumaEarnTokens() {
+  try {
+    console.log('🔄 [Cron] Starting Huma Earn tokens update...');
+    await humaManager.getEarnTokens();
+    console.log('✅ [Cron] Huma Earn tokens update completed');
+  } catch (error) {
+    console.error('❌ [Cron] Failed to update Huma Earn tokens:', error);
+  }
+}
+
+/**
  * Fetch token prices from Binance
  */
 async function updatePrices() {
@@ -146,7 +160,6 @@ async function confirmTransactions() {
         const updatedAt = new Date((tx as any).updatedAt).getTime();
         if (Date.now() - updatedAt > 5 * 60 * 1000) {
           await dbManager.confirmTransaction(String(tx._id), TransactionStatus.FAILED);
-          await markFeeTransactionFailed(String(tx._id));
           console.log(`[Cron] Transaction ${tx.signature} FAILED (timeout)`);
         }
         continue;
@@ -155,7 +168,6 @@ async function confirmTransactions() {
       if (status.err) {
         const transitioned = await dbManager.confirmTransaction(String(tx._id), TransactionStatus.FAILED);
         if (transitioned) {
-          await markFeeTransactionFailed(String(tx._id));
           console.log(`[Cron] Transaction ${tx.signature} FAILED`);
         }
       } else if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') {
@@ -373,6 +385,11 @@ export async function initializeScheduler() {
     timezone: 'UTC',
   });
 
+  // Fetch Huma Earn tokens every hour (Classic APY updates monthly per Huma docs)
+  cron.schedule('0 * * * *', updateHumaEarnTokens, {
+    timezone: 'UTC',
+  });
+
   // Fetch Drift Earn tokens every minute
   // if (driftManager) {
   //   cron.schedule('* * * * *', updateDriftEarnTokens, {
@@ -418,6 +435,7 @@ export async function initializeScheduler() {
   console.log('  - Perena Earn tokens: Every minute');
   console.log('  - Solomon Earn tokens: Every hour');
   console.log('  - Onre Earn tokens: Every hour');
+  console.log('  - Huma Earn tokens: Every hour');
   if (driftManager) {
     console.log('  - Drift Earn tokens: Every minute');
   }
@@ -433,6 +451,7 @@ export async function initializeScheduler() {
   updatePerenaEarnTokens();
   updateSolomonEarnTokens();
   updateOnreEarnTokens();
+  updateHumaEarnTokens();
   // if (driftManager) {
   //   updateDriftEarnTokens();
   // }

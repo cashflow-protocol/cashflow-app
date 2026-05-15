@@ -100,7 +100,7 @@ export async function buildBadgeMint(
         ],
       },
       { $inc: { mintedCount: 1 } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!claimedTask) {
       const existing = await RewardTaskModel.findOne({ slug: taskSlug }).lean();

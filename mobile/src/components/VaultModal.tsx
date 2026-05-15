@@ -80,7 +80,6 @@ export default function VaultModal({
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [walletBalance, setWalletBalance] = useState<bigint | null>(null);
   const [vaultData, setVaultData] = useState<VaultData | null>(null);
-  const [feePreview, setFeePreview] = useState<{ feeUiAmount: number; profitUiAmount: number } | null>(null);
   const [notified, setNotified] = useState(false);
   const [notifying, setNotifying] = useState(false);
 
@@ -148,20 +147,6 @@ export default function VaultModal({
   const isValidAmount = !isNaN(parsedAmount) && parsedAmount > 0;
   const parsedRaw = isValidAmount ? toRawAmount(amount, decimals) : 0n;
 
-  // Fetch fee preview when withdraw amount changes (debounced)
-  useEffect(() => {
-    if (mode !== 'withdraw' || !isValidAmount || !vaultData?.vaultAddress) {
-      setFeePreview(null);
-      return;
-    }
-    const rawAmount = parsedRaw.toString();
-    const timeout = setTimeout(() => {
-      apiService.getFeePreview(vaultData.vaultAddress, mint, rawAmount)
-        .then((data) => setFeePreview({ feeUiAmount: data.feeUiAmount, profitUiAmount: data.profitUiAmount }))
-        .catch(() => setFeePreview(null));
-    }, 300);
-    return () => clearTimeout(timeout);
-  }, [mode, amount, mint, vaultData?.vaultAddress]);
   const exceedsBalance =
     (mode === 'withdraw' && hasPosition && parsedRaw > BigInt(position!.balance.amount)) ||
     (mode === 'deposit' && walletBalance !== null && parsedRaw > walletBalance);
@@ -581,21 +566,6 @@ const styles = StyleSheet.create({
   validationError: {
     fontSize: 13,
     marginTop: -8,
-  },
-  feeBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  feeLabel: {
-    fontSize: 13,
-  },
-  feeAmount: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   resultBanner: {
     borderRadius: 10,

@@ -30,7 +30,7 @@ import {
     TOKEN_2022_PROGRAM_ADDRESS,
     findAssociatedTokenPda as findAssociatedTokenPda2022,
 } from '@solana-program/token-2022';
-import { SUPPORTED_TOKEN_MINTS } from '../constants/tokens';
+import { SUPPORTED_TOKEN_MINTS, USDC_MINT } from '../constants/tokens';
 
 export async function initialiseLookupManager() {
     try {
@@ -64,17 +64,19 @@ export class LookupManager {
         address('JCNCMFXo5M5qwUPg2Utu1u6YWp3MbygxqBsBeXXJfrw'), // Drift Vaults
 
         // stablecoins
-        address('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'), // USDC
+        address(USDC_MINT), // USDC
         address('JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD'), // JupUSD
         address('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'), // USDT
         address('HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr'), // EURC
         address('2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH'), // USDG
         address('USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA'), // USDS
         address('2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo'), // PYUSD
+        //TODO: add USD*, USDT+ etc - all stablecoins in Cashflow - load them from MongoDB vaults
 
         address('yyvY1cHtcQHbsPk4UYdHhjtoYQjYCX41RqF8U3dSEND'), // SEND fees
         address('CASH1g7WuVEN873RhmHbaY8KA3rhwQbutHJRUsVU9E9m'), // Cashflow All Tx Fee Payer
         address('CASH1YstLfKmTJrZZkddbBDwBheQ9zh2subDeu4RrnYu'), // Cashflow Squad Create Fee Payer
+        address('CASHzUQYANbpGyVMkn6SCkuXKKP4qbE4mywD699sXapz'), // Cashflow Treasury
 
         TOKEN_PROGRAM_ADDRESS,
         TOKEN_2022_PROGRAM_ADDRESS,
@@ -100,6 +102,29 @@ export class LookupManager {
 
             const treasuryAtas = await this.deriveTreasuryAtas(treasury);
             this.accounts.push(...treasuryAtas);
+        }
+
+        // ── Vault-creation tx accounts (every Squads vault creation hits these) ──
+        // System + ComputeBudget programs
+        this.accounts.push(address('11111111111111111111111111111111')); // System Program
+        this.accounts.push(address('ComputeBudget111111111111111111111111111111'));
+
+        // Squads V4 program + global program config PDA + protocol treasury
+        const multisigLib = await import('@sqds/multisig');
+        const web3 = await import('@solana/web3.js');
+        const SQUADS_PROGRAM_ID = 'SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf';
+        this.accounts.push(address(SQUADS_PROGRAM_ID));
+        const [programConfigPda] = multisigLib.getProgramConfigPda({});
+        this.accounts.push(address(programConfigPda.toBase58()));
+        try {
+            const conn = new web3.Connection(process.env.SOLANA_RPC_URL!, 'confirmed');
+            const programConfig = await multisigLib.accounts.ProgramConfig.fromAccountAddress(
+                conn,
+                programConfigPda,
+            );
+            this.accounts.push(address(programConfig.treasury.toBase58()));
+        } catch (err) {
+            console.warn('[LookupManager] Failed to fetch Squads program config treasury:', err);
         }
 
         console.log('[LookupManager] Accounts:', this.accounts);
@@ -192,15 +217,20 @@ export class LookupManager {
             return;
         }
 
-        const extendIx = getExtendLookupTableInstruction({
-            address: this.lookupTableAddress,
-            authority: this.owner,
-            payer: this.owner,
-            addresses: newAddresses,
-        });
+        // Solana tx limit is 1232 bytes; ~20 addresses per extend tx keeps us safely under it.
+        const CHUNK_SIZE = 20;
+        for (let i = 0; i < newAddresses.length; i += CHUNK_SIZE) {
+            const chunk = newAddresses.slice(i, i + CHUNK_SIZE);
+            const extendIx = getExtendLookupTableInstruction({
+                address: this.lookupTableAddress,
+                authority: this.owner,
+                payer: this.owner,
+                addresses: chunk,
+            });
 
-        const signature = await this.buildAndSendTx([extendIx]);
-        console.log('[LookupManager] Lookup table extended:', signature);
+            const signature = await this.buildAndSendTx([extendIx]);
+            console.log(`[LookupManager] Lookup table extended (+${chunk.length}):`, signature);
+        }
     }
 
     async deactivateLookupTable(lookupTable: Address) {

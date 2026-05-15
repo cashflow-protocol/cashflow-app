@@ -6,16 +6,19 @@ export interface SupportedToken {
   logoUrl: string;
 }
 
+export const SOL_MINT = 'So11111111111111111111111111111111111111112';
+export const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
 export const SUPPORTED_TOKENS: SupportedToken[] = [
   {
-    mint: 'So11111111111111111111111111111111111111112',
+    mint: SOL_MINT,
     symbol: 'SOL',
     name: 'Wrapped SOL',
     decimals: 9,
     logoUrl: 'https://coin-images.coingecko.com/coins/images/4128/large/solana.png?1718769756',
   },
   {
-    mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    mint: USDC_MINT,
     symbol: 'USDC',
     name: 'USD Coin',
     decimals: 6,

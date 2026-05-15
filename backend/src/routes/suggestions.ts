@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { createSolanaRpc, address } from '@solana/kit';
 import type { Rpc, SolanaRpcApi } from '@solana/kit';
 import { JupiterManager, KaminoManager } from '../managers';
-import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import { SUPPORTED_TOKENS_BY_MINT, USDC_MINT } from '../constants';
 import { EarnTokenType } from '../types';
 import type { Suggestion, SuggestionsRequest } from '../types';
 import { isVersionOlder } from '../utils/validation';
@@ -20,7 +20,6 @@ const LATEST_APP_VERSION = '1.0';
 
 // Minimum SOL balance (in lamports) below which we suggest funding
 const LOW_SOL_THRESHOLD = 50_000_000n; // 0.05 SOL
-const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const LOW_USDC_THRESHOLD = 1_000_000n; // 1 USDC (6 decimals)
 
 router.post('/', async (req: Request, res: Response) => {
@@ -118,15 +117,15 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    suggestions.push({
-      id: 'link-twitter',
-      type: 'link',
-      title: 'Build in public',
-      description: 'We build Cashflow in public with every day video updates. Follow @cashflow_fi on X.',
-      color: '#000000',
-      buttonTitle: 'Follow',
-      url: 'https://x.com/cashflow_fi',
-    });
+    // suggestions.push({
+    //   id: 'link-twitter',
+    //   type: 'link',
+    //   title: 'Build in public',
+    //   description: 'We build Cashflow in public with every day video updates. Follow @cashflow_fi on X.',
+    //   color: '#000000',
+    //   buttonTitle: 'Follow',
+    //   url: 'https://x.com/cashflow_fi',
+    // });
 
 
     // --- Transfer position suggestions ---

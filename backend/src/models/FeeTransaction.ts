@@ -7,7 +7,6 @@ export enum FeeTransactionStatus {
 }
 
 export enum FeeType {
-  PROFIT = 'profit',
   VAULT_CREATION = 'vault_creation',
 }
 
@@ -18,7 +17,6 @@ export enum FeeType {
   },
 })
 @index({ vaultAddress: 1, mint: 1 })
-@index({ withdrawTransactionId: 1, status: 1 }, { sparse: true })
 export class FeeTransaction {
   @prop({ required: true })
   public vaultAddress!: string;
@@ -26,20 +24,8 @@ export class FeeTransaction {
   @prop({ required: true })
   public mint!: string;
 
-  @prop({ required: true, enum: FeeType, default: FeeType.PROFIT })
+  @prop({ required: true, enum: FeeType, default: FeeType.VAULT_CREATION })
   public feeType!: FeeType;
-
-  /** Reference to the withdrawal Transaction._id (profit fees only) */
-  @prop()
-  public withdrawTransactionId?: string;
-
-  /** Raw withdrawal amount (bigint as string, profit fees only) */
-  @prop()
-  public withdrawAmount?: string;
-
-  /** Computed marginal profit on this withdrawal (bigint as string, profit fees only) */
-  @prop()
-  public profitAmount?: string;
 
   /** Fee charged (bigint as string) */
   @prop({ required: true })

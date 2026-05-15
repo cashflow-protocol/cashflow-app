@@ -21,10 +21,6 @@ export class UserCostBasis {
   /** Cumulative raw amount withdrawn (bigint as string) */
   @prop({ required: true, default: '0' })
   public totalWithdrawn!: string;
-
-  /** Cumulative raw fee amount collected (bigint as string) */
-  @prop({ required: true, default: '0' })
-  public totalFeesCollected!: string;
 }
 
 export const UserCostBasisModel = getModelForClass(UserCostBasis);

@@ -106,7 +106,7 @@ router.post('/verify', async (req, res) => {
       const user = await UserModel.findOneAndUpdate(
         { vaultAddress },
         { $set: extraFields, $setOnInsert: { vaultAddress } },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
       userId = user ? String(user._id) : undefined;
 

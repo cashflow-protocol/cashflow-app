@@ -5,15 +5,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Linking,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'react-native-linear-gradient';
-import { KeyRound, Lock, Recycle, Trash2, DatabaseZap, ShieldOff, MessageCircle, Gauge } from 'lucide-react-native';
-import { getVault, clearVault, type VaultData } from '../services/vaultStorage';
-import { getDevicePublicKey, deleteAllKeypairs, deleteDeviceKeypair } from '../services/keypairStorage';
+import { KeyRound, Lock, Recycle, MessageCircle, Gauge, Trash2 } from 'lucide-react-native';
+import { getVault, type VaultData } from '../services/vaultStorage';
 import { reclaimRent } from '../services/squadsService';
 import apiService from '../services/apiService';
 import { APP_VERSION, BUILD_NUMBER } from '../config/version';
@@ -24,8 +22,6 @@ import {
   logReclaimRentPress,
   logReclaimRentSuccess,
   logReclaimRentError,
-  logRemoveVaultPress,
-  logRemoveVaultConfirm,
 } from '../services/analyticsService';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -36,7 +32,6 @@ interface MoreScreenProps {
 export default function MoreScreen({ onNavigate }: MoreScreenProps) {
   const { colors } = useTheme();
   const [vault, setVault] = useState<VaultData | null>(null);
-  const [devicePubkey, setDevicePubkey] = useState<string | null>(null);
   const [reclaimStatus, setReclaimStatus] = useState<string | null>(null);
   const [supportUrl, setSupportUrl] = useState<string | null>(null);
 
@@ -44,12 +39,8 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
 
   useEffect(() => {
     (async () => {
-      const [v, devicePub] = await Promise.all([
-        getVault(),
-        getDevicePublicKey(),
-      ]);
+      const v = await getVault();
       setVault(v);
-      setDevicePubkey(devicePub);
     })();
     apiService.getConfig().then(cfg => setSupportUrl(cfg.supportUrl)).catch(() => {});
   }, []);
@@ -71,62 +62,6 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
       setTimeout(() => setReclaimStatus(null), 5000);
     }
   }, [vault]);
-
-  const handleRemoveDeviceKey = useCallback(() => {
-    Alert.alert(
-      'Remove Device Key',
-      'This will delete the device signing key from this device. The cloud key and vault will not be affected.\n\nYou can generate a new device key later, but you will need to re-add it to your multisig.\n\nAre you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteDeviceKeypair();
-            setDevicePubkey(null);
-          },
-        },
-      ],
-    );
-  }, []);
-
-  const handleRemoveVaultData = useCallback(() => {
-    Alert.alert(
-      'Remove Vault Data',
-      'This will delete the local vault data only. Your signing keys will not be removed.\n\nThe app will return to onboarding. You can re-link your vault or create a new one.\n\nAre you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            await clearVault();
-            onNavigate?.('onboarding');
-          },
-        },
-      ],
-    );
-  }, []);
-
-  const handleRemoveVault = useCallback(() => {
-    logRemoveVaultPress();
-    Alert.alert(
-      'Remove Vault',
-      'This will delete the local vault data and signing keypairs. The onchain multisig will still exist but you will lose signing access from this device.\n\nAre you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            logRemoveVaultConfirm();
-            await Promise.all([clearVault(), deleteAllKeypairs()]);
-            onNavigate?.('onboarding');
-          },
-        },
-      ],
-    );
-  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -224,7 +159,7 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
             </TouchableOpacity>
           )}
 
-          {/* DEV-only: Reclaim Rent */}
+          {/* DEV-only: Reclaim Rent (engineer escape hatch — duplicates Close Vault inline action) */}
           {__DEV__ && vault && (
             <TouchableOpacity
               style={[styles.menuCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}
@@ -245,41 +180,24 @@ export default function MoreScreen({ onNavigate }: MoreScreenProps) {
             </TouchableOpacity>
           )}
 
-          {/* DEV-only: Danger Zone */}
-          {__DEV__ && vault && (
-            <View style={styles.dangerSection}>
-              <Text style={styles.dangerLabel}>Danger Zone</Text>
-
-              {devicePubkey && (
-                <TouchableOpacity
-                  style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: '#F5A623' }]}
-                  onPress={handleRemoveDeviceKey}
-                  activeOpacity={0.7}
-                >
-                  <ShieldOff size={18} color="#F5A623" style={styles.dangerIcon} />
-                  <Text style={[styles.dangerCardText, { color: '#F5A623' }]}>Remove Device Key</Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: '#F5A623' }]}
-                onPress={handleRemoveVaultData}
-                activeOpacity={0.7}
-              >
-                <DatabaseZap size={18} color="#F5A623" style={styles.dangerIcon} />
-                <Text style={[styles.dangerCardText, { color: '#F5A623' }]}>Remove Vault Data</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: colors.accentRed }]}
-                onPress={handleRemoveVault}
-                activeOpacity={0.7}
-              >
-                <Trash2 size={18} color={colors.accentRed} style={styles.dangerIcon} />
-                <Text style={[styles.dangerCardText, { color: colors.accentRed }]}>Remove Vault</Text>
-              </TouchableOpacity>
-            </View>
+          {/* Close Vault - Hidden for now, will restore soon
+          {vault && (
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: colors.card, shadowColor: colors.shadowColor }]}
+              onPress={() => { logMoreNavigate('close-vault'); onNavigate?.('close-vault'); }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.menuIconCircle, { backgroundColor: colors.accentRed }]}>
+                <Trash2 size={22} color="#fff" />
+              </View>
+              <View style={styles.menuInfo}>
+                <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Close Vault</Text>
+                <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>Empty and remove this vault from device</Text>
+              </View>
+              <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>{'>'}</Text>
+            </TouchableOpacity>
           )}
+          */}
         </View>
 
         <Text style={[styles.versionText, { color: colors.textTertiary }]}>App version: {APP_VERSION} ({BUILD_NUMBER})</Text>
@@ -357,33 +275,6 @@ const styles = StyleSheet.create({
   },
   menuArrow: {
     fontSize: 18,
-    fontWeight: '600',
-  },
-  dangerSection: {
-    marginTop: 24,
-    gap: 10,
-  },
-  dangerLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#F95357',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  dangerCard: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  dangerIcon: {
-    marginRight: 8,
-  },
-  dangerCardText: {
-    fontSize: 15,
     fontWeight: '600',
   },
   versionText: {

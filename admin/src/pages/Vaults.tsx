@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { getEarnTokens, updateEarnTokenStatus, updateEarnTokenConfig } from '../api';
 import MultiSelect from '../components/MultiSelect';
 
-const VAULT_TYPES = ['jupiter', 'kamino', 'drift', 'perena', 'solomon', 'onre'];
+const VAULT_TYPES = ['jupiter', 'kamino', 'drift', 'perena', 'solomon', 'onre', 'huma'];
 
 interface EarnToken {
   id: string;
-  type: 'jupiter' | 'kamino' | 'drift' | 'perena' | 'solomon' | 'onre';
+  type: 'jupiter' | 'kamino' | 'drift' | 'perena' | 'solomon' | 'onre' | 'huma';
   vaultAddress: string;
   vaultTitle: string;
   mint: string;
@@ -15,6 +15,7 @@ interface EarnToken {
   status: 'active' | 'inactive';
   minDepositAmount: string;
   minWithdrawAmount: string;
+  categories?: string[];
   poolSizeUi: number | null;
   poolSizeUsd: number | null;
   decimals: number;
@@ -30,6 +31,7 @@ const TYPE_LOGO_URLS: Record<string, string> = {
   perena: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/perena.jpg',
   solomon: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/solomon.png',
   onre: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/onre.jpg',
+  huma: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/huma.png',
 };
 
 const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
@@ -39,6 +41,7 @@ const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   perena: { bg: '#f3e5f5', color: '#7b1fa2' },
   solomon: { bg: '#fce4ec', color: '#c62828' },
   onre: { bg: '#e0f2f1', color: '#00695c' },
+  huma: { bg: '#ede7f6', color: '#4527a0' },
 };
 
 function shortenAddress(addr: string) {
@@ -85,8 +88,10 @@ export default function VaultsPage() {
 
   // Config edit modal
   const [editToken, setEditToken] = useState<EarnToken | null>(null);
+  const [editVaultTitle, setEditVaultTitle] = useState('');
   const [editMinDeposit, setEditMinDeposit] = useState('');
   const [editMinWithdraw, setEditMinWithdraw] = useState('');
+  const [editCategories, setEditCategories] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -131,22 +136,41 @@ export default function VaultsPage() {
 
   const openConfigModal = (token: EarnToken) => {
     setEditToken(token);
+    setEditVaultTitle(token.vaultTitle);
     setEditMinDeposit(token.minDepositAmount);
     setEditMinWithdraw(token.minWithdrawAmount);
+    setEditCategories((token.categories ?? []).join(', '));
   };
 
   const handleSaveConfig = async () => {
     if (!editToken) return;
+    const vaultTitle = editVaultTitle.trim();
+    if (vaultTitle.length === 0) {
+      alert('Vault title cannot be empty');
+      return;
+    }
     setSaving(true);
     try {
+      const categories = editCategories
+        .split(',')
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0);
       await updateEarnTokenConfig(editToken.id, {
+        vaultTitle,
         minDepositAmount: editMinDeposit,
         minWithdrawAmount: editMinWithdraw,
+        categories,
       });
       setTokens((prev) =>
         prev.map((t) =>
           t.id === editToken.id
-            ? { ...t, minDepositAmount: editMinDeposit, minWithdrawAmount: editMinWithdraw }
+            ? {
+                ...t,
+                vaultTitle,
+                minDepositAmount: editMinDeposit,
+                minWithdrawAmount: editMinWithdraw,
+                categories,
+              }
             : t,
         ),
       );
@@ -377,6 +401,15 @@ export default function VaultsPage() {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <label style={{ fontSize: 13, fontWeight: 600 }}>
+                Vault Title
+                <input
+                  value={editVaultTitle}
+                  onChange={(e) => setEditVaultTitle(e.target.value)}
+                  placeholder="e.g. Huma - Classic (No Lockup)"
+                  style={{ marginTop: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>
                 Min Deposit Amount (raw)
                 <input
                   value={editMinDeposit}
@@ -393,6 +426,18 @@ export default function VaultsPage() {
                   placeholder="0"
                   style={{ marginTop: 4 }}
                 />
+              </label>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>
+                Categories (comma-separated)
+                <input
+                  value={editCategories}
+                  onChange={(e) => setEditCategories(e.target.value)}
+                  placeholder="e.g. yield-stable, lending"
+                  style={{ marginTop: 4 }}
+                />
+                <span style={{ display: 'block', marginTop: 4, fontSize: 11, fontWeight: 400, color: '#666' }}>
+                  Drives mobile filters (e.g. <code>yield-stable</code> → Yield Stables tab).
+                </span>
               </label>
             </div>
             <div className="modal-actions" style={{ marginTop: 16 }}>

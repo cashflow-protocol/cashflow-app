@@ -608,7 +608,7 @@ router.put('/waitlist-tasks/:id', async (req, res) => {
     if (category !== undefined) update.category = category;
     if (metadata !== undefined) update.metadata = metadata;
 
-    const task = await WaitlistTaskModel.findByIdAndUpdate(req.params.id, update, { new: true });
+    const task = await WaitlistTaskModel.findByIdAndUpdate(req.params.id, update, { returnDocument: 'after' });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
@@ -1029,7 +1029,7 @@ router.patch('/earn-tokens/:id/status', async (req, res) => {
     const token = await EarnTokenModel.findByIdAndUpdate(
       req.params.id,
       { status },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!token) {
@@ -1046,14 +1046,29 @@ router.patch('/earn-tokens/:id/status', async (req, res) => {
 
 /**
  * PATCH /earn-tokens/:id/config
- * Update earn token config (minDepositAmount, minWithdrawAmount).
+ * Update earn token config (vaultTitle, minDepositAmount, minWithdrawAmount, categories).
  */
 router.patch('/earn-tokens/:id/config', async (req, res) => {
   try {
-    const { minDepositAmount, minWithdrawAmount } = req.body;
+    const { vaultTitle, minDepositAmount, minWithdrawAmount, categories } = req.body;
     const update: any = {};
+    if (vaultTitle !== undefined) {
+      const trimmed = String(vaultTitle).trim();
+      if (trimmed.length === 0) {
+        res.status(400).json({ success: false, error: 'vaultTitle cannot be empty' });
+        return;
+      }
+      update.vaultTitle = trimmed;
+    }
     if (minDepositAmount !== undefined) update.minDepositAmount = String(minDepositAmount);
     if (minWithdrawAmount !== undefined) update.minWithdrawAmount = String(minWithdrawAmount);
+    if (categories !== undefined) {
+      if (!Array.isArray(categories) || categories.some((c) => typeof c !== 'string')) {
+        res.status(400).json({ success: false, error: 'categories must be an array of strings' });
+        return;
+      }
+      update.categories = categories.map((c) => c.trim()).filter((c) => c.length > 0);
+    }
 
     if (Object.keys(update).length === 0) {
       res.status(400).json({ success: false, error: 'No fields to update' });
@@ -1063,7 +1078,7 @@ router.patch('/earn-tokens/:id/config', async (req, res) => {
     const token = await EarnTokenModel.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!token) {
@@ -1073,8 +1088,10 @@ router.patch('/earn-tokens/:id/config', async (req, res) => {
 
     res.json({
       success: true,
+      vaultTitle: token.vaultTitle,
       minDepositAmount: token.minDepositAmount,
       minWithdrawAmount: token.minWithdrawAmount,
+      categories: token.categories,
     });
   } catch (error) {
     console.error('Admin update earn token config error:', error);
@@ -1166,7 +1183,7 @@ router.patch('/rewards/tasks/:slug', async (req, res) => {
     if (update.availableUntil) update.availableUntil = new Date(update.availableUntil);
     if (update.mintFeeLamports != null) update.mintFeeLamports = String(update.mintFeeLamports);
 
-    const task = await RewardTaskModel.findOneAndUpdate({ slug }, { $set: update }, { new: true });
+    const task = await RewardTaskModel.findOneAndUpdate({ slug }, { $set: update }, { returnDocument: 'after' });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;

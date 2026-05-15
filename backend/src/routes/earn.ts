@@ -1,18 +1,13 @@
 import { Router, Request, Response } from 'express';
-import { DBManager, JupiterManager, KaminoManager, DriftManager, PriceManager } from '../managers';
+import { DBManager, JupiterManager, KaminoManager, DriftManager, PerenaManager, HumaManager, PriceManager } from '../managers';
 import { LookupManager } from '../managers/LookupManager';
 import { EarnTokenModel } from '../models/EarnToken';
 import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
 import { TransactionAction, UserCostBasisModel, UserModel, NotifyInterestModel } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
 import { notifyAdmin } from '../services/telegramManager';
-import { calculateFee, buildFeeTransferInstructions, createFeeRecord } from '../services/feeService';
 import type { AuthenticatedRequest } from '../middleware/auth';
 import { isValidSolanaAddress } from '../utils/validation';
-
-/** Protocols that require a minimum build number (view-only / coming soon protocols) */
-const VIEW_ONLY_PROTOCOLS = new Set<string>([EarnTokenType.PERENA, EarnTokenType.SOLOMON, EarnTokenType.ONRE]);
-const MIN_BUILD_FOR_VIEW_ONLY = 20;
 
 /**
  * Verify that the given walletAddress belongs to the authenticated user.
@@ -46,11 +41,10 @@ router.get('/tokens', async (req: Request, res: Response) => {
     const typeFilter = type && typeof type === 'string' ? { type } : undefined;
     let tokens = await dbManager.getTokens(typeFilter);
 
-    // Hide view-only protocols from older app builds
+    // Hide vaults that require a newer app build than the client is running.
+    // Vaults with no `minAppBuild` are always visible.
     const build = typeof buildNumber === 'string' ? parseInt(buildNumber, 10) : 0;
-    if (!build || build < MIN_BUILD_FOR_VIEW_ONLY) {
-      tokens = tokens.filter((t: any) => !VIEW_ONLY_PROTOCOLS.has(t.type));
-    }
+    tokens = tokens.filter((t: any) => !t.minAppBuild || build >= t.minAppBuild);
 
     res.json({
       success: true,
@@ -71,6 +65,8 @@ router.get('/tokens', async (req: Request, res: Response) => {
 // Manager instances
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
+const perenaManager = new PerenaManager();
+const humaManager = new HumaManager();
 
 let driftManager: DriftManager | null = null;
 let driftReady: Promise<void> | null = null;
@@ -97,6 +93,8 @@ router.get('/positions', async (req: Request, res: Response) => {
     const positionPromises: [string, Promise<any[]>][] = [
       ['jupiter', jupiterManager.getWalletPositions(walletAddress)],
       ['kamino', kaminoManager.getWalletPositions(walletAddress)],
+      ['perena', perenaManager.getWalletPositions(walletAddress)],
+      ['huma', humaManager.getWalletPositions(walletAddress)],
     ];
     if (driftManager) {
       positionPromises.push(
@@ -144,6 +142,42 @@ router.get('/positions', async (req: Request, res: Response) => {
         const uiAmount = Number(p.amount) / 10 ** decimals;
         return {
           type: EarnTokenType.KAMINO,
+          mint: p.mint,
+          vaultAddress: p.vaultAddress,
+          symbol,
+          balance: {
+            amount: p.amount,
+            decimals,
+            uiAmount,
+            usdValue: priceManager.getUsdValue(symbol, uiAmount),
+          } as IBalance,
+        };
+      }),
+      ...(settled.perena ?? []).map((p: any) => {
+        const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
+        const decimals = tokenInfo?.decimals ?? 0;
+        const symbol = tokenInfo?.symbol ?? '';
+        const uiAmount = Number(p.amount) / 10 ** decimals;
+        return {
+          type: EarnTokenType.PERENA,
+          mint: p.mint,
+          vaultAddress: p.vaultAddress,
+          symbol,
+          balance: {
+            amount: p.amount,
+            decimals,
+            uiAmount,
+            usdValue: priceManager.getUsdValue(symbol, uiAmount),
+          } as IBalance,
+        };
+      }),
+      ...(settled.huma ?? []).map((p: any) => {
+        const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
+        const decimals = tokenInfo?.decimals ?? 0;
+        const symbol = tokenInfo?.symbol ?? '';
+        const uiAmount = Number(p.amount) / 10 ** decimals;
+        return {
+          type: EarnTokenType.HUMA,
           mint: p.mint,
           vaultAddress: p.vaultAddress,
           symbol,
@@ -213,6 +247,8 @@ router.get('/earnings', async (req: Request, res: Response) => {
         const positionPromises: [string, Promise<any[]>][] = [
           ['jupiter', jupiterManager.getWalletPositions(walletAddress)],
           ['kamino', kaminoManager.getWalletPositions(walletAddress)],
+          ['perena', perenaManager.getWalletPositions(walletAddress)],
+          ['huma', humaManager.getWalletPositions(walletAddress)],
         ];
         if (driftManager) {
           positionPromises.push(
@@ -253,6 +289,14 @@ router.get('/earnings', async (req: Request, res: Response) => {
       const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
       addPosition(p.mint, p.amount, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
     }
+    for (const p of (positionsRes.perena ?? [])) {
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
+      addPosition(p.mint, p.amount, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
+    }
+    for (const p of (positionsRes.huma ?? [])) {
+      const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
+      addPosition(p.mint, p.amount, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
+    }
     for (const p of (positionsRes.drift ?? [])) {
       const tokenInfo = SUPPORTED_TOKENS_BY_MINT[p.mint];
       addPosition(p.mint, p.amount, tokenInfo?.symbol ?? '', tokenInfo?.decimals ?? 0);
@@ -268,7 +312,6 @@ router.get('/earnings', async (req: Request, res: Response) => {
       currentPosition: string;
       realizedProfit: string;
       unrealizedProfit: string;
-      feesCollected: string;
       earningsUsd: number;
     }[] = [];
 
@@ -282,9 +325,7 @@ router.get('/earnings', async (req: Request, res: Response) => {
       const cb = costBasisRecords.find((r) => r.mint === mint);
       const totalDeposited = BigInt(cb?.totalDeposited ?? '0');
       const totalWithdrawn = BigInt(cb?.totalWithdrawn ?? '0');
-      const feesCollected = BigInt(cb?.totalFeesCollected ?? '0');
       const currentPosition = currentPositionByMint[mint]?.amount ?? 0n;
-      const currentUsdValue = currentPositionByMint[mint]?.usdValue ?? 0;
 
       // Realized profit: what was already withdrawn in profit
       const realizedProfit = totalWithdrawn > totalDeposited ? totalWithdrawn - totalDeposited : 0n;
@@ -311,7 +352,6 @@ router.get('/earnings', async (req: Request, res: Response) => {
         currentPosition: currentPosition.toString(),
         realizedProfit: realizedProfit.toString(),
         unrealizedProfit: unrealizedProfit.toString(),
-        feesCollected: feesCollected.toString(),
         earningsUsd,
       });
     }
@@ -329,45 +369,6 @@ router.get('/earnings', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch earnings',
-      timestamp: new Date().toISOString(),
-    });
-  }
-});
-
-// GET /earn/v1/fee-preview - Preview the profit fee for a withdrawal
-router.get('/fee-preview', async (req: Request, res: Response) => {
-  try {
-    const { vaultAddress, mint, amount } = req.query;
-    if (!vaultAddress || !mint || !amount || typeof vaultAddress !== 'string' || typeof mint !== 'string' || typeof amount !== 'string') {
-      res.status(400).json({ success: false, error: 'vaultAddress, mint, and amount query params are required' });
-      return;
-    }
-
-    // IDOR protection: verify the vault belongs to the authenticated user
-    if (!(await verifyWalletOwnership(req, vaultAddress))) {
-      res.status(403).json({ success: false, error: 'Forbidden' });
-      return;
-    }
-
-    const { feeAmount, profitAmount } = await calculateFee(vaultAddress, mint, amount);
-    const tokenInfo = SUPPORTED_TOKENS_BY_MINT[mint];
-    const decimals = tokenInfo?.decimals ?? 6;
-
-    res.json({
-      success: true,
-      data: {
-        feeAmount: feeAmount.toString(),
-        profitAmount: profitAmount.toString(),
-        feeUiAmount: Number(feeAmount) / 10 ** decimals,
-        profitUiAmount: Number(profitAmount) / 10 ** decimals,
-      },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('Error calculating fee preview:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to calculate fee preview',
       timestamp: new Date().toISOString(),
     });
   }
@@ -400,6 +401,7 @@ router.post('/deposit', async (req: Request, res: Response) => {
     // Return raw instructions for Squads vault flow
     if (returnInstructions) {
       let instructions: any[];
+      let extraProtocolLookupTables: string[] = [];
       switch (type) {
         case EarnTokenType.JUPITER:
           instructions = await jupiterManager.getDepositInstructions(mint, amount, authority, walletAddress);
@@ -419,6 +421,18 @@ router.post('/deposit', async (req: Request, res: Response) => {
           instructions = await driftManager.getDepositInstructions(vaultAddress, amount, authority);
           break;
         }
+        case EarnTokenType.PERENA: {
+          const perenaRes = await perenaManager.getDepositInstructions(vaultAddress, amount, authority);
+          instructions = perenaRes.instructions;
+          extraProtocolLookupTables = perenaRes.lookupTables;
+          break;
+        }
+        case EarnTokenType.HUMA: {
+          const humaRes = await humaManager.getDepositInstructions(vaultAddress, amount, authority);
+          instructions = humaRes.instructions;
+          extraProtocolLookupTables = humaRes.lookupTables;
+          break;
+        }
         default:
           res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
           return;
@@ -429,12 +443,15 @@ router.post('/deposit', async (req: Request, res: Response) => {
         console.error(`DEPOSIT returnInstructions: EMPTY instructions for type=${type}, mint=${mint}, amount=${amount}`);
       }
 
-      // Collect extra LUTs (e.g. Kamino vault-specific lookup table)
+      // Collect extra LUTs (e.g. Kamino vault-specific lookup table, Perena bankineco LUTs, Huma pool LUT)
       const extraLookupTables: string[] = [];
       if (type === EarnTokenType.KAMINO && vaultAddress) {
         const vaultDoc = await EarnTokenModel.findOne({ type, vaultAddress }).lean();
         const vaultLut = vaultDoc?.kaminoToken?.state?.vaultLookupTable;
         if (vaultLut) extraLookupTables.push(vaultLut);
+      }
+      if (extraProtocolLookupTables && extraProtocolLookupTables.length > 0) {
+        extraLookupTables.push(...extraProtocolLookupTables);
       }
 
       const record = await dbManager.createTransaction({
@@ -481,6 +498,12 @@ router.post('/deposit', async (req: Request, res: Response) => {
         transaction = await driftManager.deposit(vaultAddress, amount, walletAddress);
         break;
       }
+      case EarnTokenType.PERENA:
+        transaction = await perenaManager.deposit(vaultAddress, amount, walletAddress);
+        break;
+      case EarnTokenType.HUMA:
+        transaction = await humaManager.deposit(vaultAddress, amount, walletAddress);
+        break;
       default:
         res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
         return;
@@ -539,6 +562,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
     // Return raw instructions for Squads vault flow
     if (returnInstructions) {
       let instructions: any[];
+      let extraProtocolLookupTables: string[] = [];
       switch (type) {
         case EarnTokenType.JUPITER:
           instructions = await jupiterManager.getWithdrawInstructions(mint, amount, authority, walletAddress);
@@ -558,26 +582,32 @@ router.post('/withdraw', async (req: Request, res: Response) => {
           instructions = await driftManager.getWithdrawInstructions(vaultAddress, amount, authority);
           break;
         }
+        case EarnTokenType.PERENA: {
+          const perenaRes = await perenaManager.getWithdrawInstructions(vaultAddress, amount, authority);
+          instructions = perenaRes.instructions;
+          extraProtocolLookupTables = perenaRes.lookupTables;
+          break;
+        }
+        case EarnTokenType.HUMA: {
+          const humaRes = await humaManager.getWithdrawInstructions(vaultAddress, amount, authority);
+          instructions = humaRes.instructions;
+          extraProtocolLookupTables = humaRes.lookupTables;
+          break;
+        }
         default:
           res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
           return;
       }
 
-      // Collect extra LUTs (e.g. Kamino vault-specific lookup table)
+      // Collect extra LUTs (e.g. Kamino vault-specific lookup table, Perena bankineco LUTs, Huma pool LUT)
       const extraLookupTables: string[] = [];
       if (type === EarnTokenType.KAMINO && vaultAddress) {
         const vaultDoc = await EarnTokenModel.findOne({ type, vaultAddress }).lean();
         const vaultLut = vaultDoc?.kaminoToken?.state?.vaultLookupTable;
         if (vaultLut) extraLookupTables.push(vaultLut);
       }
-
-      // Calculate and append profit fee instructions (cost basis is keyed by user vault)
-      const { feeAmount, profitAmount } = await calculateFee(userVault, mint, amount);
-      let feeAmountStr: string | undefined;
-      if (feeAmount > 0n) {
-        const feeInstructions = await buildFeeTransferInstructions(mint, feeAmount.toString(), authority);
-        instructions.push(...feeInstructions);
-        feeAmountStr = feeAmount.toString();
+      if (extraProtocolLookupTables.length > 0) {
+        extraLookupTables.push(...extraProtocolLookupTables);
       }
 
       const record = await dbManager.createTransaction({
@@ -588,19 +618,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         userVaultAddress: userVault,
         amount,
         walletAddress,
-        feeAmount: feeAmountStr,
       });
-
-      if (feeAmount > 0n) {
-        await createFeeRecord({
-          vaultAddress: userVault,
-          mint,
-          withdrawTransactionId: String(record._id),
-          withdrawAmount: amount,
-          profitAmount: profitAmount.toString(),
-          feeAmount: feeAmount.toString(),
-        });
-      }
 
       res.json({
         success: true,
@@ -608,7 +626,6 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         instructions,
         lookupTableAddress: LookupManager.lookupTableAddress,
         extraLookupTables,
-        feeAmount: feeAmountStr,
         timestamp: new Date().toISOString(),
       });
       return;
@@ -635,6 +652,12 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         transaction = await driftManager.withdraw(vaultAddress, amount, walletAddress);
         break;
       }
+      case EarnTokenType.PERENA:
+        transaction = await perenaManager.withdraw(vaultAddress, amount, walletAddress);
+        break;
+      case EarnTokenType.HUMA:
+        transaction = await humaManager.withdraw(vaultAddress, amount, walletAddress);
+        break;
       default:
         res.status(400).json({ success: false, error: `Unsupported type: ${type}` });
         return;

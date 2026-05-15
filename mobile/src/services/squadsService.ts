@@ -23,7 +23,7 @@ import {
   signWithCloud,
   signWithDevice,
 } from './keypairStorage';
-import { createCoverFromSquadInstruction } from '@heymike/send';
+import { createCoverFromSquadInstruction, createCoverInstruction } from '@heymike/send';
 import { address as kitAddress } from '@solana/kit';
 import { IS_SOLANA_MOBILE, getVaultCreationFee, getAdminTxFeePayerPublicKey, ADMIN_COVER_TARGET, DEFAULT_SPENDING_LIMIT } from '../config/constants';
 import { logError } from './analyticsService';
@@ -910,11 +910,17 @@ export async function createMultisig(
 /**
  * Create a new Squads vault via the backend.
  *
- * - Standard mode (iOS/web): backend signs + sends the tx (admin pays gas).
- * - Seeker / android_gms: backend returns a partially-signed tx; mobile
- *   signs via MWA and sends onchain, then calls confirm-vault.
+ * Backend builds + partially signs the bundle. Layout depends on mode:
+ * - Standard / Seeker: ONE tx with multisigCreate + spending-limit config +
+ *   2 approvals + execute + close + tip [+ Seeker creation fee + cover].
+ * - Android GMS: 3-tx Jito bundle (5 signers don't fit in one tx).
  *
- * Keypairs are generated locally as usual — only public keys are sent to backend.
+ * Mobile adds the remaining member sigs:
+ * - Standard (iOS/web): device + cloud sign the single tx (no MWA).
+ * - Seeker: device signs natively; MWA wallet signs the single tx (1 prompt, 1 tx).
+ * - Android GMS: MWA signs all 3, device + cloud cosign TX2 / TX3.
+ *
+ * Keypairs are generated locally — only public keys are sent to backend.
  */
 export async function createMultisigViaBackend(
   paymentId: string,
@@ -950,95 +956,124 @@ export async function createMultisigViaBackend(
     walletAddress,
   });
 
-  let signature: string;
+  if (!result.serializedTxs || (result.serializedTxs.length !== 1 && result.serializedTxs.length !== 3)) {
+    throw new Error(`Unexpected response from create-vault: expected 1 or 3 serialized txs, got ${result.serializedTxs?.length}`);
+  }
 
-  if (result.txSignature) {
-    // Standard mode — backend already sent the tx
-    signature = result.txSignature;
-    console.log('[createMultisigViaBackend] backend sent tx:', signature);
+  console.log('[createMultisigViaBackend] signing', result.serializedTxs.length, 'tx(s)...');
 
-    // Set up gas cover spending limit separately for standard mode
-    await sleep(2000);
-    const vaultData: VaultData = {
-      multisigAddress: result.multisigAddress,
-      vaultAddress: result.vaultAddress,
-      label: 'Cashflow',
-      createdAt: new Date().toISOString(),
-      walletAddress: walletAddress || undefined,
-      seekerMode: seekerMode || undefined,
-      isInitialized: true,
-    };
-    await saveVault(vaultData);
+  const transactions = result.serializedTxs.map(b64 =>
+    VersionedTransaction.deserialize(new Uint8Array(Buffer.from(b64, 'base64'))),
+  );
 
-    try {
-      console.log('[createMultisigViaBackend] setting up gas cover spending limit...');
-      await addGasCoverSpendingLimit(result.multisigAddress);
-      console.log('[createMultisigViaBackend] spending limit created');
-    } catch (err: any) {
-      console.warn('[createMultisigViaBackend] failed to create spending limit (will retry on first tx):', err.message);
+  const devicePubkey = new PublicKey(devicePubkeyBase58);
+  const isSingleTx = transactions.length === 1;
+
+  // Per-mode signing recipe. Backend signs createKey + admin (fee payer). Mobile adds
+  // the member signatures: device + primaryKey (cloud on Standard, MWA wallet on Seeker).
+  if (mode === 'standard') {
+    if (!cloudPubkeyBase58) {
+      throw new Error('cloudKey is required for standard mode');
     }
-  } else if (result.serializedTxs) {
-    // Seeker / android_gms — backend built all 3 txs (vault + spending limit create + execute)
-    // Sign all in one MWA prompt, device cosigns TX2, send as Jito bundle
-    console.log('[createMultisigViaBackend] signing', result.serializedTxs.length, 'txs with MWA...');
-
+    const cloudPubkey = new PublicKey(cloudPubkeyBase58);
+    if (isSingleTx) {
+      // 2-of-2 cloud + device, all approvals + execute in one tx
+      console.log('[createMultisigViaBackend] device + cloud signing single tx...');
+      await signTransactionNatively(transactions[0], [
+        { pubkey: devicePubkey, signFn: signWithDevice },
+        { pubkey: cloudPubkey, signFn: signWithCloud },
+      ]);
+    } else {
+      // legacy 3-tx bundle (kept for compat with future android_gms-shaped responses)
+      await signTransactionNatively(transactions[1], [
+        { pubkey: devicePubkey, signFn: signWithDevice },
+      ]);
+      await signTransactionNatively(transactions[2], [
+        { pubkey: cloudPubkey, signFn: signWithCloud },
+      ]);
+    }
+  } else if (mode === 'seeker') {
     if (!walletAddress) {
-      throw new Error('walletAddress is required for seeker / android_gms mode');
+      throw new Error('walletAddress is required for seeker mode');
     }
-
-    const transactions = result.serializedTxs.map(b64 =>
-      VersionedTransaction.deserialize(new Uint8Array(Buffer.from(b64, 'base64'))),
-    );
-
-    // MWA signs all 3 in one prompt; copy only the wallet's signature back into
-    // the originals so the backend's createKey / admin-fee-payer signatures are
-    // preserved (some MWA wallets clobber other slots when re-serializing).
+    if (isSingleTx) {
+      // 2-of-2 wallet + device. Device signs natively; MWA signs the single tx (1 prompt).
+      console.log('[createMultisigViaBackend] device signing natively, MWA signing single tx...');
+      await signTransactionNatively(transactions[0], [
+        { pubkey: devicePubkey, signFn: signWithDevice },
+      ]);
+      await signTransactionsWithWallet(
+        transactions,
+        [0],
+        new PublicKey(walletAddress),
+      );
+    } else {
+      // legacy 3-tx bundle
+      await signTransactionNatively(transactions[1], [
+        { pubkey: devicePubkey, signFn: signWithDevice },
+      ]);
+      await signTransactionsWithWallet(
+        transactions,
+        [2],
+        new PublicKey(walletAddress),
+      );
+    }
+  } else {
+    // android_gms (3-of-3) — backend always returns a 3-tx bundle here (5 signers
+    // don't fit in a single tx). MWA signs all 3, cloud + device cosign natively.
+    if (!walletAddress) {
+      throw new Error('walletAddress is required for android_gms mode');
+    }
+    if (!cloudPubkeyBase58) {
+      throw new Error('cloudKey is required for android_gms mode');
+    }
+    if (isSingleTx) {
+      throw new Error('android_gms must use the 3-tx bundle path');
+    }
+    const cloudPubkey = new PublicKey(cloudPubkeyBase58);
     await signTransactionsWithWallet(
       transactions,
       [0, 1, 2],
       new PublicKey(walletAddress),
     );
-
-    // TX2 (config create + propose + approve) also needs device key signature
-    console.log('[createMultisigViaBackend] device cosigning TX2...');
     await signTransactionNatively(transactions[1], [
-      { pubkey: new PublicKey(devicePubkeyBase58), signFn: signWithDevice },
+      { pubkey: devicePubkey, signFn: signWithDevice },
+      { pubkey: cloudPubkey, signFn: signWithCloud },
     ]);
+    await signTransactionNatively(transactions[2], [
+      { pubkey: cloudPubkey, signFn: signWithCloud },
+    ]);
+  }
 
-    // Persist vault metadata before sending (auth requires vaultAddress) — marked uninitialized
-    const vaultData: VaultData = {
-      multisigAddress: result.multisigAddress,
-      vaultAddress: result.vaultAddress,
-      label: 'Cashflow',
-      createdAt: new Date().toISOString(),
-      walletAddress: walletAddress || undefined,
-      seekerMode: seekerMode || undefined,
-      isInitialized: false,
-    };
-    await saveVault(vaultData);
+  // Persist vault metadata before sending (auth requires vaultAddress) — marked uninitialized
+  const vaultData: VaultData = {
+    multisigAddress: result.multisigAddress,
+    vaultAddress: result.vaultAddress,
+    label: 'Cashflow',
+    createdAt: new Date().toISOString(),
+    walletAddress: walletAddress || undefined,
+    seekerMode: seekerMode || undefined,
+    isInitialized: false,
+  };
+  await saveVault(vaultData);
 
-    // Send all 3 as a Jito bundle via backend
-    const bundleTxs = transactions.map(tx => Buffer.from(tx.serialize()).toString('base64'));
-    console.log('[createMultisigViaBackend] sending bundle...');
-    try {
-      await apiService.sendBundle(bundleTxs);
-      signature = bs58.encode(transactions[0].signatures[0]);
-      console.log('[createMultisigViaBackend] bundle sent, sig:', signature);
+  // Send via backend Jito bundle endpoint (works for both 1-tx and 3-tx payloads).
+  const bundleTxs = transactions.map(tx => Buffer.from(tx.serialize()).toString('base64'));
+  console.log(`[createMultisigViaBackend] sending ${isSingleTx ? 'single tx' : 'bundle'}...`);
+  let signature: string;
+  try {
+    await apiService.sendBundle(bundleTxs);
+    signature = bs58.encode(transactions[0].signatures[0]);
+    console.log('[createMultisigViaBackend] sent, sig:', signature);
 
-      // Confirm with backend
-      await apiService.confirmVault(paymentId, signature);
-      console.log('[createMultisigViaBackend] vault confirmed');
+    await apiService.confirmVault(paymentId, signature);
+    console.log('[createMultisigViaBackend] vault confirmed');
 
-      // Bundle landed — mark vault as initialized
-      await saveVault({ ...vaultData, isInitialized: true });
-    } catch (err) {
-      // Bundle failed or didn't land — clear vault so user doesn't see a phantom squad
-      console.error('[createMultisigViaBackend] bundle/confirm failed, clearing vault:', err);
-      await clearVault();
-      throw err;
-    }
-  } else {
-    throw new Error('Unexpected response from create-vault: no txSignature or serializedTxs');
+    await saveVault({ ...vaultData, isInitialized: true });
+  } catch (err) {
+    console.error('[createMultisigViaBackend] send/confirm failed, clearing vault:', err);
+    await clearVault();
+    throw err;
   }
 
   console.log('[createMultisigViaBackend] done, vault:', result.vaultAddress);
@@ -1263,6 +1298,36 @@ export async function executeVaultTransaction(
   transactionId?: string,
   /** Pre-signed base64 transactions to append to the Jito bundle (e.g. Metaplex Core mint). */
   extraSignedTransactions?: string[],
+  /**
+   * When true, reimburse admin fee payer directly from the MWA wallet via
+   * createCoverInstruction (4-arg, walletAddress → admin) instead of the
+   * spending-limit-based createCoverFromSquadInstruction. Requires Seeker
+   * mode (an MWA wallet must be present); throws otherwise.
+   */
+  useWalletCover?: boolean,
+  /**
+   * When true, skip the precondition check that requires vault PDA to hold
+   * MIN_VAULT_SOL. Use only for inner instructions that don't create new
+   * accounts (e.g. SystemProgram.transfer of native SOL during the close-
+   * vault sweep), since the vault PDA can safely drain to zero in that case.
+   */
+  skipMinSolCheck?: boolean,
+  /**
+   * When true, omit the vaultTransactionAccountsClose instruction in TX4 so the
+   * proposal/transaction rent does NOT flow back to the multisig's rent
+   * collector (the vault PDA). The PDAs become orphaned and admin loses the
+   * rent it paid up front, but the vault truly stays at its post-execute
+   * balance — required for the close-vault sweep to land cleanly.
+   */
+  skipAccountsClose?: boolean,
+  /**
+   * When true, omit the cover instruction in TX4 entirely (no createCoverFromSquad
+   * and no createCoverInstruction). Use for the close-vault sweep, where the
+   * vault has been drained to its rent-exempt minimum and any cover that pulls
+   * additional SOL would land it in a non-rent-exempt state. Admin pays gas
+   * for this single bundle without reimbursement.
+   */
+  skipCover?: boolean,
 ): Promise<{ signature: string; bundleSignatures: string[] }> {
   const multisigPda = new PublicKey(multisigAddress);
   const vaultData = await getVault();
@@ -1308,11 +1373,13 @@ export async function executeVaultTransaction(
 
   // Vault needs SOL for rent when inner instructions create accounts (ATAs, farm state)
   const MIN_VAULT_SOL = 0.02;
-  const vaultSolBalance = await connection.getBalance(vaultPda, 'confirmed') / 1e9;
-  if (vaultSolBalance < MIN_VAULT_SOL) {
-    throw new Error(
-      `Not enough SOL in your vault for transaction fees. You need at least ${MIN_VAULT_SOL} SOL (current: ${vaultSolBalance.toFixed(4)} SOL). Please deposit SOL first.`,
-    );
+  if (!skipMinSolCheck) {
+    const vaultSolBalance = await connection.getBalance(vaultPda, 'confirmed') / 1e9;
+    if (vaultSolBalance < MIN_VAULT_SOL) {
+      throw new Error(
+        `Not enough SOL in your vault for transaction fees. You need at least ${MIN_VAULT_SOL} SOL (current: ${vaultSolBalance.toFixed(4)} SOL). Please deposit SOL first.`,
+      );
+    }
   }
 
   // Ensure spending limit exists for non-Seeker mode (lazy migration for existing vaults)
@@ -1434,18 +1501,35 @@ export async function executeVaultTransaction(
     );
   }
   tx4Instructions.push(await jitoTipIx(feePayer));
-  // Reimburse admin gas from vault via spending limit
-  const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
-  const coverMember = seekerMode ? walletPubkey! : cloudPubkey!;
-  tx4Instructions.push(
-    kitIxToWeb3(await createCoverFromSquadInstruction(
-      kitAddress(adminFeePayerPubkey.toBase58()),
-      kitAddress(coverMember.toBase58()),
-      kitAddress(multisigPda.toBase58()),
-      kitAddress(spendingLimitPda.toBase58()),
-      ADMIN_COVER_TARGET,
-    )),
-  );
+  if (!skipCover) {
+    if (useWalletCover) {
+      if (!walletPubkey) {
+        throw new Error('Wallet cover requires an MWA wallet (Solana Mobile)');
+      }
+      // Reimburse admin directly from the user's MWA wallet (no vault spending-limit involved)
+      tx4Instructions.push(
+        kitIxToWeb3(await createCoverInstruction(
+          kitAddress(walletPubkey.toBase58()),
+          kitAddress(walletPubkey.toBase58()),
+          kitAddress(adminFeePayerPubkey.toBase58()),
+          ADMIN_COVER_TARGET,
+        ) as any),
+      );
+    } else {
+      // Reimburse admin gas from vault via spending limit
+      const spendingLimitPda = getGasCoverSpendingLimitPda(multisigPda);
+      const coverMember = seekerMode ? walletPubkey! : cloudPubkey!;
+      tx4Instructions.push(
+        kitIxToWeb3(await createCoverFromSquadInstruction(
+          kitAddress(adminFeePayerPubkey.toBase58()),
+          kitAddress(coverMember.toBase58()),
+          kitAddress(multisigPda.toBase58()),
+          kitAddress(spendingLimitPda.toBase58()),
+          ADMIN_COVER_TARGET,
+        )),
+      );
+    }
+  }
 
   // --- Build all transactions with one blockhash (Jito bundle) ---
   const debugLines: string[] = [];
@@ -1490,12 +1574,18 @@ export async function executeVaultTransaction(
     const tx2 = new VersionedTransaction(msg2);
     debugLines.push(`TX2 size: ${tx2.serialize().length} bytes`);
 
-    // TX3: execute (needs extra CU for complex CPI chains like Kamino)
+    // TX3: execute. Set to Solana's per-tx max (1.4M) — Kamino USDC kvault
+    // withdraw refreshes every allocated reserve in-line and routinely exceeds
+    // 1.2M CU. Also request the max heap (256KB) — Squads VaultTransactionExecute
+    // overflows the default 32KB heap when the inner message has many accounts
+    // (e.g. Kamino kvault withdraw with 47+ accounts), which surfaces as
+    // "Access violation in heap section at address 0x3000XXXX".
     const msg3 = new TransactionMessage({
       payerKey: feePayer,
       recentBlockhash: blockhash,
       instructions: [
-        ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
+        ComputeBudgetProgram.requestHeapFrame({ bytes: 256 * 1024 }),
         executeIx,
       ],
     }).compileToV0Message(luts);
@@ -1920,6 +2010,62 @@ export async function reclaimRent(
   }
 
   return { closed, skipped, failed, cancelled };
+}
+
+/**
+ * Close every empty SPL ATA owned by the vault, returning rent to the vault.
+ * Wraps groups of close-account instructions in vault transactions and runs
+ * them through executeVaultTransaction. Skips Squads' accounts-close in TX4
+ * so the proposal/transaction PDA rent doesn't loop back into the vault.
+ *
+ * @returns the number of ATAs successfully closed, plus failed and total
+ */
+export async function closeEmptyTokenAccounts(
+  multisigAddress: string,
+  walletAddress: string,
+  onProgress?: (msg: string) => void,
+): Promise<{ closed: number; failed: number; total: number }> {
+  onProgress?.('Looking up empty token accounts...');
+  const { instructions: allInstructions, count } = await apiService.closeEmptyTokenAccountsInstructions(walletAddress);
+  if (count === 0) return { closed: 0, failed: 0, total: 0 };
+
+  // Chunk to keep each vault transaction safely under the size limit.
+  // Close-account is small (~96 bytes per ix incl. accounts), but Squads stores
+  // the whole inner message twice (TX1 + TX3 reads), so stay conservative.
+  const CHUNK_SIZE = 5;
+  let closed = 0;
+  let failed = 0;
+
+  for (let i = 0; i < allInstructions.length; i += CHUNK_SIZE) {
+    const chunk = allInstructions.slice(i, i + CHUNK_SIZE);
+    const batchNum = Math.floor(i / CHUNK_SIZE) + 1;
+    const totalBatches = Math.ceil(allInstructions.length / CHUNK_SIZE);
+    onProgress?.(`Closing ${chunk.length} accounts (batch ${batchNum}/${totalBatches})...`);
+    try {
+      await executeVaultTransaction(
+        multisigAddress,
+        chunk,
+        undefined,
+        undefined,
+        undefined,
+        false, // useWalletCover — irrelevant when skipCover=true
+        true, // skipMinSolCheck — vault might be low on SOL
+        true, // skipAccountsClose — keep this batch's proposal rent out of the vault
+        true, // skipCover — vault may already be at rent-exempt minimum
+      );
+      closed += chunk.length;
+    } catch (err: any) {
+      logError('squads_close_empty_atas', `batch_failed: ${err.message || 'unknown'}`);
+      mobileErrorTracker.log(err, {
+        severity: 'unexpected',
+        action: 'squads_close_empty_atas',
+        context: { batchSize: chunk.length, batchNum, totalBatches },
+      });
+      failed += chunk.length;
+    }
+  }
+
+  return { closed, failed, total: count };
 }
 
 /**

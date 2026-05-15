@@ -32,13 +32,18 @@ import {
   AccountRole,
 } from '@solana/kit';
 import type { Rpc, SolanaRpcApi } from '@solana/kit';
-import { SUPPORTED_TOKEN_MINTS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import {
+  SUPPORTED_TOKEN_MINTS,
+  SUPPORTED_TOKENS_BY_MINT,
+  ASSOCIATED_TOKEN_PROGRAM_ID as ASSOCIATED_TOKEN_PROGRAM_ID_STRING,
+  TOKEN_PROGRAM_ID as TOKEN_PROGRAM_ID_STRING,
+} from '../constants';
 import { EarnTokenType } from '../types';
 import type { SerializedInstruction } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
 
-const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
-const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ID_STRING);
+const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ID_STRING);
 const NATIVE_SOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 const DRIFT_ACCOUNT_INIT_COST = 30_000_000; // ~0.03 SOL for UserStats + User account rent
 

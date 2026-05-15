@@ -20,7 +20,7 @@ import {
   address as kaminoAddress,
 } from '@kamino-finance/klend-sdk/node_modules/@solana/kit';
 import Decimal from 'decimal.js';
-import { SUPPORTED_TOKEN_MINTS, SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import { SUPPORTED_TOKEN_MINTS, SUPPORTED_TOKENS_BY_MINT, ASSOCIATED_TOKEN_PROGRAM_ID } from '../constants';
 import { EarnTokenType } from '../types';
 import type { SerializedInstruction } from '../types';
 import { DBManager, EarnTokenUpsert } from './DBManager';
@@ -371,8 +371,7 @@ export class KaminoManager {
    * if the account already exists (e.g. from a previous deposit).
    */
   private makeAtaIdempotent(ix: SerializedInstruction): SerializedInstruction {
-    const ATA_PROGRAM_ID = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
-    if (ix.programId === ATA_PROGRAM_ID && Buffer.from(ix.data, 'base64').length === 0) {
+    if (ix.programId === ASSOCIATED_TOKEN_PROGRAM_ID && Buffer.from(ix.data, 'base64').length === 0) {
       console.log('[KaminoManager] Converting non-idempotent ATA create → idempotent');
       return { ...ix, data: Buffer.from([1]).toString('base64') };
     }

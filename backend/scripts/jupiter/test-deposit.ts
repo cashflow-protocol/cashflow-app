@@ -7,6 +7,7 @@ import {
   getBase64EncodedWireTransaction,
   getSignatureFromTransaction,
 } from '@solana/kit';
+import { USDC_MINT } from '../../src/constants';
 
 import 'dotenv/config';
 
@@ -29,7 +30,7 @@ async function main() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       type: 'jupiter',
-      mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+      mint: USDC_MINT,
       amount: '100000',
       walletAddress: pubkey,
     }),

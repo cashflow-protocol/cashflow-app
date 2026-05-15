@@ -5,6 +5,7 @@ export { DriftManager } from './DriftManager';
 export { PerenaManager } from './PerenaManager';
 export { SolomonManager } from './SolomonManager';
 export { OnreManager } from './OnreManager';
+export { HumaManager } from './HumaManager';
 export { PriceManager } from './PriceManager';
 export { JitoManager } from './JitoManager';
 export { TokenManager } from './TokenManager';

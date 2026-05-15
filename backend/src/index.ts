@@ -12,7 +12,7 @@ import suggestionsRouter from './routes/suggestions';
 import proxyRouter from './routes/proxy';
 import waitlistRouter from './routes/waitlist';
 import authRouter from './routes/auth';
-import onboardingRouter from './routes/onboarding';
+import onboardingRouter, { onboardingV2Router } from './routes/onboarding';
 import adminRouter from './routes/admin';
 import { requireAuth } from './middleware/auth';
 import { signResponseMiddleware } from './middleware/signResponse';
@@ -60,6 +60,7 @@ app.use('/auth/v2', authLimiter, authRouter);
 
 // Onboarding routes (no auth required — pre-wallet users)
 app.use('/onboarding/v1', onboardingLimiter, onboardingRouter);
+app.use('/onboarding/v2', onboardingLimiter, onboardingV2Router);
 
 // Vault recovery routes (no auth required — recovering users)
 app.use('/vault-recovery/v1', apiLimiter, vaultRecoveryRouter);

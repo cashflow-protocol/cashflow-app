@@ -304,7 +304,7 @@ export class RewardManager {
           taskSlug: task.slug,
         },
       },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
 
     // No auto-mint: when the verifier flips to satisfied we leave progress at

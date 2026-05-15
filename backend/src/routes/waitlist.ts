@@ -4,13 +4,13 @@ import { randomBytes } from 'crypto';
 import { createSolanaRpc, type Rpc, type SolanaRpcApi, type Signature } from '@solana/kit';
 import { WaitlistEntryModel, FamilyWaitlistEntryModel, type FamilyWaitlistEntry } from '../models';
 import { notifyAdmin } from '../services/telegramManager';
+import { USDC_MINT } from '../constants';
 
 const router = Router();
 
 const BREVO_LIST_ID = 14;
 const CODE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
-const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const USDC_DECIMALS = 6;
 const WAITLIST_PAYMENT_AMOUNT = 5_000_000n; // 5 USDC
 
@@ -206,7 +206,7 @@ router.post('/verify', async (req: Request, res: Response) => {
     const updated = await Model.findOneAndUpdate(
       { email: normalizedEmail },
       { $set: { email: normalizedEmail, verified: true } },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
 
     // Telegram ping for brand-new family signups only
