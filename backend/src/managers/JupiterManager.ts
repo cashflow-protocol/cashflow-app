@@ -389,6 +389,8 @@ export class JupiterManager {
         // Incompatible with Squads vault PDA execution (InvalidAccountData)
         'BisonFi',
         'ZeroFi',
+        // Quote/execution price mismatch in CPI context (SlippageToleranceExceeded)
+        'WhaleStreet',
       ].join(','),
     };
     if (PLATFORM_FEE_WALLET) {
