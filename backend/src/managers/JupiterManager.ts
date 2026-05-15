@@ -447,7 +447,6 @@ export class JupiterManager {
       quoteResponse,
       userPublicKey: ownerAddress,
       dynamicComputeUnitLimit: true,
-      dynamicSlippage: true,
       wrapAndUnwrapSol: false,
     };
 
