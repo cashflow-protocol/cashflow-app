@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { getEarnTokens, updateEarnTokenStatus, updateEarnTokenConfig } from '../api';
 import MultiSelect from '../components/MultiSelect';
 
-const VAULT_TYPES = ['jupiter', 'kamino', 'drift', 'perena', 'solomon', 'onre', 'huma'];
+const VAULT_TYPES = ['jupiter', 'kamino', 'kamino_multiply', 'drift', 'perena', 'solomon', 'onre', 'huma'];
 
 interface EarnToken {
   id: string;
-  type: 'jupiter' | 'kamino' | 'drift' | 'perena' | 'solomon' | 'onre' | 'huma';
+  type: 'jupiter' | 'kamino' | 'kamino_multiply' | 'drift' | 'perena' | 'solomon' | 'onre' | 'huma';
   vaultAddress: string;
   vaultTitle: string;
   mint: string;
@@ -27,6 +27,7 @@ interface EarnToken {
 const TYPE_LOGO_URLS: Record<string, string> = {
   jupiter: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/jupiter.svg',
   kamino: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/kamino.svg',
+  kamino_multiply: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/kamino.svg',
   drift: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/drift.svg',
   perena: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/perena.jpg',
   solomon: 'https://cashflowfi.ams3.cdn.digitaloceanspaces.com/logos/solomon.png',
@@ -37,6 +38,7 @@ const TYPE_LOGO_URLS: Record<string, string> = {
 const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   jupiter: { bg: '#e8f5e9', color: '#2e7d32' },
   kamino: { bg: '#e3f2fd', color: '#1565c0' },
+  kamino_multiply: { bg: '#dbeafe', color: '#1e40af' },
   drift: { bg: '#fff3e0', color: '#e65100' },
   perena: { bg: '#f3e5f5', color: '#7b1fa2' },
   solomon: { bg: '#fce4ec', color: '#c62828' },
