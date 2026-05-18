@@ -352,7 +352,7 @@ export default function HomeScreen({ onNavigateToTab, onNavigate }: HomeScreenPr
         />
 
         {/* Useful Section */}
-        <SectionCard title="Useful">
+        <SectionCard>
           <View style={[styles.solPrice, { backgroundColor: colors.cardSecondary }]}>
             <View style={[styles.solPriceIconContainer, { backgroundColor: colors.card }]}>
               <Image source={getTokenIcon('native')!} style={styles.solPriceIcon} />

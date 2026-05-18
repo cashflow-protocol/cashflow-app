@@ -84,7 +84,7 @@ export default function RewardBadgeSheet({ task, visible, onClose, onAttestSeeke
         )}
 
         <View style={[styles.statusBox, { backgroundColor: colors.cardSecondary }]}>
-          <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Soulbound</Text>
+          <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>NFT</Text>
           <Text style={[styles.statusValue, { color: colors.textPrimary }]}>Locked to your vault forever</Text>
         </View>
 

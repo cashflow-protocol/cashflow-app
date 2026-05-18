@@ -8,7 +8,7 @@ import { UserRewardProgressModel, RewardProgressStatus } from '../models/UserRew
  * the badge as an attribute (the verifier re-evaluates on next read,
  * and once the user activates their Cashflow Passport, the auto-add fires).
  *
- * Old standalone MintedBadge NFTs are soulbound and can't be burned —
+ * Old standalone MintedBadge NFTs can't be burned —
  * they remain in user wallets as orphan records.
  */
 async function main() {

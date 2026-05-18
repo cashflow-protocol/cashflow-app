@@ -33,7 +33,7 @@ export class User {
   public seekerAttestedAt?: Date;
 
   /** Metaplex Core asset address for the user's "Cashflow Passport" — the
-   *  single soulbound NFT that hosts earned-badge entries via the Attributes
+   *  single NFT that hosts earned-badge entries via the Attributes
    *  plugin. Set on activation confirm; absent until the user has activated. */
   @prop()
   public cashflowPassportAddress?: string;

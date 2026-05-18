@@ -62,7 +62,7 @@ export default function RewardsPage() {
 
   const handleReset = async () => {
     if (resetting) return;
-    if (!confirm('Reset every MINTED / MINT_PENDING reward progress back to IN_PROGRESS so badges can be re-issued as attributes on Cashflow Passports? Existing standalone NFTs are NOT removed (soulbound).')) return;
+    if (!confirm('Reset every MINTED / MINT_PENDING reward progress back to IN_PROGRESS so badges can be re-issued as attributes on Cashflow Passports? Existing standalone NFTs are NOT removed.')) return;
     setResetting(true);
     try {
       const res = await resetMintedProgress();
@@ -479,7 +479,7 @@ function SettingsCard({ settings, onSaved }: { settings: RewardSettings | null; 
 
 function CreateCollectionModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState('Cashflow Rewards');
-  const [description, setDescription] = useState('Soulbound badges earned for using Cashflow.');
+  const [description, setDescription] = useState('Reward badges earned for using Cashflow.');
   const [externalUrl, setExternalUrl] = useState('https://cashflow.fun');
   const [imageUrl, setImageUrl] = useState('');
   const [metadataStr, setMetadataStr] = useState('');

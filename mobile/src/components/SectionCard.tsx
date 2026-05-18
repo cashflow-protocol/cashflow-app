@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
 interface SectionCardProps {
-  title: string;
+  title?: string;
   children: React.ReactNode;
   onMorePress?: () => void;
   height?: number;
@@ -19,19 +19,25 @@ export default function SectionCard({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.card }, height ? { height } : {}]}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
-        {onMorePress && (
-          <TouchableOpacity
-            style={[styles.moreButton, { backgroundColor: colors.moreButtonBg }]}
-            onPress={onMorePress}
-          >
-            <Text style={[styles.moreText, { color: colors.moreButtonText }]}>More</Text>
-            <Text style={[styles.arrow, { color: colors.moreButtonText }]}>›</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-      <View style={styles.content}>
+      {(title || onMorePress) && (
+        <View style={styles.header}>
+          {title ? (
+            <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
+          ) : (
+            <View />
+          )}
+          {onMorePress && (
+            <TouchableOpacity
+              style={[styles.moreButton, { backgroundColor: colors.moreButtonBg }]}
+              onPress={onMorePress}
+            >
+              <Text style={[styles.moreText, { color: colors.moreButtonText }]}>More</Text>
+              <Text style={[styles.arrow, { color: colors.moreButtonText }]}>›</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      <View style={[styles.content, !(title || onMorePress) && styles.contentNoHeader]}>
         {children}
       </View>
     </View>
@@ -75,5 +81,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
     gap: 16,
+  },
+  contentNoHeader: {
+    paddingTop: 16,
   },
 });

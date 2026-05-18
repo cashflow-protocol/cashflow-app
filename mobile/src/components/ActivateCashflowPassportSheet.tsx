@@ -51,7 +51,7 @@ export default function ActivateCashflowPassportSheet({ visible, onClose, feeLam
 
         <Text style={[styles.title, { color: colors.textPrimary }]}>Activate Cashflow Passport</Text>
         <Text style={[styles.description, { color: colors.textSecondary }]}>
-          Your soulbound onchain passport. Reward badges will be added to your passport.
+          Your onchain passport. Reward badges will be added to your passport.
         </Text>
 
         <View style={[styles.statusBox, { backgroundColor: colors.cardSecondary }]}>
@@ -60,7 +60,7 @@ export default function ActivateCashflowPassportSheet({ visible, onClose, feeLam
         </View>
 
         <View style={[styles.statusBox, { backgroundColor: colors.cardSecondary }]}>
-          <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Soulbound</Text>
+          <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>NFT</Text>
           <Text style={[styles.statusValue, { color: colors.textPrimary }]}>Locked to your vault forever</Text>
         </View>
 

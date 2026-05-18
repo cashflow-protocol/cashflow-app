@@ -1415,7 +1415,7 @@ router.post('/rewards/backfill-user-vault', async (_req, res) => {
  * Flips all UserRewardProgress with status MINTED or MINT_PENDING back to
  * IN_PROGRESS so the new Cashflow Passport + Attributes flow can re-credit those
  * badges as attributes. Old standalone MintedBadge NFTs remain in wallets
- * (soulbound, can't burn).
+ * (can't burn).
  */
 router.post('/rewards/reset-minted-progress', async (_req, res) => {
   try {

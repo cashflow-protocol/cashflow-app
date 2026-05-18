@@ -128,7 +128,7 @@ export class RewardMintBuilder {
 
     const metadata = {
       name,
-      description: 'Soulbound onchain Cashflow Passport.',
+      description: 'Onchain Cashflow Passport.',
       image: imageUrl,
       external_url: 'https://cashflow.fun',
       attributes: [],
