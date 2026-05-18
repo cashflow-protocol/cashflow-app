@@ -428,6 +428,10 @@ class ApiService {
     amount: string;
     walletAddress: string;
     ownerAddress: string;
+    /** Kamino Multiply only: target leverage multiplier (e.g. 2.5). */
+    leverage?: number;
+    /** Optional override for embedded swap slippage. */
+    slippageBps?: number;
   }): Promise<{ transactionId: string; instructions: SerializedInstruction[]; lookupTableAddress?: string; extraLookupTables?: string[] }> {
     const res = await this.signedPost<{
       success: boolean;
@@ -446,6 +450,10 @@ class ApiService {
     amount: string;
     walletAddress: string;
     ownerAddress: string;
+    /** Kamino Multiply only: when true, klend treats the withdraw as a full close. */
+    isClosingPosition?: boolean;
+    /** Optional override for embedded swap slippage. */
+    slippageBps?: number;
   }): Promise<{ transactionId: string; instructions: SerializedInstruction[]; lookupTableAddress?: string; extraLookupTables?: string[] }> {
     const res = await this.signedPost<{
       success: boolean;

@@ -22,8 +22,9 @@ import { useTheme } from '../theme/ThemeContext';
 const ALL_FILTER = 'All';
 const STABLES_FILTER = 'Stables';
 const YIELD_STABLES_FILTER = 'Yield Stables';
+const LOOPS_FILTER = 'Loops';
 const STABLECOIN_SYMBOLS = new Set(['USDC', 'USDT', 'JupUSD', 'USDG', 'USDS', 'PYUSD', 'USD*', 'sUSDv', 'ONyc']);
-const PINNED_FILTERS = [ALL_FILTER, STABLES_FILTER, YIELD_STABLES_FILTER, 'SOL', 'USDC', 'USDT', 'USDS', 'USDG'];
+const PINNED_FILTERS = [ALL_FILTER, STABLES_FILTER, YIELD_STABLES_FILTER, LOOPS_FILTER, 'SOL', 'USDC', 'USDT', 'USDS', 'USDG'];
 
 export default function EarnScreen() {
   const { colors } = useTheme();
@@ -64,6 +65,7 @@ export default function EarnScreen() {
     if (activeFilter === ALL_FILTER) return tokens;
     if (activeFilter === STABLES_FILTER) return tokens.filter((t) => STABLECOIN_SYMBOLS.has(t.symbol));
     if (activeFilter === YIELD_STABLES_FILTER) return tokens.filter((t) => t.categories?.includes('yield-stable'));
+    if (activeFilter === LOOPS_FILTER) return tokens.filter((t) => t.categories?.includes('loop'));
     return tokens.filter((t) => t.symbol === activeFilter);
   }, [tokens, activeFilter]);
 
@@ -210,6 +212,10 @@ export default function EarnScreen() {
                   positionAmount={item.position?.balance.uiAmount}
                   protocolName={item.protocolName}
                   protocolIconUrl={item.protocolIconUrl}
+                  extraTokenMint={item.multiply?.collMint}
+                  extraTokenLogoUrl={item.multiply?.collLogoUrl}
+                  subtitle={item.multiply ? `${item.multiply.collSymbol}/${item.multiply.debtSymbol} · Looped ${item.multiply.leverageRange.default}×` : undefined}
+                  apySuffix={item.multiply ? `at ${item.multiply.leverageRange.default}×` : undefined}
                   onPress={() => { logEarnVaultPress(item.symbol, item.vaultAddress, item.type); setSelectedToken(item); }}
                 />
               )}
@@ -245,6 +251,7 @@ export default function EarnScreen() {
           minWithdrawAmount={selectedToken.minWithdrawAmount}
           protocolName={selectedToken.protocolName}
           protocolIconUrl={selectedToken.protocolIconUrl}
+          multiply={selectedToken.multiply}
         />
       )}
     </View>

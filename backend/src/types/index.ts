@@ -1,6 +1,7 @@
 export enum EarnTokenType {
   JUPITER = 'jupiter',
   KAMINO = 'kamino',
+  KAMINO_MULTIPLY = 'kamino_multiply',
   DRIFT = 'drift',
   PERENA = 'perena',
   SOLOMON = 'solomon',

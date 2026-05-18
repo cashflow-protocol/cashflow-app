@@ -1,4 +1,18 @@
-export type EarnTokenType = 'jupiter' | 'kamino' | 'drift' | (string & {});
+export type EarnTokenType = 'jupiter' | 'kamino' | 'kamino_multiply' | 'drift' | (string & {});
+
+export interface MultiplyConfig {
+  collMint: string;
+  collSymbol: string;
+  collDecimals: number;
+  collLogoUrl?: string;
+  debtMint: string;
+  debtSymbol: string;
+  debtDecimals: number;
+  defaultDepositMint: string;
+  leverageRange: { min: number; max: number; default: number };
+  apyAtDefault: number;
+  liquidationLtv: number;
+}
 
 export interface EarnToken {
   type: EarnTokenType;
@@ -16,6 +30,8 @@ export interface EarnToken {
   categories?: string[];
   protocolName?: string;
   protocolIconUrl?: string;
+  /** Present on Kamino Multiply rows — carries the collateral/debt config. */
+  multiply?: MultiplyConfig;
 }
 
 export interface WalletAsset {
@@ -46,6 +62,19 @@ export interface Suggestion {
   };
 }
 
+export interface MultiplyPositionExtra {
+  collMint: string;
+  debtMint: string;
+  collAmount: string;
+  debtAmount: string;
+  collValueUsd: number;
+  debtValueUsd: number;
+  netEquityUsd: number;
+  currentLeverage: number;
+  liquidationLtv: number;
+  healthFactor: number;
+}
+
 export interface EarnPosition {
   type: EarnTokenType;
   mint: string;
@@ -57,4 +86,6 @@ export interface EarnPosition {
     uiAmount: number;
     usdValue: number;
   };
+  /** Present on Kamino Multiply positions — leveraged balance-sheet view. */
+  multiply?: MultiplyPositionExtra;
 }

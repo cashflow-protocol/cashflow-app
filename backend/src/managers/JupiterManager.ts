@@ -1,4 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
+import Decimal from 'decimal.js';
+import { fetchMaybeAddressLookupTable } from '@solana-program/address-lookup-table';
 import {
   address,
   pipe,
@@ -809,6 +811,130 @@ export class JupiterManager {
     } catch (err: any) {
       console.error('[JupiterManager] Failed to create fee ATA:', err.message);
     }
+  }
+
+  /**
+   * Build a quoter + swapper pair for klend-sdk's leveraged-loop operations.
+   *
+   * Notes on shape: klend's SwapIxsProvider is typed against its bundled @solana/kit@2.x.
+   * We return plain objects whose shape matches klend's runtime expectations, typed as
+   * `any` to bypass cross-version TypeScript friction. The returned LUTs are fetched
+   * via the top-level @solana-program/address-lookup-table and pass straight through.
+   *
+   * Differences vs getSwapInstructions (used by the Squads vault flow):
+   *  - no platform fee (every leg of a loop would pay; erodes APY + tightens liquidation)
+   *  - no SOL wrap/unwrap (klend manages wSOL itself)
+   *  - no compute-budget ixs (klend sets its own)
+   */
+  getKlendSwapAdapter(opts: { ownerAddress: string; slippageBps?: number }): { quoter: any; swapper: any } {
+    const slippageBps = opts.slippageBps ?? 50;
+    const ownerAddress = opts.ownerAddress;
+    const self = this;
+
+    const fetchQuote = async (inputMint: string, outputMint: string, amount: string) => {
+      const params: Record<string, any> = {
+        inputMint,
+        outputMint,
+        amount,
+        slippageBps,
+        maxAccounts: 20,
+        restrictIntermediateTokens: true,
+        // Reuse the curated DEX allowlist so routes stay tx-size-friendly under Squads CPI.
+        dexes: [
+          'Raydium CLMM', 'Whirlpool', 'Meteora DLMM',
+          'Raydium', 'Raydium CP', 'Meteora', 'Lifinity V2',
+          'Saber', 'Perena', 'Phoenix',
+        ].join(','),
+      };
+      const response = await self.api.get('/swap/v1/quote', { params });
+      return response.data;
+    };
+
+    const quoter = async (inputs: any, _klendAccounts: any[]): Promise<any> => {
+      const inputMint = String(inputs.inputMint);
+      const outputMint = String(inputs.outputMint);
+      const inputAmount = new Decimal(inputs.inputAmountLamports).toFixed(0);
+      const quoteResponse = await fetchQuote(inputMint, outputMint, inputAmount);
+      const priceAInB = new Decimal(quoteResponse.outAmount).div(new Decimal(inputs.inputAmountLamports));
+      return { priceAInB, quoteResponse };
+    };
+
+    const swapper = async (inputs: any, _klendAccounts: any[], quote: any): Promise<any[]> => {
+      const inputMint = String(inputs.inputMint);
+      const outputMint = String(inputs.outputMint);
+      const inputAmount = new Decimal(inputs.inputAmountLamports).toFixed(0);
+
+      let jupQuote = quote?.quoteResponse;
+      if (!jupQuote) {
+        jupQuote = await fetchQuote(inputMint, outputMint, inputAmount);
+      }
+
+      const response = await self.api.post('/swap/v1/swap-instructions', {
+        quoteResponse: jupQuote,
+        userPublicKey: ownerAddress,
+        wrapAndUnwrapSol: false,        // klend owns wSOL handling
+        dynamicComputeUnitLimit: false, // klend sets its own CB
+        skipUserAccountsRpcCalls: true,
+      });
+      const data = response.data;
+
+      const rawIxs: any[] = [];
+      if (data.setupInstructions) rawIxs.push(...data.setupInstructions);
+      if (data.swapInstruction) rawIxs.push(data.swapInstruction);
+      if (data.cleanupInstruction) rawIxs.push(data.cleanupInstruction);
+
+      const swapIxs = rawIxs.map(rawIx => self.rawJupiterIxToKitInstruction(rawIx));
+
+      const lutAddrs = (data.addressLookupTableAddresses ?? []) as string[];
+      const lookupTables = await self.fetchLutsAsAccounts(lutAddrs);
+
+      return [{ preActionIxs: [], swapIxs, lookupTables, quote: quote ?? { priceAInB: new Decimal(0), quoteResponse: jupQuote } }];
+    };
+
+    return { quoter, swapper };
+  }
+
+  /**
+   * Convert a Jupiter REST instruction (plain { programId, accounts, data } with
+   * base64 data and { pubkey, isSigner, isWritable } accounts) into a kit-format
+   * Instruction. Idempotent ATA-create normalization is applied so repeated
+   * deposits don't fail with IllegalOwner.
+   */
+  private rawJupiterIxToKitInstruction(rawIx: any): any {
+    let dataBuf = Buffer.from(rawIx.data ?? '', 'base64');
+    // Mirror makeAtaIdempotent: ATA program with empty data → 0x01 (idempotent create discriminator)
+    if (rawIx.programId === ASSOCIATED_TOKEN_PROGRAM_ID && dataBuf.length === 0) {
+      dataBuf = Buffer.from([1]);
+    }
+    return {
+      programAddress: rawIx.programId,
+      accounts: (rawIx.accounts ?? []).map((acc: any) => {
+        let role: number;
+        if (acc.isSigner && acc.isWritable) role = AccountRole.WRITABLE_SIGNER;
+        else if (acc.isSigner) role = AccountRole.READONLY_SIGNER;
+        else if (acc.isWritable) role = AccountRole.WRITABLE;
+        else role = AccountRole.READONLY;
+        return { address: acc.pubkey, role };
+      }),
+      data: new Uint8Array(dataBuf),
+    };
+  }
+
+  /** Fetch address-lookup-table accounts for a list of addresses. Missing LUTs are skipped. */
+  private async fetchLutsAsAccounts(lutAddrs: string[]): Promise<any[]> {
+    if (lutAddrs.length === 0) return [];
+    const results = await Promise.all(
+      lutAddrs.map(async (addr) => {
+        try {
+          const acc = await fetchMaybeAddressLookupTable(this.rpc as any, address(addr));
+          return acc?.exists ? acc : null;
+        } catch (err) {
+          console.warn(`[JupiterManager] LUT fetch failed for ${addr}:`, err);
+          return null;
+        }
+      }),
+    );
+    return results.filter((a): a is NonNullable<typeof a> => a !== null);
   }
 
   private async saveTokensToDatabase(tokens: JupiterEarnTokenResponse[]): Promise<void> {

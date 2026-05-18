@@ -19,6 +19,13 @@ interface EarnTokenItemProps {
   onPress?: () => void;
   protocolName?: string;
   protocolIconUrl?: string;
+  /** Optional secondary token (rendered top-right of the icon stack). Used for Multiply rows. */
+  extraTokenMint?: string;
+  extraTokenLogoUrl?: string;
+  /** Override the default protocol·symbol subtitle (e.g. "Looped 2× · Kamino"). */
+  subtitle?: string;
+  /** Small hint shown next to APY (e.g. "at 2×"). */
+  apySuffix?: string;
 }
 
 function formatUsd(value: number): string {
@@ -45,13 +52,19 @@ export default function EarnTokenItem({
   onPress,
   protocolName,
   protocolIconUrl,
+  extraTokenMint,
+  extraTokenLogoUrl,
+  subtitle,
+  apySuffix,
 }: EarnTokenItemProps) {
   const { colors } = useTheme();
   const apyPercent = (rewardsRate / 100).toFixed(2);
   const protocolIcon = getProtocolIcon(type, protocolIconUrl);
   const protocolLabel = getProtocolLabel(type, protocolName);
   const localIcon = getTokenIcon(mint);
+  const extraLocalIcon = extraTokenMint ? getTokenIcon(extraTokenMint) : null;
   const hasPosition = positionAmount != null && positionAmount > 0;
+  const subtitleText = subtitle ?? `${protocolLabel} · ${symbol}`;
 
   return (
     <TouchableOpacity style={[styles.container, { backgroundColor: colors.card, shadowColor: colors.shadowColor }, compact && styles.containerCompact]} onPress={onPress} activeOpacity={0.7}>
@@ -61,6 +74,11 @@ export default function EarnTokenItem({
           <View style={[styles.tokenIconContainer, { backgroundColor: colors.cardSecondary }]}>
             <Image source={localIcon ?? { uri: logoUrl }} style={styles.tokenIcon} />
           </View>
+          {extraTokenMint && (extraLocalIcon || extraTokenLogoUrl) && (
+            <View style={[styles.secondaryTokenBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Image source={extraLocalIcon ?? { uri: extraTokenLogoUrl }} style={styles.secondaryTokenIcon} />
+            </View>
+          )}
           <View style={[styles.protocolBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {protocolIcon ? (
               <Image source={protocolIcon} style={styles.protocolIcon} />
@@ -73,7 +91,7 @@ export default function EarnTokenItem({
         {/* Info */}
         <View style={styles.info}>
           <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>{vaultTitle || `${protocolLabel} - ${symbol}`}</Text>
-          <Text style={[styles.protocol, { color: colors.textSecondary }]}>{protocolLabel} · {symbol}</Text>
+          <Text style={[styles.protocol, { color: colors.textSecondary }]}>{subtitleText}</Text>
         </View>
 
         {/* Right side: APY or deposit value */}
@@ -83,7 +101,10 @@ export default function EarnTokenItem({
             <Text style={[styles.depositAmount, { color: colors.textSecondary }]}>{formatAmount(positionAmount)} {symbol}</Text>
           </View>
         ) : (
-          <Text style={styles.apy}>{apyPercent}%</Text>
+          <View style={styles.apyColumn}>
+            <Text style={styles.apy}>{apyPercent}%</Text>
+            {apySuffix && <Text style={[styles.apySuffix, { color: colors.textSecondary }]}>{apySuffix}</Text>}
+          </View>
         )}
       </View>
 
@@ -152,6 +173,23 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
   },
+  secondaryTokenBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    overflow: 'hidden',
+  },
+  secondaryTokenIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+  },
   protocolIconFallback: {
     fontSize: 11,
     fontWeight: '700',
@@ -172,6 +210,14 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#138001',
+  },
+  apyColumn: {
+    alignItems: 'flex-end',
+  },
+  apySuffix: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2,
   },
   depositRight: {
     alignItems: 'flex-end',

@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { DBManager, JupiterManager, KaminoManager, DriftManager, PerenaManager, HumaManager, PriceManager } from '../managers';
+import { DBManager, JupiterManager, KaminoManager, KaminoMultiplyManager, DriftManager, PerenaManager, HumaManager, PriceManager } from '../managers';
 import { LookupManager } from '../managers/LookupManager';
 import { EarnTokenModel } from '../models/EarnToken';
-import { SUPPORTED_TOKENS_BY_MINT } from '../constants';
+import { SUPPORTED_TOKENS_BY_MINT, MULTIPLY_POOL_BY_ID } from '../constants';
 import { TransactionAction, UserCostBasisModel, UserModel, NotifyInterestModel } from '../models';
 import { EarnTokenType, type IBalance } from '../types';
 import { notifyAdmin } from '../services/telegramManager';
@@ -65,6 +65,7 @@ router.get('/tokens', async (req: Request, res: Response) => {
 // Manager instances
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
+const kaminoMultiplyManager = new KaminoMultiplyManager();
 const perenaManager = new PerenaManager();
 const humaManager = new HumaManager();
 
@@ -93,6 +94,7 @@ router.get('/positions', async (req: Request, res: Response) => {
     const positionPromises: [string, Promise<any[]>][] = [
       ['jupiter', jupiterManager.getWalletPositions(walletAddress)],
       ['kamino', kaminoManager.getWalletPositions(walletAddress)],
+      ['kamino_multiply', kaminoMultiplyManager.getWalletPositions(walletAddress)],
       ['perena', perenaManager.getWalletPositions(walletAddress)],
       ['huma', humaManager.getWalletPositions(walletAddress)],
     ];
@@ -151,6 +153,37 @@ router.get('/positions', async (req: Request, res: Response) => {
             uiAmount,
             usdValue: priceManager.getUsdValue(symbol, uiAmount),
           } as IBalance,
+        };
+      }),
+      ...(settled.kamino_multiply ?? []).map((p: any) => {
+        const depositMint = p.defaultDepositMint;
+        const tokenInfo = SUPPORTED_TOKENS_BY_MINT[depositMint];
+        const decimals = tokenInfo?.decimals ?? 0;
+        const symbol = tokenInfo?.symbol ?? '';
+        const uiAmount = Number(p.netEquityRaw) / 10 ** decimals;
+        return {
+          type: EarnTokenType.KAMINO_MULTIPLY,
+          mint: depositMint,
+          vaultAddress: p.poolId,
+          symbol,
+          balance: {
+            amount: p.netEquityRaw,
+            decimals,
+            uiAmount,
+            usdValue: p.netEquityUsd,
+          } as IBalance,
+          multiply: {
+            collMint: p.collMint,
+            debtMint: p.debtMint,
+            collAmount: p.collAmount,
+            debtAmount: p.debtAmount,
+            collValueUsd: p.collValueUsd,
+            debtValueUsd: p.debtValueUsd,
+            netEquityUsd: p.netEquityUsd,
+            currentLeverage: p.currentLeverage,
+            liquidationLtv: p.liquidationLtv,
+            healthFactor: p.healthFactor,
+          },
         };
       }),
       ...(settled.perena ?? []).map((p: any) => {
@@ -412,6 +445,27 @@ router.post('/deposit', async (req: Request, res: Response) => {
           instructions = await kaminoManager.getDepositInstructions(vaultAddress, decimalAmount, authority);
           break;
         }
+        case EarnTokenType.KAMINO_MULTIPLY: {
+          const pool = MULTIPLY_POOL_BY_ID[vaultAddress];
+          if (!pool) {
+            res.status(400).json({ success: false, error: `Unknown Multiply pool: ${vaultAddress}` });
+            return;
+          }
+          const rawLeverage = Number(req.body.leverage);
+          if (!Number.isFinite(rawLeverage)) {
+            res.status(400).json({ success: false, error: 'leverage (number) is required' });
+            return;
+          }
+          // Server-side clamp — never trust client-supplied leverage.
+          const leverage = Math.min(pool.maxLeverage, Math.max(pool.minLeverage, rawLeverage));
+          const slippageBps = req.body.slippageBps !== undefined ? Number(req.body.slippageBps) : undefined;
+          const result = await kaminoMultiplyManager.getDepositInstructions(
+            vaultAddress, mint, amount, leverage, authority, slippageBps,
+          );
+          instructions = result.instructions;
+          extraProtocolLookupTables = result.lookupTables;
+          break;
+        }
         case EarnTokenType.DRIFT: {
           if (!driftManager) {
             res.status(400).json({ success: false, error: 'Drift not configured' });
@@ -571,6 +625,21 @@ router.post('/withdraw', async (req: Request, res: Response) => {
           const decimals = SUPPORTED_TOKENS_BY_MINT[mint]?.decimals ?? 0;
           const decimalAmount = (Number(amount) / 10 ** decimals).toString();
           instructions = await kaminoManager.getWithdrawInstructions(vaultAddress, decimalAmount, authority);
+          break;
+        }
+        case EarnTokenType.KAMINO_MULTIPLY: {
+          const pool = MULTIPLY_POOL_BY_ID[vaultAddress];
+          if (!pool) {
+            res.status(400).json({ success: false, error: `Unknown Multiply pool: ${vaultAddress}` });
+            return;
+          }
+          const isClosingPosition = Boolean(req.body.isClosingPosition);
+          const slippageBps = req.body.slippageBps !== undefined ? Number(req.body.slippageBps) : undefined;
+          const result = await kaminoMultiplyManager.getWithdrawInstructions(
+            vaultAddress, mint, amount, isClosingPosition, authority, slippageBps,
+          );
+          instructions = result.instructions;
+          extraProtocolLookupTables = result.lookupTables;
           break;
         }
         case EarnTokenType.DRIFT: {

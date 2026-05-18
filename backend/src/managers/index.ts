@@ -1,6 +1,7 @@
 export { DBManager } from './DBManager';
 export { JupiterManager } from './JupiterManager';
 export { KaminoManager } from './KaminoManager';
+export { KaminoMultiplyManager } from './KaminoMultiplyManager';
 export { DriftManager } from './DriftManager';
 export { PerenaManager } from './PerenaManager';
 export { SolomonManager } from './SolomonManager';

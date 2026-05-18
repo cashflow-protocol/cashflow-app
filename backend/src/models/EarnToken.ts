@@ -8,7 +8,7 @@ import { EarnTokenType } from '../types';
     collection: 'earn_tokens',
     toJSON: {
       transform: (_doc, ret) => {
-        const { _id, __v, jupiterToken, kaminoToken, driftToken, perenaToken, solomonToken, onreToken, humaToken, createdAt, updatedAt, ...fields } = ret;
+        const { _id, __v, jupiterToken, kaminoToken, kaminoMultiplyToken, driftToken, perenaToken, solomonToken, onreToken, humaToken, createdAt, updatedAt, ...fields } = ret;
         const { logoUrl, ...tokenInfo } = SUPPORTED_TOKENS_BY_MINT[fields.mint] ?? {};
         return { ...fields, ...tokenInfo };
       },
@@ -64,6 +64,26 @@ export class EarnToken {
 
   @prop({ type: () => Object })
   public kaminoToken?: Record<string, any>;
+
+  @prop({ type: () => Object })
+  public kaminoMultiplyToken?: Record<string, any>;
+
+  /** Mobile-facing config for leveraged loop rows. Returned by /earn/v1/tokens so
+   *  the client can render two-token icons, leverage range, and liquidation LTV. */
+  @prop({ type: () => Object })
+  public multiply?: {
+    collMint: string;
+    collSymbol: string;
+    collDecimals: number;
+    collLogoUrl?: string;
+    debtMint: string;
+    debtSymbol: string;
+    debtDecimals: number;
+    defaultDepositMint: string;
+    leverageRange: { min: number; max: number; default: number };
+    apyAtDefault: number;
+    liquidationLtv: number;
+  };
 
   @prop({ type: () => Object })
   public driftToken?: Record<string, any>;

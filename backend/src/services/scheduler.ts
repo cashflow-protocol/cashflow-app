@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import cron from 'node-cron';
 import { createSolanaRpc } from '@solana/kit';
 import type { Rpc, SolanaRpcApi, Signature } from '@solana/kit';
-import { JupiterManager, KaminoManager, DriftManager, PerenaManager, SolomonManager, OnreManager, HumaManager, DBManager, PriceManager, TokenManager } from '../managers';
+import { JupiterManager, KaminoManager, KaminoMultiplyManager, DriftManager, PerenaManager, SolomonManager, OnreManager, HumaManager, DBManager, PriceManager, TokenManager } from '../managers';
 import { TransactionStatus, InviteCodeModel, WaitlistUserModel, UserModel } from '../models';
 import { NotificationType } from '../models';
 import { CashflowPassportActivationModel, CashflowPassportActivationStatus } from '../models/CashflowPassportActivation';
@@ -17,6 +17,7 @@ import { onTransactionConfirmed } from './feeService';
 
 const jupiterManager = new JupiterManager();
 const kaminoManager = new KaminoManager();
+const kaminoMultiplyManager = new KaminoMultiplyManager();
 const perenaManager = new PerenaManager();
 const solomonManager = new SolomonManager();
 const onreManager = new OnreManager();
@@ -59,6 +60,19 @@ async function updateKaminoEarnTokens() {
     console.log('✅ [Cron] Kamino Earn tokens update completed');
   } catch (error) {
     console.error('❌ [Cron] Failed to update Kamino Earn tokens:', error);
+  }
+}
+
+/**
+ * Fetch and update Kamino Multiply Earn tokens
+ */
+async function updateKaminoMultiplyEarnTokens() {
+  try {
+    console.log('🔄 [Cron] Starting Kamino Multiply tokens update...');
+    await kaminoMultiplyManager.getEarnTokens();
+    console.log('✅ [Cron] Kamino Multiply tokens update completed');
+  } catch (error) {
+    console.error('❌ [Cron] Failed to update Kamino Multiply tokens:', error);
   }
 }
 
@@ -370,6 +384,11 @@ export async function initializeScheduler() {
     timezone: 'UTC',
   });
 
+  // Fetch Kamino Multiply tokens every minute
+  cron.schedule('* * * * *', updateKaminoMultiplyEarnTokens, {
+    timezone: 'UTC',
+  });
+
   // Fetch Perena Earn tokens every minute
   cron.schedule('* * * * *', updatePerenaEarnTokens, {
     timezone: 'UTC',
@@ -432,6 +451,7 @@ export async function initializeScheduler() {
   console.log('  - Token prices: Every minute');
   console.log('  - Jupiter Earn tokens: Every minute');
   console.log('  - Kamino Earn tokens: Every minute');
+  console.log('  - Kamino Multiply tokens: Every minute');
   console.log('  - Perena Earn tokens: Every minute');
   console.log('  - Solomon Earn tokens: Every hour');
   console.log('  - Onre Earn tokens: Every hour');
@@ -448,6 +468,7 @@ export async function initializeScheduler() {
   updatePrices();
   updateJupiterEarnTokens();
   updateKaminoEarnTokens();
+  updateKaminoMultiplyEarnTokens();
   updatePerenaEarnTokens();
   updateSolomonEarnTokens();
   updateOnreEarnTokens();

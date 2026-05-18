@@ -31,6 +31,13 @@ import {
     findAssociatedTokenPda as findAssociatedTokenPda2022,
 } from '@solana-program/token-2022';
 import { SUPPORTED_TOKEN_MINTS, USDC_MINT } from '../constants/tokens';
+import {
+    JLP_MINT,
+    JITOSOL_MINT,
+    JUPSOL_MINT,
+    KAMINO_MAIN_MARKET,
+    KAMINO_JLP_MARKET,
+} from '../constants/multiplyPools';
 
 export async function initialiseLookupManager() {
     try {
@@ -62,6 +69,15 @@ export class LookupManager {
         address('jup3YeL8QhtSx1e253b2FDvsMNC87fDrgQZivbrndc9'), // Jupiter Lend Earn
         address('dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH'), // Drift Protocol
         address('JCNCMFXo5M5qwUPg2Utu1u6YWp3MbygxqBsBeXXJfrw'), // Drift Vaults
+        address('KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD'), // Kamino Lending (klend) program
+
+        // Kamino Multiply: markets + collateral mints. Per-pool reserves/farms come
+        // through the per-tx lookupTables returned by KaminoMultiplyManager.
+        address(KAMINO_MAIN_MARKET),
+        address(KAMINO_JLP_MARKET),
+        address(JLP_MINT),
+        address(JITOSOL_MINT),
+        address(JUPSOL_MINT),
 
         // stablecoins
         address(USDC_MINT), // USDC

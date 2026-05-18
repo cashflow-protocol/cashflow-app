@@ -37,11 +37,26 @@ export interface EarnTokenUpsert {
   protocolData?: Record<string, any>;
   protocolName?: string;
   protocolIconUrl?: string;
+  /** Mobile-facing leveraged-loop config (Kamino Multiply). */
+  multiply?: {
+    collMint: string;
+    collSymbol: string;
+    collDecimals: number;
+    collLogoUrl?: string;
+    debtMint: string;
+    debtSymbol: string;
+    debtDecimals: number;
+    defaultDepositMint: string;
+    leverageRange: { min: number; max: number; default: number };
+    apyAtDefault: number;
+    liquidationLtv: number;
+  };
 }
 
 const PROTOCOL_DATA_FIELD: Record<EarnTokenType, string> = {
   [EarnTokenType.JUPITER]: 'jupiterToken',
   [EarnTokenType.KAMINO]: 'kaminoToken',
+  [EarnTokenType.KAMINO_MULTIPLY]: 'kaminoMultiplyToken',
   [EarnTokenType.DRIFT]: 'driftToken',
   [EarnTokenType.PERENA]: 'perenaToken',
   [EarnTokenType.SOLOMON]: 'solomonToken',
@@ -80,6 +95,7 @@ export class DBManager {
               ...(token.protocolData && { [dataField]: token.protocolData }),
               ...(token.protocolName && { protocolName: token.protocolName }),
               ...(token.protocolIconUrl && { protocolIconUrl: token.protocolIconUrl }),
+              ...(token.multiply && { multiply: token.multiply }),
             },
             $setOnInsert: {
               status: 'inactive' as const,
@@ -117,7 +133,7 @@ export class DBManager {
     }
 
     return EarnTokenModel.find(query)
-      .select('type mint vaultAddress vaultTitle symbol rewardsRate status minDepositAmount minWithdrawAmount minAppBuild categories protocolName protocolIconUrl')
+      .select('type mint vaultAddress vaultTitle symbol rewardsRate status minDepositAmount minWithdrawAmount minAppBuild categories protocolName protocolIconUrl multiply')
       .sort({ rewardsRate: -1 });
   }
 

@@ -1,11 +1,12 @@
 import { ImageSourcePropType } from 'react-native';
 
 /** Protocols where the app can execute deposit/withdraw transactions. */
-export const SUPPORTED_PROTOCOLS = new Set(['jupiter', 'kamino', 'drift', 'perena', 'huma']);
+export const SUPPORTED_PROTOCOLS = new Set(['jupiter', 'kamino', 'kamino_multiply', 'drift', 'perena', 'huma']);
 
 const PROTOCOL_ICONS: Record<string, ImageSourcePropType> = {
   jupiter: require('../assets/protocol-icons/jupiter.png'),
   kamino: require('../assets/protocol-icons/kamino.png'),
+  kamino_multiply: require('../assets/protocol-icons/kamino.png'),
   drift: require('../assets/protocol-icons/drift.png'),
   perena: require('../assets/protocol-icons/perena.jpg'),
   huma: require('../assets/protocol-icons/huma.png'),
@@ -14,6 +15,7 @@ const PROTOCOL_ICONS: Record<string, ImageSourcePropType> = {
 const PROTOCOL_LABELS: Record<string, string> = {
   jupiter: 'Jupiter',
   kamino: 'Kamino',
+  kamino_multiply: 'Kamino',
   drift: 'Drift',
   perena: 'Perena',
   solomon: 'Solomon',

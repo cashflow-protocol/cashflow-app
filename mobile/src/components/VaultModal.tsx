@@ -9,7 +9,7 @@ import {
   Image,
 } from 'react-native';
 import BottomSheet from './BottomSheet';
-import type { EarnTokenType, EarnPosition } from '../types/earn';
+import type { EarnTokenType, EarnPosition, MultiplyConfig } from '../types/earn';
 import { getTokenIcon } from '../assets/token-icons';
 import { getProtocolIcon, getProtocolLabel, isProtocolSupported } from '../constants/protocols';
 import apiService from '../services/apiService';
@@ -32,6 +32,22 @@ function formatAmount(value: number): string {
   return str.replace(/\.?0+$/, '');
 }
 
+/** Build a set of leverage stops in 0.5× increments, snapping to the pool's min/max. */
+function buildLeverageSteps(min: number, max: number): number[] {
+  const steps: number[] = [];
+  // Start at min rounded up to the nearest 0.5
+  let v = Math.ceil(min * 2) / 2;
+  if (v < min) v = min;
+  while (v <= max + 1e-6) {
+    steps.push(Math.round(v * 10) / 10);
+    v += 0.5;
+  }
+  if (steps[steps.length - 1] !== max && max - steps[steps.length - 1] > 0.05) {
+    steps.push(Math.round(max * 10) / 10);
+  }
+  return steps;
+}
+
 interface VaultModalProps {
   visible: boolean;
   onClose: () => void;
@@ -49,6 +65,8 @@ interface VaultModalProps {
   minWithdrawAmount?: string;
   protocolName?: string;
   protocolIconUrl?: string;
+  /** When set, the modal renders Multiply-specific UI (leverage selector, close-position). */
+  multiply?: MultiplyConfig;
 }
 
 type Mode = 'deposit' | 'withdraw';
@@ -70,6 +88,7 @@ export default function VaultModal({
   minWithdrawAmount,
   protocolName,
   protocolIconUrl,
+  multiply,
 }: VaultModalProps) {
   const { colors } = useTheme();
   const { wallet, connect, isConnecting } = useWallet();
@@ -82,6 +101,8 @@ export default function VaultModal({
   const [vaultData, setVaultData] = useState<VaultData | null>(null);
   const [notified, setNotified] = useState(false);
   const [notifying, setNotifying] = useState(false);
+  const [leverage, setLeverage] = useState<number>(multiply?.leverageRange.default ?? 1);
+  const [isClosingPosition, setIsClosingPosition] = useState<boolean>(false);
 
   // Convert raw bigint amount to UI display string
   const toUiAmount = (raw: bigint, dec: number): string => {
@@ -113,6 +134,8 @@ export default function VaultModal({
       setVaultData(null);
       setNotified(false);
       setNotifying(false);
+      setLeverage(multiply?.leverageRange.default ?? 1);
+      setIsClosingPosition(false);
 
       (async () => {
         const vault = await getVault();
@@ -214,8 +237,14 @@ export default function VaultModal({
         };
 
         const res = mode === 'deposit'
-          ? await apiService.depositInstructions(instrParams)
-          : await apiService.withdrawInstructions(instrParams);
+          ? await apiService.depositInstructions({
+              ...instrParams,
+              ...(multiply ? { leverage } : {}),
+            })
+          : await apiService.withdrawInstructions({
+              ...instrParams,
+              ...(multiply ? { isClosingPosition } : {}),
+            });
 
         const result = await executeVaultTransaction(
           vaultData.multisigAddress,
@@ -280,6 +309,14 @@ export default function VaultModal({
                   <View style={[styles.tokenIconContainer, { backgroundColor: colors.cardSecondary }]}>
                     <Image source={localIcon ?? { uri: logoUrl }} style={styles.tokenIcon} />
                   </View>
+                  {multiply && (multiply.collLogoUrl || getTokenIcon(multiply.collMint)) && (
+                    <View style={[styles.secondaryTokenBadge, { backgroundColor: colors.sheetBackground, borderColor: colors.border }]}>
+                      <Image
+                        source={getTokenIcon(multiply.collMint) ?? { uri: multiply.collLogoUrl! }}
+                        style={styles.secondaryTokenIcon}
+                      />
+                    </View>
+                  )}
                   <View style={[styles.protocolBadge, { backgroundColor: colors.sheetBackground, borderColor: colors.border }]}>
                     {protocolIcon ? (
                       <Image source={protocolIcon} style={styles.protocolIcon} />
@@ -290,7 +327,9 @@ export default function VaultModal({
                 </View>
                 <View style={styles.vaultInfo}>
                   <Text style={[styles.vaultTitle, { color: colors.textPrimary }]} numberOfLines={1}>{vaultTitle || `${protocolLabel} - ${symbol}`}</Text>
-                  <Text style={[styles.vaultApy, { color: colors.accentGreenDark }]}>{apyPercent}% APY</Text>
+                  <Text style={[styles.vaultApy, { color: colors.accentGreenDark }]}>
+                    {apyPercent}% APY{multiply ? ` · ${leverage.toFixed(1)}×` : ''}
+                  </Text>
                 </View>
               </View>
 
@@ -350,6 +389,62 @@ export default function VaultModal({
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Leverage selector — Multiply deposits only */}
+              {multiply && mode === 'deposit' && (
+                <View style={styles.leverageSection}>
+                  <View style={styles.leverageHeader}>
+                    <Text style={[styles.leverageLabel, { color: colors.textSecondary }]}>Leverage</Text>
+                    <Text style={[styles.leverageValue, { color: colors.textPrimary }]}>{leverage.toFixed(1)}×</Text>
+                  </View>
+                  <View style={styles.leverageChips}>
+                    {buildLeverageSteps(multiply.leverageRange.min, multiply.leverageRange.max).map((step) => {
+                      const active = Math.abs(step - leverage) < 0.05;
+                      return (
+                        <TouchableOpacity
+                          key={step}
+                          style={[
+                            styles.leverageChip,
+                            { backgroundColor: colors.cardSecondary },
+                            active && { backgroundColor: colors.primaryButton },
+                          ]}
+                          onPress={() => setLeverage(step)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.leverageChipText, { color: colors.textSecondary }, active && { color: '#fff' }]}>
+                            {step.toFixed(1)}×
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* Close-position toggle — Multiply withdrawals only, when user has a position */}
+              {multiply && mode === 'withdraw' && hasPosition && (
+                <TouchableOpacity
+                  style={[
+                    styles.closePositionRow,
+                    { backgroundColor: colors.infoBackground },
+                    isClosingPosition && { backgroundColor: colors.primaryButton },
+                  ]}
+                  onPress={() => {
+                    const next = !isClosingPosition;
+                    setIsClosingPosition(next);
+                    if (next) setAmount(toUiAmount(BigInt(position!.balance.amount), decimals));
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[
+                    styles.closePositionText,
+                    { color: colors.textPrimary },
+                    isClosingPosition && { color: '#fff' },
+                  ]}>
+                    {isClosingPosition ? '✓ Closing entire position' : 'Close entire position'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {/* Balance info - contextual per mode */}
               {mode === 'deposit' && (
@@ -476,6 +571,62 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#666',
+  },
+  secondaryTokenBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    overflow: 'hidden',
+  },
+  secondaryTokenIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+  },
+  leverageSection: {
+    gap: 8,
+  },
+  leverageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  leverageLabel: {
+    fontSize: 13,
+  },
+  leverageValue: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  leverageChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  leverageChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  leverageChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  closePositionRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  closePositionText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   comingSoonContainer: {
     alignItems: 'center',
